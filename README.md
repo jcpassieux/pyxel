@@ -62,6 +62,7 @@ The gray level conservation problem is written in three-dimensional space. It re
 
 5. TERM OF USE. 
     This program is a free software: you can redistribute it/or modify it. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY.
+    **pyxel** is distributed under the terms of CeCILL which is a french free software license agreement in the spirit of GNU GPL
 
 
 # References
