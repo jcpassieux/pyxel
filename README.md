@@ -12,8 +12,8 @@ The gray level conservation problem is written in three-dimensional space. It re
 
 1. SCRIPT FILE
     - pyxel is a library. For each testcase, a script file must be written.
-    - the testcases (images, meshes...) are stored in the `./data` folder.
-    - an sample script named `dic_composite.py` is provided to understand the usage of the library.
+    - the input data (images, meshes...) are stored in the `./data` folder.
+    - a sample script named `dic_composite.py` is provided to understand some functionnalities of the library.
 
 2. ABOUT MESHES
     - a mesh is entierly defined by two variables:
