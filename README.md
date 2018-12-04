@@ -19,14 +19,14 @@ The gray level conservation problem is written in three-dimensional space. It re
     - a mesh is entierly defined by two variables:
         (1) a python dictionnary for the elements (the key is the element number and the value is an
         integer numpy array of size N+1 (N being the number of nodes of this element). The first value
-        of this array is the element type (according to gmsh numbering) and the remainder are the node numbers 
+        of this array is the element type (according to gmsh numbering) and the remainder are the node numbers, 
         example:
         ```python
         e[num]=np.array([type_el,n0,n1,n2,n3])
         ```
-        (2) a numpy array n for the node coordinates
+        (2) a numpy array n for the node coordinates, example:
         ```python
-        example: n=np.array([[x0,y0],[x1,y1],...])
+        n=np.array([[x0,y0],[x1,y1],...])
         ```
     - There is an home made mesher for rectangular and parallelipedic domains.
         give size and number of elements in each direction (see examples).
