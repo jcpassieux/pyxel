@@ -8,7 +8,7 @@
 </p>
 
 In its present form, it is restricted to 2D-DIC. Stereo (SDIC) and Digital Volume Correlation (DVC) will be updated later. 
-The gray level conservation problem is written in three-dimensional space. It relies on camera models (which must be calibrated) and a dedicated quadrature rule in the 3d space. Considering only 2D-DIC and front-parallel camera settings, the implemented camera model is a simplified pinhole model (including only 4 parameters: 2 translations, 1 rotation and the focal length only). More complex camera models (including distorsions) could easily be implemented within this framework (next update?). The library natively includes linear triangles and quadrilateral elements, but other element types could be added very easily (again?). The library also include de VTK library such that the measurements can be post-processed in Paraview.
+The gray level conservation problem is written in three-dimensional space. It relies on camera models (which must be calibrated) and on a dedicated quadrature rule in the 3d space. Considering only 2D-DIC and front-parallel camera settings, the implemented camera model is a simplified pinhole model (including only 4 parameters: 2 translations, 1 rotation and the focal length). More complex camera models (including distorsions) could easily be implemented within this framework (next update?). The library natively includes linear triangles and quadrilateral elements, but other element types could be added very easily (again?). The library also includes a VTK library such that the measurements can be post-processed in Paraview.
 
 1. SCRIPT FILE
     - pyxel is a library. For each testcase, a script file must be written.
