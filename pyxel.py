@@ -1030,7 +1030,6 @@ class DICEngine():
         Jxx,Jxy,Jyx,Jyy=cam.dPdX(m.pgx,m.pgy)
         phiJdf=sp.sparse.diags(fdxr*Jxx+fdyr*Jyx).dot(m.phix)+sp.sparse.diags(fdxr*Jxy+fdyr*Jyy).dot(m.phiy)
         self.wphiJdf=sp.sparse.diags(m.wdetJ).dot(phiJdf)
-        phiJdf.T.dot(self.wphiJdf)
         self.dyn=np.max(self.f)-np.min(self.f)
         self.mean0=np.mean(self.f)
         self.std0=np.std(self.f)
