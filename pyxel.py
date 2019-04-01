@@ -582,10 +582,10 @@ class Mesh:
         ''' Displacement field '''        
         new_u=np.array([pgu,pgv,0*pgu]).T.ravel()
         vtkfile.addPointData('disp',3,new_u)
-        ''' Strain field '''
-        epsxx,epsyy,epsxy=self.StrainAtGP(U)
-        new_eps=np.array([epsxx,epsyy,epsxy]).T.ravel()
-        vtkfile.addCellData('epsilon',3,new_eps)
+        #''' Strain field '''
+        #epsxx,epsyy,epsxy=self.StrainAtGP(U)
+        #new_eps=np.array([epsxx,epsyy,epsxy]).T.ravel()
+        #vtkfile.addCellData('epsilon',3,new_eps)
         
         # Write the VTU file in the VTK dir
         rep=filename.rfind('/')+1
@@ -683,7 +683,8 @@ class Mesh:
 
 #%%
 def StructuredMeshQ4(roi,N):
-    #roi=np.array([[xmin,ymin],[xmax,ymax]])
+    # roi=np.array([[xmin,ymin],[xmax,ymax]])
+    # N=[Nx,Ny]: average element size (can be scalar)
     droi=np.diff(roi,axis=0).astype('int')
     NE=np.round(droi/N)[0].astype('int')
     [X,Y]=np.meshgrid(np.linspace(roi[0,0],roi[1,0],NE[0]+1),np.linspace(roi[0,1],roi[1,1],NE[1]+1))
@@ -700,7 +701,8 @@ def StructuredMeshQ4(roi,N):
     return m
 
 def StructuredMeshT3(roi,N):
-    #roi=np.array([[xmin,ymin],[xmax,ymax]])
+    # roi=np.array([[xmin,ymin],[xmax,ymax]])
+    # N=[Nx,Ny]: average element size (can be scalar)
     droi=np.diff(roi,axis=0).astype('int')
     NE=np.round(droi/N)[0].astype('int')
     [X,Y]=np.meshgrid(np.linspace(roi[0,0],roi[1,0],NE[0]+1),np.linspace(roi[0,1],roi[1,1],NE[1]+1))
