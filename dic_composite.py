@@ -4,34 +4,57 @@
     JC Passieux, INSA Toulouse, 2017       """
 
 import numpy as np
+import matplotlib.pyplot as plt
 import scipy.sparse.linalg as splalg
 import scipy as sp
 import pyxel as px
+import os
 
 #%% ============================================================================
-# Datafiles, images and mesh   =================================================
+# Datafiles, images  ===========================================================
 # ==============================================================================
 
 imnums=np.array([53,54,57,58,61,62,65,66,69,70,75])
-imagefile='./data/dic_composite/zoom-0%03d_1.tif'
+imagefile=os.path.join('data','dic_composite','zoom-0%03d_1.tif')
 imref = imagefile % imnums[0]
 f=px.Image(imref).Load()
 f.Show()
 
-# Triangular Mesh in milimeter
-m=px.ReadMeshGMSH('./data/dic_composite/gmsh_t3_mm.msh')
+#%% ============================================================================
+# Mesh and Camera model  =======================================================
+# ==============================================================================
+
+''' Example1: Triangular GMSH Mesh in milimeter '''
+meshfile=os.path.join('data','dic_composite','gmsh_t3_mm.msh')
+m=px.ReadMeshGMSH(meshfile)
 #cam=px.MeshCalibration(f,m,[1,2])
 cam=px.Camera(np.array([10.49882137, 51.07774613, -6.53402857,  1.56607077]))
 l0=1     # regularization length
 
-# Quadrilateral Mesh in meter
-m=px.ReadMeshINP('./data/dic_composite/abaqus_q4_m.inp')
+''' Example2: Quadrilateral ABAQUS Mesh in meter '''
+meshfile=os.path.join('data','dic_composite','abaqus_q4_m.inp')
+m=px.ReadMeshINP(meshfile)
 #cam=px.MeshCalibration(f,m,[1,2])
 cam=px.Camera(np.array([ 1.05168768e+04,  5.13737634e-02, -9.65935782e-02, -2.65443047e-03]))
 l0=0.005     # regularization length
 
+''' Example3: Structured Built-in Quad Mesh in Pixels '''
+box=np.array([[538,50],[638,950]])+0.5
+N=np.array([10,10])
+m=px.StructuredMeshQ4(box,N)
+cam=px.Camera(np.array([1,0,-f.pix.shape[0],0]))
+l0=15     # regularization length
 
-# Visualization of the mesh using Matplotlib
+''' Example4: Structured Built-in Triangle Mesh in Pixels '''
+box=np.array([[538,50],[638,950]])+0.5
+N=np.array([10,10])
+m=px.StructuredMeshT3(box,N)
+cam=px.Camera(np.array([1,0,-f.pix.shape[0],0]))
+l0=15     # regularization length
+
+# Plot Mesh on the reference image
+px.PlotMeshImage(f,m,cam)
+# Visualization of the mesh alone using Matplotlib
 m.Plot()
 # Or Visualization of the mesh using Paraview
 m.VTKMesh('dic_composite/Mesh')
@@ -44,8 +67,6 @@ m.VTKMesh('dic_composite/Mesh')
 m.Connectivity()
 # Build the quadrature rule; compute FE basis functions and derivatives
 m.DICIntegration(cam)
-# Plot Mesh on the reference image
-px.PlotMeshImage(f,m,cam)
 
 # Open reference image
 imdef = imagefile % imnums[-2]
@@ -110,8 +131,6 @@ for ik in range(0,30):
 m.Plot(U,30)
 # or Displacement field visualization using Paraview
 m.VTKSol('dic_composite/Sol_Tikhonov',U)
-
-
 
 
 #%% ============================================================================
@@ -181,14 +200,14 @@ L0=V.dot(L.dot(V))
 l=H0/L0
 
 U=np.zeros(m.ndof)
-M_LU=splalg.splu(H+l*L)
+H_LU=splalg.splu(H+l*L)
 m.PVDFile('dic_composite/Sol','vtu',1,len(imnums)-1)
 for ig in range(1,len(imnums)):
     imdef=imagefile % imnums[ig]
     g=px.Image(imdef).Load()
     for ik in range(0,30):
         [b,res]=dic.ComputeRHS(g,m,cam,U)
-        dU=M_LU.solve(b-l*L.dot(U))
+        dU=H_LU.solve(b-l*L.dot(U))
         U+=dU
         err=np.linalg.norm(dU)/np.linalg.norm(U)
         print("Iter # %2d | disc/dyn=%2.2f %% | dU/U=%1.2e" % (ik+1,np.std(res)/dic.dyn*100,err))
