@@ -34,6 +34,7 @@ vtk.write('test2')
 """
 
 import numpy as np
+import os
 
 #import pdb
 #pdb.set_trace()
@@ -265,19 +266,14 @@ class VTRWriter():
         doc.writexml(outFile, newl='\n')
         print("VTK: "+ fileName +".vtr written")
         outFile.close()
-
-
+    
 def PVDFile(fileName,ext,npart,nstep):    
     """ Write PVD file
     Usage: writePVD("toto","vtu",npart,nstep) 
     generated file: "toto.pvd" 
     vtk files must be formated as follows:
     npart=2  and nstep=5  =>  toto_5_2.*  (starts from zero)    """   
-    rep=fileName.rfind('/')+1
-    if rep==0:
-        fname=fileName
-    else:
-        fname=fileName[rep:]
+    rep,fname=os.path.split(fileName)
     import xml.dom.minidom
     pvd = xml.dom.minidom.Document()
     pvd_root = pvd.createElementNS("VTK", "VTKFile")
@@ -299,13 +295,3 @@ def PVDFile(fileName,ext,npart,nstep):
     pvd.writexml(outFile, newl='\n')
     print("VTK: "+ fileName +".pvd written")
     outFile.close()
-
-    
-    
-    
-    
-
-
-
-
-
