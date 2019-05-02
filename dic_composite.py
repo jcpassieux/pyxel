@@ -42,14 +42,14 @@ l0=0.005     # regularization length
 box=np.array([[538,50],[638,950]])+0.5
 N=np.array([10,10])
 m=px.StructuredMeshQ4(box,N)
-cam=px.Camera(np.array([1,0,-f.pix.shape[0],0]))
+cam=px.Camera(np.array([1.,0.,-f.pix.shape[0],0.]))
 l0=15     # regularization length
 
 ''' Example4: Structured Built-in Triangle Mesh in Pixels '''
 box=np.array([[538,50],[638,950]])+0.5
 N=np.array([10,10])
 m=px.StructuredMeshT3(box,N)
-cam=px.Camera(np.array([1,0,-f.pix.shape[0],0]))
+cam=px.Camera(np.array([1.,0.,-f.pix.shape[0],0.]))
 l0=15     # regularization length
 
 # Plot Mesh on the reference image
@@ -57,7 +57,7 @@ px.PlotMeshImage(f,m,cam)
 # Visualization of the mesh alone using Matplotlib
 m.Plot()
 # Or Visualization of the mesh using Paraview
-m.VTKMesh('dic_composite/Mesh')
+m.VTKMesh(os.path.join('dic_composite','Mesh'))
 
 #%% ============================================================================
 # Pre-processing  ==============================================================
@@ -92,11 +92,16 @@ for ik in range(0,30):
     if err<1e-3:
         break
 
-# Displacement field visualization using matplotlib
+# Visualization using matplotlib: Scaled deformation of the mesh
+m.Plot(edgecolor='#CCCCCC')
 m.Plot(U,30)
+# Visualization using matplotlib: displacement fields
+m.PlotContourDispl(U)
+# Visualization using matplotlib: strain fields
+m.PlotContourStrain(U)
 # or Displacement field visualization using Paraview
-m.VTKSol('dic_composite/Sol_std',U)
-# Plot Mesh on deformed state image
+m.VTKSol(os.path.join('dic_composite','Sol_std'),U)
+# Plot deformed Mesh on deformed state image
 px.PlotMeshImage(g,m,cam,U)
 
 #%% ============================================================================
@@ -130,7 +135,7 @@ for ik in range(0,30):
 # Displacement field visualization using matplotlib
 m.Plot(U,30)
 # or Displacement field visualization using Paraview
-m.VTKSol('dic_composite/Sol_Tikhonov',U)
+m.VTKSol(os.path.join('dic_composite','Sol_Tikhonov'),U)
 
 
 #%% ============================================================================
@@ -180,8 +185,7 @@ for ik in range(0,30):
 # Displacement field visualization using matplotlib
 m.Plot(U,30)
 # or Displacement field visualization using Paraview
-m.VTKSol('dic_composite/Sol_EquilibriumGap',U)
-
+m.VTKSol(os.path.join('dic_composite','Sol_EquilibriumGap'),U)
 
 
 #%% ============================================================================
@@ -201,7 +205,9 @@ l=H0/L0
 
 U=np.zeros(m.ndof)
 H_LU=splalg.splu(H+l*L)
-m.PVDFile('dic_composite/Sol','vtu',1,len(imnums)-1)
+
+m.PVDFile(os.path.join('dic_composite','Sol'),'vtu',1,len(imnums))
+m.VTKSol(os.path.join('dic_composite','Sol_0_0'),np.zeros(m.ndof))
 for ig in range(1,len(imnums)):
     imdef=imagefile % imnums[ig]
     g=px.Image(imdef).Load()
@@ -213,4 +219,16 @@ for ig in range(1,len(imnums)):
         print("Iter # %2d | disc/dyn=%2.2f %% | dU/U=%1.2e" % (ik+1,np.std(res)/dic.dyn*100,err))
         if err<1e-3:
             break
-    m.VTKSol('dic_composite/Sol_0_'+str(ig-1),U)
+    # Deformed mesh output
+    m.Plot(edgecolor='#CCCCCC')
+    m.Plot(U,30)
+    plt.savefig(os.path.join('vtk','dic_composite','traction_%02d.png' % ig))
+    plt.close()
+
+    # Mesh on Image output    
+    px.PlotMeshImage(g,m,cam,U)
+    plt.savefig(os.path.join('vtk','dic_composite','MshImg_%02d.png' % ig))
+    plt.close()
+    
+    # Paraview Output
+    m.VTKSol(os.path.join('dic_composite','Sol_0_%d' % ig),U)
