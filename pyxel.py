@@ -1784,7 +1784,9 @@ def ReadMeshINP(fn):
     line = mshfid.readline()
     while(line.find("*") < 0):
         sl=np.int32(line.split(','))
-        elems[ne]=np.append(np.array([3]),sl[1:]-1)
+        elem_type = np.int(sl[1:].size)-1
+        # elem_type = 3 for qua4 and 2 for tri3
+        elems[ne]=np.append(np.array([elem_type]),sl[1:]-1)
         line = mshfid.readline()
         ne+=1
     # here certainly other elements types... todo
