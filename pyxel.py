@@ -207,6 +207,88 @@ class Mesh:
         self.phiy=sp.sparse.csc_matrix((val, (row, col+1*self.ndof/2)), shape=(self.npg, self.ndof))
         #self.Me  =sp.sparse.csc_matrix((vale, (rowe, cole)), shape=(self.npg, len(self.e)))       
 
+    def DICIntegrationPixel(self,cam):
+        """ Build a pixel integration scheme """
+        nzv=0   # nb of non zero values in phix
+        repg=0  # nb of integration points
+        elem = np.empty(len(self.e), dtype=object)
+        for je in range(len(self.e)):
+            elem[je] = Elem()
+            if self.e[je][0]==3:  # qua4
+                elem[je].repx=self.conn[self.e[je][1:],0]
+                elem[je].repy=self.conn[self.e[je][1:],1]
+                xn=self.n[self.e[je][1:],0]
+                yn=self.n[self.e[je][1:],1]
+                u,v=cam.P(xn,yn)
+                rx=np.arange(np.floor(min(u)),np.ceil(max(u))+1).astype('int')
+                ry=np.arange(np.floor(min(v)),np.ceil(max(v))+1).astype('int')
+                [ypix,xpix]=np.meshgrid(ry,rx)
+                [xg,yg,elem[je].pgx,elem[je].pgy]=GetPixelsQua(u,v,xpix.ravel(),ypix.ravel())
+                elem[je].phi = 0.25 * np.c_[(1-xg)*(1-yg),(1+xg)*(1-yg),(1+xg)*(1+yg),(1-xg)*(1+yg)]
+                elem[je].repg = repg+np.arange(xg.shape[0])
+                repg+=xg.shape[0]
+                elem[je].wdetJ=np.ones(xg.shape[0])
+            elif self.e[je][0]==2: # tri3
+                elem[je].repx=self.conn[self.e[je][1:],0]
+                elem[je].repy=self.conn[self.e[je][1:],1]
+                xn=self.n[self.e[je][1:],0]
+                yn=self.n[self.e[je][1:],1]
+                u,v=cam.P(xn,yn)
+                rx=np.arange(np.floor(min(u)),np.ceil(max(u))+1).astype('int')
+                ry=np.arange(np.floor(min(v)),np.ceil(max(v))+1).astype('int')
+                [ypix,xpix]=np.meshgrid(ry,rx)
+                [xg,yg,elem[je].pgx,elem[je].pgy]=GetPixelsTri(u,v,xpix.ravel(),ypix.ravel())
+                elem[je].phi = np.c_[(1-xg-yg),xg,yg]
+                elem[je].repg = repg+np.arange(xg.shape[0])
+                repg+=xg.shape[0]
+                elem[je].wdetJ=np.ones(xg.shape[0])
+            else:
+                print("Oops!  That is not a valid element type...")
+            nzv+=np.prod(elem[je].phi.shape)
+        self.npg=repg
+        self.pgx=np.zeros(self.npg)
+        self.pgy=np.zeros(self.npg)
+        for je in range(len(self.e)):
+            self.pgx[elem[je].repg]=elem[je].pgx
+            self.pgy[elem[je].repg]=elem[je].pgy
+
+        """ Inverse Mapping ray tracing """
+        pgX=np.zeros(self.pgx.shape[0])
+        pgY=np.zeros(self.pgx.shape[0])
+        for ii in range(10):
+            pgx,pgy=cam.P(pgX,pgY)
+            resx=self.pgx-pgx
+            resy=self.pgy-pgy
+            #print(np.linalg.norm(resx)+np.linalg.norm(resy))
+            dPxdX,dPxdY,dPydX,dPydY=cam.dPdX(pgX,pgY)
+            detJ=dPxdX*dPydY-dPxdY*dPydX
+            dX=dPydY/detJ*resx-dPxdY/detJ*resy
+            dY=-dPydX/detJ*resx+dPxdX/detJ*resy
+            pgX+=dX
+            pgY+=dY
+            res=np.linalg.norm(dX)+np.linalg.norm(dY)
+            if res<1e-4:
+                break
+        self.pgx=pgX
+        self.pgy=pgY
+        
+        """ Build the FE interpolation """
+        self.wdetJ=np.zeros(self.npg)
+        row=np.zeros(nzv)
+        col=np.zeros(nzv)
+        val=np.zeros(nzv)
+        nzv=0
+        for je in range(len(self.e)):
+            self.wdetJ[elem[je].repg]=elem[je].wdetJ
+            [repj,repi]=np.meshgrid(elem[je].repx,elem[je].repg)
+            rangephi = nzv + np.arange(np.prod(elem[je].phi.shape))
+            row[rangephi]=repi.ravel()
+            col[rangephi]=repj.ravel()
+            val[rangephi]=elem[je].phi.ravel()
+            nzv+=np.prod(elem[je].phi.shape)
+        self.phix=sp.sparse.csc_matrix((val, (row, col+0*self.ndof/2)), shape=(self.npg, self.ndof))
+        self.phiy=sp.sparse.csc_matrix((val, (row, col+1*self.ndof/2)), shape=(self.npg, self.ndof))
+        
     def DICIntegrationWithGrad(self,cam):
         """ Build the integration scheme """
         nzv=0   # nb of non zero values in phix
