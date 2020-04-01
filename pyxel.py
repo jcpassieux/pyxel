@@ -2,7 +2,7 @@
 """
 Finite Element Digital Image Correlation method 
 
-@author: JC Passieux, INSA Toulouse, 2018
+@author: JC Passieux, INSA Toulouse, 2020
 
 pyxel
 
@@ -886,6 +886,8 @@ class Mesh:
         """ Plot deformed or undeformes Mesh """
         if n is None:
             n=self.n.copy()
+        else:
+            print('ok')
         if U is not None:
             n+=coef*U[self.conn]
         # plt.plot(n[:,0],n[:,1],'.',color=edgecolor,alpha=0.5)
@@ -1030,6 +1032,18 @@ def StructuredMeshT3(roi,dx):
     m=Mesh(e,n)
     return m 
 
+def MeshFromROI(roi,dx,f):
+    # roi=np.array([[x0,y0],[x1,y1]]) 2 points definig a box
+    # dx=[dx,dy]: average element size (can be scalar)
+    droi=np.diff(roi,axis=0)[0]
+    xmin=np.min(roi[:,0])
+    ymin=f.pix.shape[0]-np.max(roi[:,1])
+    roi=np.array([[0,0],droi])
+    m=StructuredMeshQ4(roi,dx)
+    p=np.array([1.0,xmin,ymin-f.pix.shape[0],0.0])
+    cam=Camera(p)
+    return m,cam
+
 
 #%%    
 class Image:
@@ -1065,7 +1079,7 @@ class Image:
     def InterpHess(self,x,y):
         return self.tck.ev(x,y,2,0),self.tck.ev(x,y,0,2),self.tck.ev(x,y,1,1)    
     def Show(self):
-        plt.imshow(self.pix, cmap="gray", interpolation='none') 
+        plt.imshow(self.pix, cmap="gray", interpolation='none',origin='upper') 
         #plt.axis('off')
         #plt.colorbar()
     def Dynamic(self):
@@ -1154,9 +1168,9 @@ def GetPixelsTri(xn,yn,xpix,ypix):
 
 def SubQuaIso(nx,ny):
     px=1./nx
-    xi=np.linspace(px-1,1-px,nx)
+    xi=np.linspace(px-1,1-px,int(nx))
     py=1./ny
-    yi=np.linspace(py-1,1-py,ny)
+    yi=np.linspace(py-1,1-py,int(ny))
     xg,yg=np.meshgrid(xi,yi)
     wg=4./(nx*ny)
     return xg.ravel(),yg.ravel(),wg
@@ -1220,6 +1234,10 @@ class Camera():
         u=-self.f*(-np.sin(self.rz)*X+np.cos(self.rz)*Y+self.ty)
         v=self.f*(np.cos(self.rz)*X+np.sin(self.rz)*Y+self.tx)
         return u,v
+    def Pinv(self,u,v):
+        X=-np.sin(self.rz)*(-u/self.f-self.ty)+np.cos(self.rz)*(v/self.f-self.tx)
+        Y= np.cos(self.rz)*(-u/self.f-self.ty)+np.sin(self.rz)*(v/self.f-self.tx)
+        return X,Y
     def dPdX(self,X,Y):
         dudx = self.f*np.sin(self.rz)*np.ones(X.shape[0])
         dudy =-self.f*np.cos(self.rz)*np.ones(X.shape[0])
@@ -1612,6 +1630,7 @@ def MultiscaleInit(m,imf,img,cam,nscale,l0=None):
         n1 = np.array([m.n[m.e[i][1],:] for i in range(len(m.e))])
         n2 = np.array([m.n[m.e[i][2],:] for i in range(len(m.e))])
         l0 = 4*min(np.linalg.norm(n1-n2,axis=1))
+        print(l0)
     used_nodes=m.conn[:,0]>0
     L=m.Tikhonov()
     U=np.zeros(m.ndof)
