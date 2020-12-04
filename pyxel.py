@@ -17,6 +17,7 @@ import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 import PIL.Image as image
 import matplotlib.collections as cols
+import matplotlib.animation as animation
 import os
 
 import vtktools as vtk
@@ -877,7 +878,10 @@ class Mesh:
     def Morphing(self,U):
         self.n+=U[self.conn]
         
-    def Plot(self,U=None,coef=1,n=None, **kwargs):
+    def PreparePlot(self,U=None,coef=1.,n=None, **kwargs):
+        """
+        Prepare the matplotlib collections for a plot
+        """
         edgecolor=kwargs.pop('edgecolor','k')
         facecolor=kwargs.pop('facecolor','none')
         alpha=kwargs.pop('alpha',0.8)        
@@ -890,31 +894,76 @@ class Mesh:
             print('ok')
         if U is not None:
             n+=coef*U[self.conn]
-        # plt.plot(n[:,0],n[:,1],'.',color=edgecolor,alpha=0.5)
-        qua=np.zeros((len(self.e),4),dtype='int64')
-        nqua=0
-        tri=np.zeros((len(self.e),3),dtype='int64')
-        ntri=0
-        for ie in range(len(self.e)):
-            if self.e[ie][0]==3 or self.e[ie][0]==16 or self.e[ie][0]==10:  # quadrangles
-                qua[nqua,:]=self.e[ie][1:]
-                nqua+=1
-            elif self.e[ie][0]==2 or self.e[ie][0]==9:       # triangles
-                tri[ntri,:]=self.e[ie][1:]
-                ntri+=1
-        if nqua<len(self.e):
-            qua=qua[:nqua,:]
-        if ntri<len(self.e):
-            tri=tri[:ntri,:]
-        if nqua>0:
-            pc = cols.PolyCollection(n[qua], facecolor=facecolor, edgecolor=edgecolor, alpha=alpha, **kwargs)
-            ax.add_collection(pc)
-        if ntri>0:
-            pc = cols.PolyCollection(n[tri], facecolor=facecolor, edgecolor=edgecolor, alpha=alpha, **kwargs)
-            ax.add_collection(pc)
+        ### Find the quad elements
+        lqua = [ie for ie in self.e if self.e[ie][0] in (3,16,10)]
+        ### Find the tri elements
+        ltri = [ie for ie in self.e if self.e[ie][0] in (2,9)]
+        
+        qua = np.zeros((len(lqua),4),dtype='int64')
+        tri = np.zeros((len(ltri),3),dtype='int64')
+        for ii,ie in enumerate(lqua):
+            qua[ii,:] = self.e[ie][1:]
+        for ii,ie in enumerate(ltri):
+            tri[ii,:] = self.e[ie][1:]
+        
+        ### Join the 2 lists of vertices
+        nn = n[qua].tolist()+n[tri].tolist()
+        ### Create the collection
+        pc = cols.PolyCollection(nn, facecolor=facecolor, edgecolor=edgecolor, alpha=alpha, **kwargs)
+        ### Return the matplotlib collection and the list of vertices
+        return pc,nn
+
+    def Plot(self,U=None,coef=1,n=None, **kwargs):
+        """
+        Plot the mesh
+        Inputs: 
+            -U: displacement fields for a deformed mesh plot
+            -coef: amplification coefficient
+            -n: nodes coordinates
+        """
+        ax = plt.gca()
+        pc,nn = self.PreparePlot(U,coef,n, **kwargs)
+        ax.add_collection(pc)
         ax.autoscale()
         plt.axis('equal')
         plt.show()
+
+    
+    def AnimatedPlot(self,U,coef=1,n=None,timeAnim=5,color=('k','b','r','g','c')):
+        """
+        Animated plot with funcAnimation 
+        Inputs:
+            -U: displacement field, stored in column for each time step
+            -coef: amplification coefficient
+            -n: nodes coordinates
+            -timeAnim: time of the animation
+        """
+        if not(isinstance(U,list)):
+            U = [U]
+        ntimes = U[0].shape[1]
+        fig = plt.figure()
+        ax = plt.gca()
+        pc = dict()
+        nn = dict()
+        for jj,u in enumerate(U):
+            pc[jj],nn[jj] = self.PreparePlot(u[:,0],coef,n,edgecolor=color[jj])
+            ax.add_collection(pc[jj])
+            ax.autoscale()
+            plt.axis('equal')
+        
+        def updateMesh(ii):
+            """
+            Function to update the matplotlib collections
+            """
+            for jj,u in enumerate(U):
+                titi,nn = self.PreparePlot(u[:,ii],coef,n)
+                pc[jj].set_paths(nn)
+            return pc.values()
+        
+        line_ani = animation.FuncAnimation(fig, updateMesh, range(ntimes),
+                                           blit=True,
+                                           interval=timeAnim/ntimes*1000)
+        return line_ani
 
     def PlotContourDispl(self,U=None, **kwargs):
         rep,=np.where(self.conn[:,0]>=0)
