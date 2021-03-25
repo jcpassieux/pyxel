@@ -2,7 +2,7 @@
 """
 Finite Element Digital Image Correlation method 
 
-@author: JC Passieux, INSA Toulouse, 2020
+@author: JC Passieux, INSA Toulouse, 2021
 
 pyxel
 
