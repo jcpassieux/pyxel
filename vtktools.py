@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """ Some tools to produce VTK XML Files  ***
-                JchPassieux 2011
+                JchPassieux 2021
 
 DEMO:
 
@@ -31,6 +31,22 @@ vtk.clearData()
 vtk.addPointData('temperature',1,[20,21,22,23])
 vtk.addCellData('num',1,[1,2])
 vtk.write('test2')
+
+
+# VTR Example
+xi=np.linspace(0.7,1.3,8)
+yi=np.linspace(0.7,1.3,8)
+zi=np.linspace(0.7,1.3,8)
+vtk=VTRWriter(xi,yi,zi)
+[Yi,Xi,Zi]=np.meshgrid(yi,xi,zi)
+v=(Xi-1)**2+(Yi-1)**2+(Zi-1)**2
+vtk.addPointData('u',1,v.T.ravel())
+[Yi,Xi,Zi]=np.meshgrid(yi[:-1],xi[:-1],zi[:-1])
+E=(Xi-1)**2+(Yi-1)**2+(Zi-1)**2
+vtk.addCellData('e',1,E.T.ravel())
+vtk.VTRWriter('test2.vtr')
+
+
 """
 
 import numpy as np
@@ -174,7 +190,6 @@ class VTUWriter():
         print("VTK: "+ fileName +".vtu written")
         outFile.close()
         
-
 class VTRWriter():
     def __init__(self,xi,yi,zi):
         self.clearData()
@@ -184,8 +199,12 @@ class VTRWriter():
     def addCellData(self,varName,numb,data):
         cdnew=VTKData(varName,numb,data)
         self.cd=np.append(self.cd,cdnew)
+    def addPointData(self,varName,numb,data):
+        pdnew=VTKData(varName,numb,data)
+        self.pd=np.append(self.pd,pdnew)
     def clearData(self):
         self.cd = np.empty(0 , dtype=object)
+        self.pd = np.empty(0 , dtype=object)
     def VTRWriter(self,fileName):
         import xml.dom.minidom    
         # Document and root element
@@ -198,7 +217,7 @@ class VTRWriter():
     
         # Unstructured grid element
         RectilinearGrid = doc.createElementNS("VTK", "RectilinearGrid")
-        extent=np.array([0,len(self.xi),0,len(self.yi),0,len(self.zi)])
+        extent=np.array([0,len(self.xi)-1,0,len(self.yi)-1,0,len(self.zi)-1])
         RectilinearGrid.setAttribute("WholeExtent",array2string(extent))
         root_element.appendChild(RectilinearGrid)
     
@@ -219,8 +238,7 @@ class VTRWriter():
         point_X_coords.setAttribute("format", "ascii") 
         points.appendChild(point_X_coords)
     
-        xi=np.append(self.xi,self.xi[-1]+1)    
-        point_X_coords_data = doc.createTextNode(array2string(xi))
+        point_X_coords_data = doc.createTextNode(array2string(self.xi))
         point_X_coords.appendChild(point_X_coords_data)
     
         # Point Y Coordinates Data
@@ -231,8 +249,7 @@ class VTRWriter():
         point_Y_coords.setAttribute("format", "ascii") 
         points.appendChild(point_Y_coords)
     
-        yi=np.append(self.yi,self.yi[-1]+1)
-        point_Y_coords_data = doc.createTextNode(array2string(yi))
+        point_Y_coords_data = doc.createTextNode(array2string(self.yi))
         point_Y_coords.appendChild(point_Y_coords_data)
     
         # Point Z Coordinates Data
@@ -243,8 +260,7 @@ class VTRWriter():
         point_Z_coords.setAttribute("format", "ascii") 
         points.appendChild(point_Z_coords)
     
-        zi=np.append(self.zi,self.zi[-1]+1)
-        point_Z_coords_data = doc.createTextNode(array2string(zi))
+        point_Z_coords_data = doc.createTextNode(array2string(self.zi))
         point_Z_coords.appendChild(point_Z_coords_data)
     
         #### Cell data  ####
@@ -260,6 +276,20 @@ class VTRWriter():
             cell_data.appendChild(cell_data_array)
             cell_data_array_Data = doc.createTextNode(array2string(self.cd[ic].vals))
             cell_data_array.appendChild(cell_data_array_Data)
+
+        #### Point data  ####
+        point_data = doc.createElementNS("VTK", "PointData")
+        piece.appendChild(point_data)
+        for ic in range(len(self.pd)):
+            # Point Data
+            point_data_array = doc.createElementNS("VTK", "DataArray")
+            point_data_array.setAttribute("Name", self.pd[ic].name )
+            point_data_array.setAttribute("NumberOfComponents", str(self.pd[ic].numb))
+            point_data_array.setAttribute("type", "Float32")
+            point_data_array.setAttribute("format", "ascii")
+            point_data.appendChild(point_data_array)
+            point_data_array_Data = doc.createTextNode(array2string(self.pd[ic].vals))
+            point_data_array.appendChild(point_data_array_Data)
     
         # Write to file and exit
         outFile = open(fileName, 'w')
