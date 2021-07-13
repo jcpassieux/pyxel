@@ -67,6 +67,6 @@ The gray level conservation problem is written in three-dimensional space. It re
 
 # References
 
-Jean-Emmanuel Pierré, Jean-Charles Passieux, Jean-Noël Périé. **Finite Element Stereo Digital Image Correlation: Framework and Mechanical Regularization**. *Experimental Mechanics*, Society for Experimental Mechanics, p.443-456, 57, 2017
+Jean-Charles Passieux, Robin Bouclier. **Classic and Inverse Compositional Gauss-Newton in Global DIC**. *International Journal for Numerical Methods in Engineering*, 119(6), p.453-468, 2019.
 
-Jean-Emmanuel Pierré, Jean-Charles Passieux, Jean-Noël Périé, Florian Bugarin, Laurent Robert. **Unstructured finite element-based digital image correlation with enhanced management of quadrature and lens distortions**. *Optics and Lasers in Engineering*, Elsevier, 44-53, 77, 2016. 
+Jean-Charles Passieux. **pyxel, an open-source FE-DIC library**. *Zenodo*. http://doi.org/10.5281/zenodo.4654018
