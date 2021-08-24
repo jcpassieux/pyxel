@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """ Some tools to produce VTK XML Files  ***
-                JchPassieux 2021
+                JchPassieux 2011
 
 DEMO:
 
@@ -45,7 +45,6 @@ vtk.addPointData('u',1,v.T.ravel())
 E=(Xi-1)**2+(Yi-1)**2+(Zi-1)**2
 vtk.addCellData('e',1,E.T.ravel())
 vtk.VTRWriter('test2.vtr')
-
 
 """
 
