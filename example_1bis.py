@@ -12,19 +12,12 @@ import os
 import numpy as np
 import pyxel as px
 
-#%% IMAGES
-
 imref = os.path.join('data', 'dic_composite', 'zoom-0053_1.tif')
 f = px.Image(imref).Load()
-f.Plot()
-
 imdef = os.path.join('data', 'dic_composite', 'zoom-0070_1.tif')
 g = px.Image(imdef).Load()
-g.Plot()
 
-#%% MESH
-
-m = px.ReadMeshINP(os.path.join('data', 'dic_composite', 'abaqus_q4_m.inp'))
+m = px.ReadMeshGMSH(os.path.join('data', 'dic_composite', 'gmsh_t3_mm.msh'))
 m.Plot()
 
 #%% CAMERA MODEL
@@ -40,37 +33,17 @@ if do_calibration:
     cam=ls.Calibration()
 else:
     # reuse previous calibration parameters
-    p = np.array([ 1.05449047e+04,  5.12335842e-02, -9.63541211e-02, -4.17489457e-03])
-    cam = px.Camera(p)
+    cam = px.Camera(np.array([-10.513327, -50.987166, 6.449013, 4.709107]))
 
 px.PlotMeshImage(f,m,cam)
 
-#%% Pre-processing 
+#%% 
 
 m.Connectivity()
 m.DICIntegration(cam)
 
-#%% Do Correlation
 U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
 U, res=px.Correlate(f ,g, m, cam, U0=U)
 
-#%%  Post-processing 
 
-# Visualization: Scaled deformation of the mesh
-m.Plot(edgecolor='#CCCCCC')
-m.Plot(U,30)
-
-# Visualization: displacement fields
 m.PlotContourDispl(U,s=30)
-
-# Visualization: strain fields
-m.PlotContourStrain(U)
-
-# Plot deformed Mesh on deformed state image
-px.PlotMeshImage(g,m,cam,U)
-
-# Plot residual
-m.PlotResidualMap(res,cam,1e5)
-
-# Export for Paraview
-m.VTKSol('example_1',U)

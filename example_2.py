@@ -17,7 +17,7 @@ imagefile = os.path.join('data', 'dic_composite', 'zoom-0%03d_1.tif')
 imref = imagefile % imnums[0]
 f = px.Image(imref).Load()
 
-m = px.ReadMeshINP(os.path.join('data', 'dic_composite', 'olfa3.inp'))
+m = px.ReadMeshINP(os.path.join('data', 'dic_composite', 'abaqus_q4_m.inp'))
 
 p=np.array([ 1.05449047e+04,  5.12335842e-02, -9.63541211e-02, -4.17489457e-03])
 cam=px.Camera(p)
@@ -26,6 +26,8 @@ m.Connectivity()
 m.DICIntegration(cam)
 
 UU=px.CorrelateTimeIncr(m, f, imagefile, imnums, cam, [3, 2, 1, 0])
+
+m.AnimatedPlot(UU, 30)
 
 m.VTKSolSeries('example_2', UU)
 

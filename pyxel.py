@@ -17,6 +17,7 @@ import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 import PIL.Image as image
 import matplotlib.collections as cols
+import matplotlib.animation as animation
 from numba import njit
 
 import vtktools as vtk
@@ -1543,7 +1544,7 @@ class Mesh:
         self.pgx += self.phix @ U
         self.pgy += self.phiy @ U
 
-    def Plot(self, U=None, coef=1, n=None, **kwargs):
+    def PlotOld(self, U=None, coef=1, n=None, **kwargs):
         """
         Plots the (possibly warped) mesh using Matplotlib Library.
         Usage:
@@ -1607,6 +1608,116 @@ class Mesh:
             )
         plt.axis("equal")
         plt.show()
+
+    def PreparePlot(self, U=None, coef=1., n=None, **kwargs):
+        """
+        Prepare the matplotlib collections for a plot
+        """
+        edgecolor = kwargs.pop("edgecolor", "k")
+        facecolor = kwargs.pop("facecolor", "none")
+        alpha = kwargs.pop("alpha", 0.8)
+        """ Plot deformed or undeformes Mesh """
+        if n is None:
+            n = self.n.copy()
+        if U is not None:
+            n += coef * U[self.conn]
+        qua = np.zeros((0, 4), dtype="int64")
+        tri = np.zeros((0, 3), dtype="int64")
+        bar = np.zeros((0, 2), dtype="int64")
+        plotnodes = False
+        for ie in self.e.keys():
+            if ie == 3 or ie == 16 or ie == 10:  # quadrangles
+                qua = np.vstack((qua, self.e[ie][:, :4]))
+                if ie == 16 or ie == 10:
+                    plotnodes = True
+            elif ie == 2 or ie == 9:  # triangles
+                tri = np.vstack((tri, self.e[ie][:, :3]))
+                if ie == 9:
+                    plotnodes = True
+            elif ie == 1:  # bars
+                bar = np.vstack((bar, self.e[ie]))
+
+        ### Join the 2 lists of vertices
+        nn = n[qua].tolist() + n[tri].tolist() + n[bar].tolist()
+        ### Create the collection
+        if not plotnodes:
+            n=np.empty((0,2))
+        pc = cols.PolyCollection(nn, facecolor=facecolor, edgecolor=edgecolor, 
+                                 alpha=alpha, **kwargs)
+        ### Return the matplotlib collection and the list of vertices
+        return pc, nn, n
+
+    def Plot(self, U=None, coef=1, n=None, **kwargs):
+        """
+        Plots the (possibly warped) mesh using Matplotlib Library.
+
+        Inputs: 
+        -------
+            -U: displacement fields for a deformed mesh plot
+            -coef: amplification coefficient
+            -n: nodes coordinates
+
+        Usage:
+        ------
+            m.Plot()      > plots the mesh
+            m.Plot(U)     > plots the mesh warped by the displacement U
+            m.Plot(U, 30) > ... with a displacement amplification factor = 30
+
+            Supports other Matplotlib arguments:
+            m.Plot(U, edgecolor='r', facecolor='b', alpha=0.2)
+        """
+        ax = plt.gca()
+        pc, nn, n = self.PreparePlot(U, coef, n, **kwargs)
+        ax.add_collection(pc)
+        ax.autoscale()
+        edgecolor = kwargs.pop("edgecolor", "k")
+        alpha = kwargs.pop("alpha", 0.8)
+        plt.plot(
+            n[:, 0],
+            n[:, 1],
+            linestyle="None",
+            marker="o",
+            color=edgecolor,
+            alpha=alpha,
+        )
+        plt.axis('equal')
+        plt.show()
+
+    def AnimatedPlot(self, U, coef=1, n=None, timeAnim=5, color=('k','b','r','g','c')):
+        """
+        Animated plot with funcAnimation 
+        Inputs:
+            -U: displacement field, stored in column for each time step
+            -coef: amplification coefficient
+            -n: nodes coordinates
+            -timeAnim: time of the animation
+        """
+        if not(isinstance(U,list)):
+            U = [U]
+        ntimes = U[0].shape[1]
+        fig = plt.figure()
+        ax = plt.gca()
+        pc = dict()
+        nn = dict()
+        for jj, u in enumerate(U):
+            pc[jj], nn[jj], _ = self.PreparePlot(u[:,0], coef, n, edgecolor=color[jj])
+            ax.add_collection(pc[jj])
+            ax.autoscale()
+            plt.axis('equal')
+        
+        def updateMesh(ii):
+            """
+            Function to update the matplotlib collections
+            """
+            for jj, u in enumerate(U):
+                titi, nn, _ = self.PreparePlot(u[:,ii], coef, n)
+                pc[jj].set_paths(nn)
+            return pc.values()
+        
+        line_ani = animation.FuncAnimation(fig, updateMesh, range(ntimes),
+                                           blit=True, 
+                                           interval=timeAnim/ntimes*1000)
+        return line_ani
 
     def PlotResidualMap(self, res, cam, npts=1e4):
         """
@@ -3222,8 +3333,10 @@ def ReadMeshGMSH(fn, dim=2):
             ne += 1
     if dim == 2:
         nodes = np.delete(nodes, 2, 1)
-    del elems[15]  # remove points
-    del elems[1]  # remove segments
+    if 15 in elems.keys():
+        del elems[15]  # remove points
+    if 1 in elems.keys():
+        del elems[1]  # remove segments
     m = Mesh(elems, nodes, dim)
     return m
 
