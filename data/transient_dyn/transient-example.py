@@ -3,16 +3,10 @@
 
 ### Importing packages
 import numpy as np
-import scipy.sparse as sp
 from scipy.sparse import linalg as spl
 import matplotlib.pyplot as plt
-import matplotlib.collections as cols
-import time
 
-import sys
-sys.path.append('../..')
 import pyxel as px
-import matplotlib.animation as animation
 
 
 #%%
@@ -85,6 +79,8 @@ Q = np.zeros((mesh.ndof,Qbc.shape[1]))
 Q[dofToKeep,:] = Qbc
 
 # mesh.Plot(Q[:,1],1)
+mesh.PlotContourDispl(Q[:,1],s=1)
+# mesh.PlotContourStrain(Q[:,1],s=1)
 
 #%%
 ### Numbering of the node for the FRF
