@@ -16,6 +16,7 @@ import scipy.sparse.linalg as splalg
 from .image import Image
 from .camera import Camera
 from .mesh import StructuredMesh
+import matplotlib.pyplot as plt
 
 #import pdb
 #pdb.set_trace()
@@ -468,13 +469,7 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
             l0 = max(l0, 4 * min(np.linalg.norm(n1 - n2, axis=1)))
             print('Auto reg. length l0 = %2.3e' % l0)
     # estimate average element size in pixels
-    u, v = cam.P(m.n[:,0], m.n[:,1])
-    aes = []
-    for et in m.e.keys():
-        v1x = u[m.e[et][:, 1]] - u[m.e[et][:, 0]]
-        v1y = v[m.e[et][:, 1]] - v[m.e[et][:, 0]]
-        aes = np.append(aes, np.sqrt(v1x**2 + v1y**2))
-    aes = int(np.mean(aes)-np.std(aes))
+    aes = m.GetAverageElementSize(cam)
     print('Average Element Size in px: %3d' % aes)
     if U0 is None:
         U = np.zeros(m.ndof)
@@ -492,6 +487,13 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         cam2 = cam.SubSampleCopy(iscale)
         m2 = m.Copy()
         m2.DICIntegrationFast(aes // (2**iscale))
+        # m2.DICIntegration(cam2)
+
+        # plt.figure()
+        # m2.Plot()
+        # plt.plot(m2.pgx,m2.pgy,'k.')
+        # plt.axis('equal')
+
         U, r = Correlate(f, g, m2, cam2, l0=l0 * 2 ** iscale, 
                          Basis=Basis, L=L, U0=U, eps=eps, disp=disp)
     return U

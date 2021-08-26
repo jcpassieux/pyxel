@@ -20,7 +20,7 @@ import matplotlib.animation as animation
 from numba import njit
 from .utils import meshgrid, isInBox
 from .vtktools import VTUWriter, PVDFile
-#from . import vtktools as vtk
+from .camera import Camera
 
 def ElTypes():
     """
@@ -1032,10 +1032,10 @@ class Mesh:
             # plt.plot([0,1,0,0],[0,0,1,0],'k-')
             # plt.axis('equal')
         elif et in [3, 10, 16]: # Quadrangles
-            if et == 3:
-                n = max(n, 1) # minimum 1 integration point for first order
-            else:
-                n = max(n, 2) # minimum 2 integration points for second order
+            # if et == 3:
+            #     n = max(n, 1) # minimum 1 integration point for first order
+            # else:
+            n = max(n, 2) # minimum 2 integration points for second order
             # xi = np.linspace(-1, 1, n+2)[1:-1]
             xi = np.linspace(-1, 1, n+1)[:-1] + 1/n
             xg, yg = np.meshgrid(xi, xi)
@@ -1085,17 +1085,24 @@ class Mesh:
                 valy[repnzv] = dphidy.ravel()
         return col, row, val, valx, valy, wdetJ
 
+    def GetAverageElementSize(self, cam=None):
+        if cam is None:
+            u = self.n[:, 0]
+            v = self.n[:, 1]            
+        else:
+            u, v = cam.P(self.n[:,0], self.n[:,1])
+        aes = []
+        for et in self.e.keys():
+            um = u[self.e[et]]-np.mean(u[self.e[et]], axis=1)[:,np.newaxis]
+            vm = v[self.e[et]]-np.mean(v[self.e[et]], axis=1)[:,np.newaxis]
+            aes = np.max(np.sqrt(um**2 + vm**2), axis=1)
+        return int(np.mean(aes)+np.std(aes))
+
     def DICIntegrationFast(self, n=10, G=False):
         """Builds a homogeneous (and fast) integration scheme for DIC"""
         if hasattr(n, 'rz'):
             # n is a camera and n is autocomputed
-            u, v = n.P(self.n[:,0], self.n[:,1])
-            aes = []
-            for et in self.e.keys():
-                v1x = u[self.e[et][:, 1]] - u[self.e[et][:, 0]]
-                v1y = v[self.e[et][:, 1]] - v[self.e[et][:, 0]]
-                aes = np.append(aes, np.sqrt(v1x**2 + v1y**2))
-            n = int(np.mean(aes)-np.std(aes))
+            n = self.GetAverageElementSize(n)
         if type(n) is not int:
             n = int(n)
         self.wdetJ = np.array([])
