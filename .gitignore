@@ -1,0 +1,7 @@
+# ignore cache
+__pycache__/
+
+#ignore hidden folder
+.*/
+dist/
+src/pyxel.egg-info/
