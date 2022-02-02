@@ -9,6 +9,7 @@ pyxel
 PYthon library for eXperimental mechanics using Finite ELements
 
 """
+import os
 import numpy as np
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
@@ -16,23 +17,33 @@ import PIL.Image as image
 from .utils import PlotMeshImage
 
 class Image:
+    def __init__(self, fname):
+        """Contructor"""
+        self.fname = fname
+
     def Load(self):
         """Load image data"""
-        if self.fname.split(".")[-1] == "npy":
-            self.pix = np.load(self.fname)
+        if os.path.isfile(self.fname):
+            if self.fname.split(".")[-1] == "npy":
+                self.pix = np.load(self.fname)
+            else:
+                self.pix = np.asarray(image.open(self.fname)).astype(float)
+                # self.pix = image.imread(self.fname).astype(float)
+            if len(self.pix.shape) == 3:
+                self.ToGray()
         else:
-            self.pix = np.asarray(image.open(self.fname)).astype(float)
-            # self.pix = image.imread(self.fname).astype(float)
-        if len(self.pix.shape) == 3:
-            self.ToGray()
+            print("File "+self.fname+" not in directory "+os.getcwd())
         return self
 
     def Load_cv2(self):
         """Load image data using OpenCV"""
-        import cv2 as cv
-        self.pix = cv.imread(self.fname).astype(float)
-        if len(self.pix.shape) == 3:
-            self.ToGray()
+        if os.path.isfile(self.fname):
+            import cv2 as cv
+            self.pix = cv.imread(self.fname).astype(float)
+            if len(self.pix.shape) == 3:
+                self.ToGray()
+        else:
+            print("File "+self.fname+" not in directory "+os.getcwd())
         return self
 
     def Copy(self):
@@ -43,13 +54,9 @@ class Image:
 
     def Save(self, fname):
         """Image Save"""
-        PILimg = image.fromarray(self.pix.astype("uint8"))
+        PILimg = image.fromarray(np.round(self.pix).astype("uint8"))
         PILimg.save(fname)
         # image.imsave(fname,self.pix.astype('uint8'),vmin=0,vmax=255,format='tif')
-
-    def __init__(self, fname):
-        """Contructor"""
-        self.fname = fname
 
     def BuildInterp(self):
         """build bivariate Spline interp"""

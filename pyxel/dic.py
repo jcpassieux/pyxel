@@ -331,7 +331,7 @@ def MeshFromROI(roi, dx, f, typel=3):
 
 
 def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None, 
-              L=None, eps=None, disp=True):
+              L=None, eps=None, maxiter=30, disp=True):
     """Perform FE-Digital Image Correlation.
 
     Parameters
@@ -403,7 +403,7 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             if disp:
                 print("no reg")
             H_LU = splalg.splu(H)
-    for ik in range(0, 100):
+    for ik in range(0, maxiter):
         [b, res] = dic.ComputeRHS(g, m, cam, U)
         if Basis is not None:
             da = H_LU.solve(Basis.T @ b)
@@ -442,6 +442,8 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         Scale 0 correspond to initial image
     l0 : float (OPTIONAL)
         regularization length in physical (mesh) unit
+        - set l0 to None to automatically compute l0
+        - set l0 to 0 to descativate regularization in the multiscale process
     U0 : Numpy Array (OPTIONAL)
         Initial guess for the displacement dof vector.
     Basis : Numpy array (OPTIONAL)
@@ -468,8 +470,10 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
             n2 = m.n[m.e[et][:, 1]]
             l0 = max(l0, 4 * min(np.linalg.norm(n1 - n2, axis=1)))
             print('Auto reg. length l0 = %2.3e' % l0)
+    if l0 == 0:
+        l0 = None
     # estimate average element size in pixels
-    aes = m.GetAverageElementSize(cam)
+    aes = int(m.GetApproxElementSize(cam))
     print('Average Element Size in px: %3d' % aes)
     if U0 is None:
         U = np.zeros(m.ndof)
@@ -488,7 +492,10 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         m2 = m.Copy()
         m2.DICIntegrationFast(aes // (2**iscale))
         # m2.DICIntegration(cam2)
-
+        # plt.figure()
+        # g.Plot()
+        # u, v = cam2.P(m2.n[:, 0], m2.n[:, 1])
+        # m.Plot(n=np.c_[v, u], edgecolor="y", alpha=0.6)
         # plt.figure()
         # m2.Plot()
         # plt.plot(m2.pgx,m2.pgy,'k.')

@@ -2,52 +2,7 @@
 import numpy as np
 from .mesh import Mesh
 
-
 #%%
-def Gmsh2Mesh(gmsh, dim=2):
-    """
-    Bulding pyxel mesh from gmsh python object
-
-    Parameters
-    ----------
-        gmsh : python gmsh object
-
-    EXAMPLE:
-    ----------
-        import gmsh
-        gmsh.initialize()
-        gmsh.model.add("P")
-        lc = 0.02
-        gmsh.model.geo.addPoint(0, 0.0, 0, 4 * lc, 1)
-        gmsh.model.geo.addPoint(1, 0.0, 0, lc, 2)
-        gmsh.model.geo.addPoint(1, 0.5, 0, lc, 3)
-        gmsh.model.geo.addPoint(0, 0.5, 0, 4 * lc, 4)
-        gmsh.model.geo.addLine(1, 2, 1)
-        gmsh.model.geo.addLine(2, 3, 2)
-        gmsh.model.geo.addLine(3, 4, 3)
-        gmsh.model.geo.addLine(4, 1, 4)
-        gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
-        gmsh.model.geo.addPlaneSurface([1], 1)
-        gmsh.model.geo.synchronize()
-        gmsh.model.mesh.generate(2)
-        m = px.gmsh2pyxel(gmsh)
-        m.Plot()
-        
-    """
-    # Get direct full node list
-    nums, nodes, e = gmsh.model.mesh.getNodes()
-    nodes = nodes.reshape((len(nums), 3))
-    elems = dict()
-    # Get the Element by type
-    for et in gmsh.model.mesh.getElementTypes():
-        nums, els = gmsh.model.mesh.getElementsByType(et)
-        nnd = len(els) // len(nums)
-        elems[et] = els.reshape((len(nums), nnd)).astype(int) - 1
-    del elems[15]  # remove points
-    del elems[1]  # remove segments
-    m = Mesh(elems, nodes[:, :dim], dim)
-    return m
-
 def ReadMeshGMSH(fn, dim=2):
     """
     Beta GMSH parser and converter to pyxel.Mesh object.

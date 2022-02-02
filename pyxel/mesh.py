@@ -92,32 +92,26 @@ def IsPointInElem2d(xn, yn, x, y):
         yes = yes * (a * b >= 0)
     return yes
 
-def GetPixelsQua(xn, yn, xpix, ypix):
-    """Finds the pixels that belong to a quadrilateral element and"""
-    """inverse the mapping to know their corresponding position in """
-    """the parent element."""
-    wg = IsPointInElem2d(xn, yn, xpix, ypix)
-    ind = np.where(wg)
-    xpix = xpix[ind]
-    ypix = ypix[ind]
+def InverseFEMapping(xn, yn, xpix, ypix, eltype):
+    """ Inverse the Finite Element mapping in order to map the coordinates """
+    """ of any physical points (xpix, ypix) to their corresponding position in """
+    """ the parent element (xg, yg)."""
+    _,_,_,N,dN_xi,dN_eta = ShapeFunctions(eltype)
     xg = 0 * xpix
     yg = 0 * ypix
     res = 1
     for k in range(7):
-        N = np.array([0.25 * (1 - xg) * (1 - yg),
-                      0.25 * (1 + xg) * (1 - yg),
-                      0.25 * (1 + xg) * (1 + yg),
-                      0.25 * (1 - xg) * (1 + yg)]).T
-        N_r = np.array([-0.25 * (1 - yg), 0.25 * (1 - yg), 0.25 * (1 + yg), -0.25 * (1 + yg)]).T
-        N_s = np.array([-0.25 * (1 - xg), -0.25 * (1 + xg), 0.25 * (1 + xg), 0.25 * (1 - xg)]).T
+        phi = N(xg, yg)
+        N_r = dN_xi(xg, yg)
+        N_s = dN_eta(xg, yg)
         dxdr = np.dot(N_r, xn)
         dydr = np.dot(N_r, yn)
         dxds = np.dot(N_s, xn)
         dyds = np.dot(N_s, yn)
         detJ = dxdr * dyds - dydr * dxds
         invJ = np.array([dyds / detJ, -dxds / detJ, -dydr / detJ, dxdr / detJ]).T
-        xp = np.dot(N, xn)
-        yp = np.dot(N, yn)
+        xp = np.dot(phi, xn)
+        yp = np.dot(phi, yn)
         dxg = invJ[:, 0] * (xpix - xp) + invJ[:, 1] * (ypix - yp)
         dyg = invJ[:, 2] * (xpix - xp) + invJ[:, 3] * (ypix - yp)
         res = np.dot(dxg, dxg) + np.dot(dyg, dyg)
@@ -125,40 +119,16 @@ def GetPixelsQua(xn, yn, xpix, ypix):
         yg = yg + dyg
         if res < 1.0e-6:
             break
-    return [xg, yg, xpix, ypix]
+    return xg, yg
 
-
-def GetPixelsTri(xn, yn, xpix, ypix):
-    """Finds the pixels that belong to a triangle element and"""
+def GetPixelsElem(xn, yn, xpix, ypix, eltype):
+    """Finds the pixels that belong to any 2D element and"""
     """inverse the mapping to know their corresponding position in """
     """the parent element."""
     wg = IsPointInElem2d(xn, yn, xpix, ypix)
     ind = np.where(wg)
-    xpix = xpix[ind]
-    ypix = ypix[ind]
-    xg = 0 * xpix
-    yg = 0 * ypix
-    res = 1
-    for k in range(7):
-        N = np.array([1 - xg - yg, xg, yg]).T
-        N_r = np.array([-np.ones(xg.shape), np.ones(xg.shape), np.zeros(xg.shape)]).T
-        N_s = np.array([-np.ones(xg.shape), np.zeros(xg.shape), np.ones(xg.shape)]).T
-        dxdr = np.dot(N_r, xn)
-        dydr = np.dot(N_r, yn)
-        dxds = np.dot(N_s, xn)
-        dyds = np.dot(N_s, yn)
-        detJ = dxdr * dyds - dydr * dxds
-        invJ = np.array([dyds / detJ, -dxds / detJ, -dydr / detJ, dxdr / detJ]).T
-        xp = np.dot(N, xn)
-        yp = np.dot(N, yn)
-        dxg = invJ[:, 0] * (xpix - xp) + invJ[:, 1] * (ypix - yp)
-        dyg = invJ[:, 2] * (xpix - xp) + invJ[:, 3] * (ypix - yp)
-        res = np.dot(dxg, dxg) + np.dot(dyg, dyg)
-        xg = xg + dxg
-        yg = yg + dyg
-        if res < 1.0e-6:
-            break
-    return [xg, yg, xpix, ypix]
+    xg, yg = InverseFEMapping(xn, yn, xpix[ind], ypix[ind], eltype)
+    return xg, yg, xpix[ind], ypix[ind]
 
 @njit(cache=True)
 def SubQuaIso(nx, ny):
@@ -258,13 +228,13 @@ def SubTriIso2(nx, ny=None):
     # plt.plot(wx,wy,'ro')
     return xg, yg, wg
 
-def SubTriGmsh(nx,ny):
+def SubTriGmsh(n):
     import gmsh as gmsh
     gmsh.initialize()
     gmsh.model.add("P")
-    gmsh.model.geo.addPoint(nx[0], ny[0], 0, 1, 1)
-    gmsh.model.geo.addPoint(nx[1], ny[1], 0, 1, 2)
-    gmsh.model.geo.addPoint(nx[2], ny[2], 0, 1, 3)
+    gmsh.model.geo.addPoint(0, 0, 0, 1/n, 1)
+    gmsh.model.geo.addPoint(1, 0, 0, 1/n, 2)
+    gmsh.model.geo.addPoint(0, 1, 0, 1/n, 3)
     gmsh.model.geo.addLine(1, 2, 1)
     gmsh.model.geo.addLine(2, 3, 2)
     gmsh.model.geo.addLine(3, 1, 3)
@@ -308,6 +278,7 @@ def StructuredMeshQ4(box, dx):
     dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
+    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
     X, Y = meshgrid(np.linspace(box[0, 0], box[1, 0], NE[0] + 1),
                     np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
@@ -331,6 +302,7 @@ def StructuredMeshQ9(box, dx):
     dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
+    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
     X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], 2 * NE[0] + 1),
                        np.linspace(box[0, 1], box[1, 1], 2 * NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
@@ -359,6 +331,7 @@ def StructuredMeshQ8(box, dx):
     dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
+    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
     X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], 2 * NE[0] + 1),
                        np.linspace(box[0, 1], box[1, 1], 2 * NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
@@ -387,6 +360,7 @@ def StructuredMeshT3(box, dx):
     dx = [dx, dy]: average element size (can be scalar) in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
+    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
     X, Y = meshgrid(np.linspace(box[0, 0], box[1, 0], NE[0] + 1),
                     np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
@@ -469,7 +443,45 @@ def ShapeFunctions(eltype):
     xg = 0
     yg = 0
     wg = 0
-    if eltype == 2:
+    if eltype == 1:
+        """
+        #############
+            seg2
+        #############
+        """
+        def N(x):
+            return np.concatenate(
+                (1 - x, x)).reshape((2,len(x))).T
+        
+        def dN_xi(x):
+            return np.concatenate(
+                (-1.0 + 0 * x, 1.0 + 0 * x)).reshape((2,len(x))).T
+
+        def dN_eta(x):
+            return False
+
+        xg = np.array([0.])
+        wg = np.array([2.])
+    elif eltype == 8:
+        """
+        #############
+            seg3
+        #############
+        """
+        def N(x):
+            return np.concatenate(
+                ((x**2 - x) * 0.5, 1 - x**2, (x**2 + x) * 0.5)).reshape((3,len(x))).T
+        
+        def dN_xi(x):
+            return np.concatenate(
+                (x - 0.5, -2 * x, x + 1)).reshape((3,len(x))).T
+
+        def dN_eta(x):
+            return False
+        
+        xg = np.sqrt(3) / 3 * np.array([-1, 1])
+        wg = np.array([1., 1.])
+    elif eltype == 2:
         """
         #############
             tri3
@@ -930,46 +942,24 @@ class Mesh:
             u = un[self.e[et]]
             v = vn[self.e[et]]
             _, _, _, N, _, _ = ShapeFunctions(et)
-            if et == 3:  # qua4
-                for je in range(len(self.e[et])):
-                    elem[ne] = Elem()
-                    elem[ne].repx = repdof[je]
-                    rx = np.arange(
-                        np.floor(min(u[je])), np.ceil(max(u[je])) + 1
-                    ).astype("int")
-                    ry = np.arange(
-                        np.floor(min(v[je])), np.ceil(max(v[je])) + 1
-                    ).astype("int")
-                    [ypix, xpix] = meshgrid(ry, rx)
-                    [xg, yg, elem[ne].pgx, elem[ne].pgy] = GetPixelsQua(
-                        u[je], v[je], xpix.ravel(), ypix.ravel()
-                    )
-                    elem[ne].phi = N(xg, yg)
-                    elem[ne].repg = repg + np.arange(xg.shape[0])
-                    repg += xg.shape[0]
-                    nzv += np.prod(elem[ne].phi.shape)
-                    ne += 1
-            elif et == 2:  # tri3
-                for je in range(len(self.e[et])):
-                    elem[ne] = Elem()
-                    elem[ne].repx = repdof[je]
-                    rx = np.arange(
-                        np.floor(min(u[je])), np.ceil(max(u[je])) + 1
-                    ).astype("int")
-                    ry = np.arange(
-                        np.floor(min(v[je])), np.ceil(max(v[je])) + 1
-                    ).astype("int")
-                    [ypix, xpix] = meshgrid(ry, rx)
-                    [xg, yg, elem[ne].pgx, elem[ne].pgy] = GetPixelsTri(
-                        u[je], v[je], xpix.ravel(), ypix.ravel()
-                    )
-                    elem[ne].phi = N(xg, yg)
-                    elem[ne].repg = repg + np.arange(xg.shape[0])
-                    repg += xg.shape[0]
-                    nzv += np.prod(elem[ne].phi.shape)
-                    ne += 1
-            else:
-                print("Oops!  That is not a valid element type...")
+            for je in range(len(self.e[et])):
+                elem[ne] = Elem()
+                elem[ne].repx = repdof[je]
+                rx = np.arange(
+                    np.floor(min(u[je])), np.ceil(max(u[je])) + 1
+                ).astype("int")
+                ry = np.arange(
+                    np.floor(min(v[je])), np.ceil(max(v[je])) + 1
+                ).astype("int")
+                [ypix, xpix] = meshgrid(ry, rx)
+                [xg, yg, elem[ne].pgx, elem[ne].pgy] = GetPixelsElem(
+                    u[je], v[je], xpix.ravel(), ypix.ravel(), et
+                )
+                elem[ne].phi = N(xg, yg)
+                elem[ne].repg = repg + np.arange(xg.shape[0])
+                repg += xg.shape[0]
+                nzv += np.prod(elem[ne].phi.shape)
+                ne += 1
         self.npg = repg
         self.pgx = np.zeros(self.npg)
         self.pgy = np.zeros(self.npg)
@@ -1021,21 +1011,20 @@ class Mesh:
                 n = max(n, 1) # minimum 1 integration point for first order
             else:
                 n = max(n, 2) # minimum 2 integration points for second order
-            xi = np.linspace(0, 1, n+3)[1:-1]
-            #xi2 = np.linspace(0, 1, n+2)[:-1] + 3/(2*n+2)
-            xg, yg = np.meshgrid(1-xi, xi)
-            rep=xg==np.triu(xg, 1)
-            repi,repj=np.where(rep)
-            xg = xg[repi,repj]
-            yg = yg[repi,repj]
+            xg, yg, wg = SubTriIso2(n)
+            # xi = np.linspace(0, 1, n+3)[1:-1]
+            # xg, yg = np.meshgrid(1-xi, xi)
+            # rep=xg==np.triu(xg, 1)
+            # repi,repj=np.where(rep)
+            # xg = xg[repi,repj]
+            # yg = yg[repi,repj]
+            # wg = 0.5 / len(xg) * np.ones(len(xg))
+
             # plt.plot(xg,yg,'k.')
             # plt.plot([0,1,0,0],[0,0,1,0],'k-')
             # plt.axis('equal')
         elif et in [3, 10, 16]: # Quadrangles
-            # if et == 3:
-            #     n = max(n, 1) # minimum 1 integration point for first order
-            # else:
-            n = max(n, 2) # minimum 2 integration points for second order
+            n = max(n, 2) # minimum 2 integration points
             # xi = np.linspace(-1, 1, n+2)[1:-1]
             xi = np.linspace(-1, 1, n+1)[:-1] + 1/n
             xg, yg = np.meshgrid(xi, xi)
@@ -1043,7 +1032,7 @@ class Mesh:
             yg = yg.ravel()
             # plt.plot(xg,yg,'k.')
             # plt.plot([-1,1,1,-1,-1],[-1,-1,1,1,-1],'k-')
-        wg = 4 / len(xg) * np.ones(len(xg))
+            wg = 4 / len(xg) * np.ones(len(xg))
         phi = N(xg, yg)
         dN_xi = Ndx(xg, yg)
         dN_eta = Ndy(xg, yg)
@@ -1085,7 +1074,17 @@ class Mesh:
                 valy[repnzv] = dphidy.ravel()
         return col, row, val, valx, valy, wdetJ
 
-    def GetAverageElementSize(self, cam=None):
+    def GetApproxElementSize(self, cam=None, method='max'):
+        """ Estimate average/min/max element size
+        input
+        -----
+        cam : pyxel.Camera (OPTIONAL)
+            To get the size in pixels
+        method: string
+            'max': estimation of the maximum element size
+            'min': estimation of the minimum element size
+            'mean': estimation of the mean element size
+        """
         if cam is None:
             u = self.n[:, 0]
             v = self.n[:, 1]            
@@ -1095,14 +1094,24 @@ class Mesh:
         for et in self.e.keys():
             um = u[self.e[et]]-np.mean(u[self.e[et]], axis=1)[:,np.newaxis]
             vm = v[self.e[et]]-np.mean(v[self.e[et]], axis=1)[:,np.newaxis]
-            aes = np.max(np.sqrt(um**2 + vm**2), axis=1)
-        return int(np.mean(aes)+np.std(aes))
+            if method == 'max':
+                aes = np.append(aes, np.max(np.sqrt(um**2 + vm**2), axis=1))
+            elif method == 'min':
+                aes = np.append(aes, np.min(np.sqrt(um**2 + vm**2), axis=1))
+            elif method == 'mean':
+                aes = np.append(aes, np.sqrt(um**2 + vm**2))
+        if method == 'max':
+            return np.mean(aes) + np.std(aes) * 0.5
+        elif method == 'min':
+            return np.mean(aes) - np.std(aes) * 0.5
+        elif method == 'mean':
+            return np.mean(aes)
 
     def DICIntegrationFast(self, n=10, G=False):
         """Builds a homogeneous (and fast) integration scheme for DIC"""
         if hasattr(n, 'rz'):
-            # n is a camera and n is autocomputed
-            n = self.GetAverageElementSize(n)
+            # if n is a camera and n is autocomputed
+            n = self.GetApproxElementSize(n)
         if type(n) is not int:
             n = int(n)
         self.wdetJ = np.array([])
@@ -1224,6 +1233,7 @@ class Mesh:
         """Assembles Stiffness Operator"""
         if not hasattr(self, "dphixdx"):
             m = self.Copy()
+            print('Gauss Integ.')
             m.GaussIntegration()
             wdetJ = sp.sparse.diags(m.wdetJ)
             Bxy = m.dphixdy + m.dphiydx
@@ -1452,7 +1462,7 @@ class Mesh:
             vtkfile.addPointData("temp", 1, T[self.conn[:, 0]])
         # Strain
         if len(E) == 0:
-            Ex, Ey, Exy = self.StrainAtNodes(U)
+            Ex, Ey, Exy = self.StrainAtNodes2(U)
             E = np.c_[Ex, Ey, Exy]
             C = (Ex + Ey) / 2
             R = np.sqrt((Ex - C) ** 2 + Exy ** 2)
@@ -1488,6 +1498,36 @@ class Mesh:
             epsxy = 0.5 * self.dphixdy @ U + 0.5 * self.dphiydx @ U
         return epsx, epsy, epsxy
 
+    # def StrainAtNodes(self, U):
+    #     nnodes = self.ndof // 2
+    #     m = self.Copy()
+    #     m.GaussIntegration()
+    #     exxgp = m.dphixdx @ U
+    #     eyygp = m.dphiydy @ U
+    #     exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
+    #     EpsXX = np.zeros(nnodes)
+    #     EpsYY = np.zeros(nnodes)
+    #     EpsXY = np.zeros(nnodes)
+    #     for jn in range(len(self.n)):
+    #         if self.conn[jn, 0] >= 0:
+    #             sig = 0  # max over all element types in the neighborhood
+    #             for je in self.e.keys():
+    #                 eljn, _ = np.where(self.e[je] == jn)
+    #                 if len(eljn) != 0:
+    #                     xm = np.mean(self.n[self.e[je][eljn, :], 0], axis=1)
+    #                     ym = np.mean(self.n[self.e[je][eljn, :], 1], axis=1)
+    #                     sig = max(sig, np.max(np.sqrt((xm - self.n[jn, 0]) ** 2
+    #                                                   + (ym - self.n[jn, 1]) ** 2)) / 3)
+    #             D = np.sqrt((m.pgx - self.n[jn, 0]) ** 2 + (m.pgy - self.n[jn, 1]) ** 2)
+    #             gauss = np.exp(-(D ** 2) / (2 * sig ** 2))
+    #             if np.sum(gauss) < 1e-15:
+    #                 print(jn)
+    #             gauss /= np.sum(gauss)
+    #             EpsXX[self.conn[jn, 0]] = gauss @ exxgp
+    #             EpsYY[self.conn[jn, 0]] = gauss @ eyygp
+    #             EpsXY[self.conn[jn, 0]] = gauss @ exygp
+    #     return EpsXX, EpsYY, EpsXY
+
     def StrainAtNodes(self, U):
         nnodes = self.ndof // 2
         m = self.Copy()
@@ -1498,38 +1538,27 @@ class Mesh:
         EpsXX = np.zeros(nnodes)
         EpsYY = np.zeros(nnodes)
         EpsXY = np.zeros(nnodes)
-        for jn in range(len(self.n)):
-            if self.conn[jn, 0] >= 0:
-                sig = 0  # max over all element types in the neighborhood
-                for je in self.e.keys():
-                    eljn, _ = np.where(self.e[je] == jn)
-                    if len(eljn) != 0:
-                        xm = np.mean(self.n[self.e[je][eljn, :], 0], axis=1)
-                        ym = np.mean(self.n[self.e[je][eljn, :], 1], axis=1)
-                        sig = max(sig, np.max(np.sqrt((xm - self.n[jn, 0]) ** 2
-                                                      + (ym - self.n[jn, 1]) ** 2)) / 3)
-                D = np.sqrt((m.pgx - self.n[jn, 0]) ** 2 + (m.pgy - self.n[jn, 1]) ** 2)
-                gauss = np.exp(-(D ** 2) / (2 * sig ** 2))
-                if np.sum(gauss) < 1e-15:
-                    print(jn)
-                gauss /= np.sum(gauss)
-                EpsXX[self.conn[jn, 0]] = gauss @ exxgp
-                EpsYY[self.conn[jn, 0]] = gauss @ eyygp
-                EpsXY[self.conn[jn, 0]] = gauss @ exygp
+        phi = m.phix[:,:nnodes]
+        w = np.array(np.sum(phi, axis=0))[0]
+        phi = phi @ sp.sparse.diags(1/w)
+        EpsXX = phi.T @ exxgp
+        EpsYY = phi.T @ eyygp
+        EpsXY = phi.T @ exygp
         return EpsXX, EpsYY, EpsXY
 
-    def StrainAtNodesOld(self, UU):
-        # LS projection... not working so good!
-        m = self.Copy()
-        m.GaussIntegration()
-        wdetJ = sp.sparse.diags(m.wdetJ)
-        phi = m.phix[:, : m.ndof // 2]
-        if not hasattr(self, "Bx"):
-            self.Bx = splalg.splu(phi.T @ wdetJ @ phi)
-        epsx = self.Bx.solve(phi.T @ wdetJ @ m.dphixdx @ UU)
-        epsy = self.Bx.solve(phi.T @ wdetJ @ m.dphiydy @ UU)
-        epsxy = self.Bx.solve(phi.T @ wdetJ @ (m.dphixdy @ UU + m.dphiydx @ UU)) * 0.5
-        return epsx, epsy, epsxy
+
+    # def StrainAtNodesOld(self, UU):
+    #     # LS projection... not working so good!
+    #     m = self.Copy()
+    #     m.GaussIntegration()
+    #     wdetJ = sp.sparse.diags(m.wdetJ)
+    #     phi = m.phix[:, : m.ndof // 2]
+    #     if not hasattr(self, "Bx"):
+    #         self.Bx = splalg.splu(phi.T @ wdetJ @ phi)
+    #     epsx = self.Bx.solve(phi.T @ wdetJ @ m.dphixdx @ UU)
+    #     epsy = self.Bx.solve(phi.T @ wdetJ @ m.dphiydy @ UU)
+    #     epsxy = self.Bx.solve(phi.T @ wdetJ @ (m.dphixdy @ UU + m.dphiydx @ UU)) * 0.5
+    #     return epsx, epsy, epsxy
 
     def Elem2Node(self, edata):
         # LS projection... not working so good!
@@ -1666,30 +1695,32 @@ class Mesh:
         qua = np.zeros((0, 4), dtype="int64")
         tri = np.zeros((0, 3), dtype="int64")
         bar = np.zeros((0, 2), dtype="int64")
-        plotnodes = False
+        pn = np.zeros(0, dtype=int) # nodes to plot for quad elems
         for ie in self.e.keys():
-            if ie == 3 or ie == 16 or ie == 10:  # quadrangles
+            if ie in [3, 16, 10]:  # quadrangles
                 qua = np.vstack((qua, self.e[ie][:, :4]))
-                if ie == 16 or ie == 10:
-                    plotnodes = True
-            elif ie == 2 or ie == 9:  # triangles
+                if ie in [16, 10]:
+                    pn = np.append(pn, self.e[ie].ravel())
+            elif ie in [2, 9]:  # triangles
                 tri = np.vstack((tri, self.e[ie][:, :3]))
                 if ie == 9:
-                    plotnodes = True
-            elif ie == 1:  # bars
-                bar = np.vstack((bar, self.e[ie]))
+                    pn = np.append(pn, self.e[ie].ravel())
+            elif ie in [1, 8]:  # lin and quad bars
+                bar = np.vstack((bar, self.e[ie][:, :2]))
+                if ie == 8:
+                    pn = np.append(pn, self.e[ie].ravel())
 
         ### Join the 2 lists of vertices
         nn = n[qua].tolist() + n[tri].tolist() + n[bar].tolist()
         ### Create the collection
-        if not plotnodes:
-            n=np.empty((0,2))
+        pn = np.unique(pn)
+        n = n[pn,:]
         pc = cols.PolyCollection(nn, facecolor=facecolor, edgecolor=edgecolor, 
                                  alpha=alpha, **kwargs)
         ### Return the matplotlib collection and the list of vertices
         return pc, nn, n
 
-    def Plot(self, U=None, coef=1, n=None, **kwargs):
+    def Plot(self, U=None, coef=1, n=None, plotnodes=True, **kwargs):
         """
         Plots the (possibly warped) mesh using Matplotlib Library.
 
@@ -1714,14 +1745,15 @@ class Mesh:
         ax.autoscale()
         edgecolor = kwargs.pop("edgecolor", "k")
         alpha = kwargs.pop("alpha", 0.8)
-        plt.plot(
-            n[:, 0],
-            n[:, 1],
-            linestyle="None",
-            marker="o",
-            color=edgecolor,
-            alpha=alpha,
-        )
+        if plotnodes:
+            plt.plot(
+                n[:, 0],
+                n[:, 1],
+                linestyle="None",
+                marker="o",
+                color=edgecolor,
+                alpha=alpha,
+            )
         plt.axis('equal')
         plt.show()
 
@@ -2030,22 +2062,48 @@ class Mesh:
 
     def BuildBoundaryMesh(self):
         """
-        Builds edge elements corresponding to the edges of Mesh m.
+        Builds edge elements corresponding to the edges of 2d Mesh m.
         """
-        edges = {}
+        edgel = {} #lin
+        edgeq = {} #qua
         for je in self.e.keys():
-            n1 = self.e[je].ravel()
-            n2 = np.c_[self.e[je][:, 1:], self.e[je][:, 0]].ravel()
-            a = np.sort(np.c_[n1, n2], axis=1)
-            for i in range(len(a)):
-                tedge = tuple(a[i, :])
-                if tedge in edges.keys():
-                    edges[tedge] += 1
-                else:
-                    edges[tedge] = 1
-        (rep,) = np.where(np.array(list(edges.values())) == 1)
-        edges = np.array(list(edges.keys()))[rep, :]
-        elems = {1: edges}
+            if je in [9, 16, 10]: # quadratic
+                if je in [16, 10]: # qua8 et qua9
+                    n1 = self.e[je][:,:4].ravel()
+                    n2 = np.c_[self.e[je][:, 1:4], self.e[je][:, 0]].ravel()
+                    n3 = self.e[je][:,4:8].ravel()
+                else: # tri6
+                    n1 = self.e[je][:,:3].ravel()
+                    n2 = np.c_[self.e[je][:, 1:3], self.e[je][:, 0]].ravel()
+                    n3 = self.e[je][:,3:].ravel()
+                a = np.sort(np.c_[n1, n2, n3], axis=1)
+                for i in range(len(a)):
+                    tedge = tuple(a[i, :])
+                    if tedge in edgeq.keys():
+                        edgeq[tedge] += 1
+                    else:
+                        edgeq[tedge] = 1
+            else: #linear
+                n1 = self.e[je].ravel()
+                n2 = np.c_[self.e[je][:, 1:], self.e[je][:, 0]].ravel()
+                a = np.sort(np.c_[n1, n2], axis=1)
+                for i in range(len(a)):
+                    tedge = tuple(a[i, :])
+                    if tedge in edgel.keys():
+                        edgel[tedge] += 1
+                    else:
+                        edgel[tedge] = 1
+        # linear edges
+        elems = dict()
+        if len(edgel):
+            (rep,) = np.where(np.array(list(edgel.values())) == 1)
+            edgel = np.array(list(edgel.keys()))[rep, :]
+            elems[1] = edgel
+        # quadratic edges
+        if len(edgeq):
+            (rep,) = np.where(np.array(list(edgeq.values())) == 1)
+            edgeq = np.array(list(edgeq.keys()))[rep, :]
+            elems[8] = edgeq
         edgem = Mesh(elems, self.n)
         return edgem
 
@@ -2177,3 +2235,30 @@ class Mesh:
         # self.Plot()
         # plt.plot(self.n[nset,0],self.n[nset,1],'ro')
         return nset  # ,R
+
+    def RBM(self):
+        """
+        INFINITESIMAL RIGID BODY MODES
+        
+        Returns
+        -------
+        tx : 1D NUMPY ARRAY
+            Give the dof vector corresponding to a unitary rigid body 
+            translation in direction x.
+        ty : 1D NUMPY ARRAY
+            Give the dof vector corresponding to a unitary rigid body 
+            translation in direction y.
+        rz : 1D NUMPY ARRAY
+            Give the dof vector corresponding to a infinitesimal unitary rigid
+            body rotation around direction z.
+
+        """
+        tx = np.zeros(self.ndof)
+        tx[self.conn[:,0]]=1
+        ty = np.zeros(self.ndof)
+        ty[self.conn[:,1]]=1
+        v = self.n-np.mean(self.n,axis=0)
+        v = np.c_[-v[:,1],v[:,0]] / np.max(np.linalg.norm(v,axis=1))
+        rz = np.zeros(self.ndof)
+        rz[self.conn]=v
+        return tx, ty, rz
