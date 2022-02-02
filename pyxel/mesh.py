@@ -1462,7 +1462,7 @@ class Mesh:
             vtkfile.addPointData("temp", 1, T[self.conn[:, 0]])
         # Strain
         if len(E) == 0:
-            Ex, Ey, Exy = self.StrainAtNodes2(U)
+            Ex, Ey, Exy = self.StrainAtNodes(U)
             E = np.c_[Ex, Ey, Exy]
             C = (Ex + Ey) / 2
             R = np.sqrt((Ex - C) ** 2 + Exy ** 2)
