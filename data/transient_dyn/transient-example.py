@@ -26,7 +26,7 @@ hooke = E / (1-nu**2) * np.array([[1,nu,0],[nu,1,0],[0,0,0.5*(1-nu)]])
 
 #%%
 #### Loading the mesh
-mesh = px.ReadMeshGMSH('support-1.msh')
+mesh = px.ReadMesh('support-1.msh')
 #mesh.Plot()
 
 

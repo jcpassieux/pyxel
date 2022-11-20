@@ -21,6 +21,7 @@ def LSfromLine(f, pts1):
 
 def LSfromPoint(f, pts1):
     """Compute level set from one single point"""
+    pts1 = pts1.ravel()
     ui = np.arange(f.pix.shape[0]) - pts1[1]
     vi = np.arange(f.pix.shape[1]) - pts1[0]
     [Yi, Xi] = np.meshgrid(vi, ui)

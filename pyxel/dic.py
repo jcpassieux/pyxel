@@ -319,13 +319,9 @@ def MeshFromROI(roi, dx, f, typel=3):
                       and copy - paste the roi in the python terminal
     m, cam = px.MeshFromROI(roi, [20, 20], f)
     """
-
-    droi = roi[1] - roi[0]
-    xmin = np.min(roi[:, 0])
-    ymin = f.pix.shape[0] - np.max(roi[:, 1])
-    roi = np.array([[0, 0], droi])
     m = StructuredMesh(roi, dx, typel=typel)
-    p = np.array([1.0, xmin, ymin - f.pix.shape[0], 0.0])
+    m.n[:,1] *= -1
+    p = np.array([1., 0., 0., 0.])
     cam = Camera(p)
     return m, cam
 
@@ -386,7 +382,9 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         eps = 1e-3
     if Basis is not None:
         # Reduced Basis
+        print('reduced basis')
         H_LU = splalg.splu(Basis.T @ H @ Basis)
+        print(Basis.T @ H @ Basis)
     else:
         if l0 is not None:
             # Tikhonov regularisation
@@ -403,6 +401,7 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             if disp:
                 print("no reg")
             H_LU = splalg.splu(H)
+    stdr_old = 100
     for ik in range(0, maxiter):
         [b, res] = dic.ComputeRHS(g, m, cam, U)
         if Basis is not None:
@@ -415,10 +414,12 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             dU = H_LU.solve(b)
         U += dU
         err = np.linalg.norm(dU) / np.linalg.norm(U)
+        stdr = np.std(res)
         if disp:
-            print("Iter # %2d | std(res)=%2.2f gl | dU/U=%1.2e" % (ik + 1, np.std(res), err))
-        if err < eps:
+            print("Iter # %2d | std(res)=%2.2f gl | dU/U=%1.2e" % (ik + 1, stdr, err))
+        if err < eps or abs(stdr - stdr_old) < 1e-3:
             break
+        stdr_old = stdr
     return U, res
 
 
@@ -463,17 +464,19 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
     """
     if len(m.conn) == 0:
         m.Connectivity()
-    if l0 is None:
-        l0 = 0.0
-        for et in m.e.keys():
-            n1 = m.n[m.e[et][:, 0]]
-            n2 = m.n[m.e[et][:, 1]]
-            l0 = max(l0, 4 * min(np.linalg.norm(n1 - n2, axis=1)))
-            print('Auto reg. length l0 = %2.3e' % l0)
-    if l0 == 0:
-        l0 = None
     # estimate average element size in pixels
     aes = int(m.GetApproxElementSize(cam))
+    if l0 is None:
+        # l0 = 0.0
+        # for et in m.e.keys():
+        #     n1 = m.n[m.e[et][:, 0]]
+        #     n2 = m.n[m.e[et][:, 1]]
+        #     l0 = max(l0, 4 * min(np.linalg.norm(n1 - n2, axis=1)))
+        l0 = 30/cam.get_p()[0]
+        print('Auto reg. length l0 = %2.3e' % l0)
+    if l0 == 0:
+        l0 = None
+
     print('Average Element Size in px: %3d' % aes)
     if U0 is None:
         U = np.zeros(m.ndof)
@@ -569,4 +572,75 @@ def CorrelateTimeIncr(m, f, imagefile, imnums, cam, scales):
     return UU
 
 
+def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM'):
+    """
+    Compute initial guess using OpenCV DISFlow routine
 
+    Parameters
+    ----------
+    imf : PYXEL.IMAGE
+        Reference image
+    img : PYXEL.IMAGE
+        Deformed state image
+    m : PYXEL.MESH
+        finite element mesh
+        if None > return the result of DISFlow
+    cam : PYXEL.CAMERA
+        Camera model
+        if None > return the result of DISFlow
+    meth : STRING, optional
+        'MEDIUM': medium option of DISFlow
+        'FAST': fast option of DISFlow
+        'ULTRAFAST': ultrafast option of DISFlow
+        otherwise: manual settings for DISFlow
+        DESCRIPTION. The default is 'MEDIUM'.
+
+    Returns
+    -------
+    u : NUMPY.ARRAY
+        initial guess DOF vector if m and cam are given
+        returns pixmaps U, V is cam is None
+
+    """
+    import cv2
+    if meth == 'MEDIUM':
+        flow=cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+    elif meth == 'FAST':
+        flow=cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_FAST)
+    elif meth == 'ULTRAFAST':
+        flow=cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_ULTRAFAST)
+    else:
+        # MANUAL
+        flow = cv2.DISOpticalFlow_create()
+        flow.setVariationalRefinementAlpha(20.0)		# Laplacian of displacment
+        flow.setVariationalRefinementGamma(10.0)		# Gradient of image consistency
+        flow.setVariationalRefinementDelta(5.0) 	    # Optical flow
+        flow.setVariationalRefinementIterations(5)	    # Number of iterations
+        flow.setFinestScale(0)
+        flow.setPatchSize(13)
+        flow.setPatchStride(7)
+    UV = flow.calc(imf.pix.astype('uint8'), img.pix.astype('uint8'), None)
+    U = UV[::,::,0]
+    V = UV[::,::,1]
+    if m is None:
+        return U, V
+    else: 
+        u, v = cam.P(m.n[:,0],m.n[:,1])
+        fp = imf.Copy()
+        fp.pix = V
+        fp.BuildInterp()
+        du = fp.Interp(u, v)
+        fp.pix = U
+        fp.BuildInterp()
+        dv = fp.Interp(u, v)
+        
+        Xdx, Ydy = cam.PinvNL(u+du, v+dv)
+        Ux = Xdx - m.n[:,0]
+        Uy = Ydy - m.n[:,1]
+        
+        if len(m.conn) == 0 :
+            m.Connectivity()
+        u = np.zeros(m.ndof)
+        u[m.conn[:,0]] = Ux
+        u[m.conn[:,1]] = Uy
+        return u

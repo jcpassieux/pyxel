@@ -19,7 +19,7 @@ g.Plot()
 
 #%% MESH
 
-m = px.ReadMeshINP('abaqus_q4_m.inp')
+m = px.ReadMesh('abaqus_q4_m.inp')
 m.Plot()
 
 #%% CAMERA MODEL
@@ -69,3 +69,17 @@ m.PlotResidualMap(res,cam,1e5)
 
 # Export for Paraview
 m.VTKSol('example_1',U)
+
+# Export for Paraview at integration points (residual map)
+m.VTKIntegrationPoints(cam, f, g, U)
+
+#%% Post-processing as a pixel map
+
+# Initialization 
+emp = px.ExportPixMap(f, m, cam)
+
+# Get Residual on the pixel map
+Rmap = emp.PlotResidual(f, g, U)
+
+# Get displacement on the pixel map
+Umap, Vmap = emp.PlotDispl(U)

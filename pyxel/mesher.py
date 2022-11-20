@@ -7,59 +7,60 @@ Created on Sat Jan 29 08:16:13 2022
 import numpy as np
 import matplotlib.pyplot as plt
 import gmsh
-from .mesh import Mesh
+from .mesh import ReadMesh
 from .camera import Camera
+from .image import Image
 from skimage import measure
 
 #%%
 
-def Gmsh2Mesh(gmsh, dim=2):
-    """
-    Bulding pyxel mesh from gmsh python object
+# def Gmsh2Mesh(gmsh, dim=2):
+#     """
+#     Bulding pyxel mesh from gmsh python object
 
-    Parameters
-    ----------
-        gmsh : python gmsh object
+#     Parameters
+#     ----------
+#         gmsh : python gmsh object
 
-    EXAMPLE:
-    ----------
-        import gmsh
-        gmsh.initialize()
-        gmsh.model.add("P")
-        lc = 0.02
-        gmsh.model.geo.addPoint(0, 0.0, 0, 4 * lc, 1)
-        gmsh.model.geo.addPoint(1, 0.0, 0, lc, 2)
-        gmsh.model.geo.addPoint(1, 0.5, 0, lc, 3)
-        gmsh.model.geo.addPoint(0, 0.5, 0, 4 * lc, 4)
-        gmsh.model.geo.addLine(1, 2, 1)
-        gmsh.model.geo.addLine(2, 3, 2)
-        gmsh.model.geo.addLine(3, 4, 3)
-        gmsh.model.geo.addLine(4, 1, 4)
-        gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
-        gmsh.model.geo.addPlaneSurface([1], 1)
-        gmsh.model.geo.synchronize()
-        gmsh.model.mesh.generate(2)
-        m = px.gmsh2pyxel(gmsh)
-        m.Plot()
+#     EXAMPLE:
+#     ----------
+#         import gmsh
+#         gmsh.initialize()
+#         gmsh.model.add("P")
+#         lc = 0.02
+#         gmsh.model.geo.addPoint(0, 0.0, 0, 4 * lc, 1)
+#         gmsh.model.geo.addPoint(1, 0.0, 0, lc, 2)
+#         gmsh.model.geo.addPoint(1, 0.5, 0, lc, 3)
+#         gmsh.model.geo.addPoint(0, 0.5, 0, 4 * lc, 4)
+#         gmsh.model.geo.addLine(1, 2, 1)
+#         gmsh.model.geo.addLine(2, 3, 2)
+#         gmsh.model.geo.addLine(3, 4, 3)
+#         gmsh.model.geo.addLine(4, 1, 4)
+#         gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
+#         gmsh.model.geo.addPlaneSurface([1], 1)
+#         gmsh.model.geo.synchronize()
+#         gmsh.model.mesh.generate(2)
+#         m = px.Gmsh2Mesh(gmsh)
+#         m.Plot()
         
-    """
-    # Get direct full node list
-    nums, nodes, e = gmsh.model.mesh.getNodes()
-    nodes = nodes.reshape((len(nums), 3))
-    elems = dict()
-    # Get the Element by type
-    for et in gmsh.model.mesh.getElementTypes():
-        nums, els = gmsh.model.mesh.getElementsByType(et)
-        nnd = len(els) // len(nums)
-        elems[et] = els.reshape((len(nums), nnd)).astype(int) - 1
-    if 15 in elems:
-        del elems[15]  # remove points
-    if 1 in elems:
-        del elems[1]  # remove segments
-    if 8 in elems:
-        del elems[8]  # remove quadratic segments
-    m = Mesh(elems, nodes[:, :dim], dim)
-    return m
+#     """
+#     # Get direct full node list
+#     nums, nodes, e = gmsh.model.mesh.getNodes()
+#     nodes = nodes.reshape((len(nums), 3))
+#     elems = dict()
+#     # Get the Element by type
+#     for et in gmsh.model.mesh.getElementTypes():
+#         nums, els = gmsh.model.mesh.getElementsByType(et)
+#         nnd = len(els) // len(nums)
+#         elems[et] = els.reshape((len(nums), nnd)).astype(int) - 1
+#     if 15 in elems:
+#         del elems[15]  # remove points
+#     if 1 in elems:
+#         del elems[1]  # remove segments
+#     if 8 in elems:
+#         del elems[8]  # remove quadratic segments
+#     m = Mesh(elems, nodes[:, :dim], dim)
+#     return m
 
 
 #%% Plot a polygon
@@ -148,11 +149,18 @@ def MeshFromLS(ls, lc):
             ncl += 1    
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(2)
-    m = Gmsh2Mesh(gmsh)
-    gmsh.finalize()    
+    gmsh.write('tmp.msh')
+    gmsh.finalize()
+    m = ReadMesh('tmp.msh')
+    if 15 in m.e:
+        del m.e[15]  # remove vertex
+    if 1 in m.e:
+        del m.e[1]  # remove segments
+    if 8 in m.e:
+        del m.e[8]  # remove quadratic segments
     return m
 
-def MeshFromImage(f, h, appls=1):
+def MeshFromImage(f, h, appls=None):
     """
     Builds a mesh from a graylevel image.
 
@@ -165,7 +173,7 @@ def MeshFromImage(f, h, appls=1):
     appls : BOOL
         If 0, does not approximate the list of segments 
         Set appls=4 to allow to move each point of the polygon up to
-        4 pixels to regularize its shape. Default 1.
+        4 pixels to regularize its shape. Default None (=no approx.)
 
     Returns
     -------
@@ -173,10 +181,17 @@ def MeshFromImage(f, h, appls=1):
         mesh of the domain where f equals to 0
 
     """
-    pix = ((1-f)*255).astype('uint8')
+    pix = ((1-f.pix)*255).astype('uint8')
     ls = measure.find_contours(pix, 127 ,fully_connected='low') 
-    ls = [measure.approximate_polygon(i, appls) for i in ls]
+    #PlotLS(ls,'r.-')
+    if appls is not None:
+        ls = [measure.approximate_polygon(i, appls) for i in ls]
+        # PlotLS(ls,'k.-')
     m = MeshFromLS(ls, h)
-    p = np.array([1, 0., 0., np.pi/2])
+    # p = np.array([1, 0., 0., np.pi/2])
+    a = Image('')
+    a.pix = f
+    m.n = np.c_[m.n[:,1], -m.n[:,0]]
+    p = np.array([1, 0., 0., 0])
     cam = Camera(p)
     return m, cam

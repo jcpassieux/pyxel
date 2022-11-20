@@ -13,16 +13,17 @@ import os
 import numpy as np
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
-import PIL.Image as image
 from .utils import PlotMeshImage
+import cv2
 
 class Image:
     def __init__(self, fname):
         """Contructor"""
         self.fname = fname
 
-    def Load(self):
-        """Load image data"""
+    def LoadPIL(self):
+        import PIL.Image as image
+        """Load image data using Pillow"""
         if os.path.isfile(self.fname):
             if self.fname.split(".")[-1] == "npy":
                 self.pix = np.load(self.fname)
@@ -35,12 +36,16 @@ class Image:
             print("File "+self.fname+" not in directory "+os.getcwd())
         return self
 
-    def Load_cv2(self):
-        """Load image data using OpenCV"""
+    def Load(self, bw=True):
+        """Load image data"""
         if os.path.isfile(self.fname):
-            import cv2 as cv
-            self.pix = cv.imread(self.fname).astype(float)
-            if len(self.pix.shape) == 3:
+            if self.fname.split(".")[-1] == "npy":
+                self.pix = np.load(self.fname)
+            else:
+                self.pix = cv2.imread(self.fname).astype(float)
+                if len(self.pix.shape) == 3 and bw:
+                    self.ToGray()
+            if len(self.pix.shape) == 3 and bw:
                 self.ToGray()
         else:
             print("File "+self.fname+" not in directory "+os.getcwd())
@@ -54,9 +59,8 @@ class Image:
 
     def Save(self, fname):
         """Image Save"""
-        PILimg = image.fromarray(np.round(self.pix).astype("uint8"))
-        PILimg.save(fname)
-        # image.imsave(fname,self.pix.astype('uint8'),vmin=0,vmax=255,format='tif')
+        f = np.round(self.pix).astype("uint8")
+        cv2.imwrite(fname,f)
 
     def BuildInterp(self):
         """build bivariate Spline interp"""
@@ -66,6 +70,8 @@ class Image:
 
     def Interp(self, x, y):
         """evaluate interpolator at non-integer pixel position x, y"""
+        if not hasattr(self,'tck'):
+            self.BuildInterp()
         return self.tck.ev(x, y)
 
     def InterpGrad(self, x, y):
@@ -120,7 +126,7 @@ class Image:
         self.pix = im0.reshape(nn)
 
     def ToGray(self, type="lum"):
-        """Convert RVG to Grayscale :
+        """Convert RGB to Grayscale :
 
         Parameters
         ----------
@@ -129,10 +135,12 @@ class Image:
             lum : luminosity (DEFAULT)
             avg : average"""
         if type == "lum":
+            # human perception of color
+            # self.pix = cv2.cvtColor(self.pix, cv2.COLOR_BGR2GRAY)
             self.pix = (
-                0.21 * self.pix[:, :, 0]
-                + 0.72 * self.pix[:, :, 1]
-                + 0.07 * self.pix[:, :, 2]
+                0.299 * self.pix[:, :, 0]
+                + 0.587 * self.pix[:, :, 1]
+                + 0.114 * self.pix[:, :, 2]
             )
         elif type == "lig":
             self.pix = 0.5 * np.maximum(

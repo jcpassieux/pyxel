@@ -43,7 +43,7 @@ def meshgrid(a, b):
     B = b.repeat(len(a)).reshape((-1, len(a)))
     return A, B
 
-def PlotMeshImage(f, m, cam, U=None):
+def PlotMeshImage(f, m, cam, U=None, plot='mesh'):
     """Plotting the mesh over the image. 
 
     Parameters
@@ -56,8 +56,10 @@ def PlotMeshImage(f, m, cam, U=None):
         The camera model
     U : Numpy array
         A displacement dof vector (OPTIONNAL) to warp the mesh.
-    newfig : Bool
-        (DEFAULT = True)
+    plot : String (OPTIONNAL)
+        'mesh': plot the mesh in yellow (DEFAULT)
+        'displ': plot contour displacement field
+        'strain': plot contour strain field
 
     """
     n = m.n.copy()
@@ -66,7 +68,14 @@ def PlotMeshImage(f, m, cam, U=None):
     plt.figure()
     f.Plot()
     u, v = cam.P(n[:, 0], n[:, 1])
-    m.Plot(n=np.c_[v, u], edgecolor="y", alpha=0.6)
+    if plot == 'mesh':
+        m.Plot(n=np.c_[v, u], edgecolor="y", alpha=0.6)
+    elif plot == 'strain':
+        m.PlotContourStrain(U, n=np.c_[v, u], alpha=0.8, stype='maxpcp', newfig=False)
+    elif plot == 'displ':
+        m.PlotContourDispl(U, n=np.c_[v, u], alpha=0.8, stype='mag', newfig=False)
+    else:
+        print('Unknown plot type in PlotMeshImage')
     # plt.xlim([0,f.pix.shape[1]])
     # plt.ylim([f.pix.shape[0],0])
-    plt.axis("on")
+    # plt.axis("on")

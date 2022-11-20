@@ -13,53 +13,142 @@ PYthon library for eXperimental mechanics using Finite ELements
 import os
 import numpy as np
 import scipy as sp
-import scipy.sparse.linalg as splalg
+#import scipy.sparse.linalg as splalg
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import art3d
 import matplotlib.pyplot as plt
 import matplotlib.collections as cols
 import matplotlib.animation as animation
 from numba import njit
 from .utils import meshgrid, isInBox
-from .vtktools import VTUWriter, PVDFile
-from .camera import Camera
+#from .camera import Camera
+import meshio
 
 def ElTypes():
     """
     Returns a dictionnary of GMSH element types which some of them are used in the library.
     """
-    return {1: "2-node line.",
-        2: "3-node triangle.",
-        3: "4-node quadrangle.",
-        4: "4-node tetrahedron.",
-        5: "8-node hexahedron.",
-        6: "6-node prism.",
-        7: "5-node pyramid.",
-        8: "3-node second order line (2 nodes associated with the vertices and 1 with the edge).",
-        9: "6-node second order triangle (3 nodes associated with the vertices and 3 with the edges).",
-        10: "9-node second order quadrangle (4 nodes associated with the vertices, 4 with the edges and 1 with the face).",
-        11: "10-node second order tetrahedron (4 nodes associated with the vertices and 6 with the edges).",
-        12: "27-node second order hexahedron (8 nodes associated with the vertices, 12 with the edges, 6 with the faces and 1 with the volume).",
-        13: "18-node second order prism (6 nodes associated with the vertices, 9 with the edges and 3 with the quadrangular faces).",
-        14: "14-node second order pyramid (5 nodes associated with the vertices, 8 with the edges and 1 with the quadrangular face).",
-        15: "1-node point.",
-        16: "8-node second order quadrangle (4 nodes associated with the vertices and 4 with the edges).",
-        17: "20-node second order hexahedron (8 nodes associated with the vertices and 12 with the edges).",
-        18: "15-node second order prism (6 nodes associated with the vertices and 9 with the edges).",
-        19: "13-node second order pyramid (5 nodes associated with the vertices and 8 with the edges).",
-        20: "9-node third order incomplete triangle (3 nodes associated with the vertices, 6 with the edges)",
-        21: "10-node third order triangle (3 nodes associated with the vertices, 6 with the edges, 1 with the face)",
-        22: "12-node fourth order incomplete triangle (3 nodes associated with the vertices, 9 with the edges)",
-        23: "15-node fourth order triangle (3 nodes associated with the vertices, 9 with the edges, 3 with the face)",
-        24: "15-node fifth order incomplete triangle (3 nodes associated with the vertices, 12 with the edges)",
-        25: "21-node fifth order complete triangle (3 nodes associated with the vertices, 12 with the edges, 6 with the face)",
-        26: "4-node third order edge (2 nodes associated with the vertices, 2 internal to the edge)",
-        27: "5-node fourth order edge (2 nodes associated with the vertices, 3 internal to the edge)",
-        28: "6-node fifth order edge (2 nodes associated with the vertices, 4 internal to the edge)",
-        29: "20-node third order tetrahedron (4 nodes associated with the vertices, 12 with the edges, 4 with the faces)",
-        30: "35-node fourth order tetrahedron (4 nodes associated with the vertices, 18 with the edges, 12 with the faces, 1 in the volume)",
-        31: "56-node fifth order tetrahedron (4 nodes associated with the vertices, 24 with the edges, 24 with the faces, 4 in the volume)",
-        92: "64-node third order hexahedron (8 nodes associated with the vertices, 24 with the edges, 24 with the faces, 8 in the volume)",
-        93: "125-node fourth order hexahedron (8 nodes associated with the vertices, 36 with the edges, 54 with the faces, 27 in the volume)",
-        }
+    return {
+      1: "2-node line.",
+      2: "3-node triangle.",
+      3: "4-node quadrangle.",
+      4: "4-node tetrahedron.",
+      5: "8-node hexahedron.",
+      6: "6-node prism.",
+      7: "5-node pyramid.",
+      8: "3-node second order line (2 nodes associated with the vertices and 1 with the edge).",
+      9: "6-node second order triangle (3 nodes associated with the vertices and 3 with the edges).",
+      10: "9-node second order quadrangle (4 nodes associated with the vertices, 4 with the edges and 1 with the face).",
+      11: "10-node second order tetrahedron (4 nodes associated with the vertices and 6 with the edges).",
+      12: "27-node second order hexahedron (8 nodes associated with the vertices, 12 with the edges, 6 with the faces and 1 with the volume).",
+      13: "18-node second order prism (6 nodes associated with the vertices, 9 with the edges and 3 with the quadrangular faces).",
+      14: "14-node second order pyramid (5 nodes associated with the vertices, 8 with the edges and 1 with the quadrangular face).",
+      15: "1-node point.",
+      16: "8-node second order quadrangle (4 nodes associated with the vertices and 4 with the edges).",
+      17: "20-node second order hexahedron (8 nodes associated with the vertices and 12 with the edges).",
+      18: "15-node second order prism (6 nodes associated with the vertices and 9 with the edges).",
+      19: "13-node second order pyramid (5 nodes associated with the vertices and 8 with the edges).",
+      20: "9-node third order incomplete triangle (3 nodes associated with the vertices, 6 with the edges)",
+      21: "10-node third order triangle (3 nodes associated with the vertices, 6 with the edges, 1 with the face)",
+      22: "12-node fourth order incomplete triangle (3 nodes associated with the vertices, 9 with the edges)",
+      23: "15-node fourth order triangle (3 nodes associated with the vertices, 9 with the edges, 3 with the face)",
+      24: "15-node fifth order incomplete triangle (3 nodes associated with the vertices, 12 with the edges)",
+      25: "21-node fifth order complete triangle (3 nodes associated with the vertices, 12 with the edges, 6 with the face)",
+      26: "4-node third order edge (2 nodes associated with the vertices, 2 internal to the edge)",
+      27: "5-node fourth order edge (2 nodes associated with the vertices, 3 internal to the edge)",
+      28: "6-node fifth order edge (2 nodes associated with the vertices, 4 internal to the edge)",
+      29: "20-node third order tetrahedron (4 nodes associated with the vertices, 12 with the edges, 4 with the faces)",
+      30: "35-node fourth order tetrahedron (4 nodes associated with the vertices, 18 with the edges, 12 with the faces, 1 in the volume)",
+      31: "56-node fifth order tetrahedron (4 nodes associated with the vertices, 24 with the edges, 24 with the faces, 4 in the volume)",
+      92: "64-node third order hexahedron (8 nodes associated with the vertices, 24 with the edges, 24 with the faces, 8 in the volume)",
+      93: "125-node fourth order hexahedron (8 nodes associated with the vertices, 36 with the edges, 54 with the faces, 27 in the volume)",
+      }
+
+eltype_n2s = {1: "line",
+        2: "triangle",
+        3: "quad",
+        4: "tetra",
+        5: "hexahedron",
+        6: "wedge",
+        7: "pyramid",
+        8: "line3",
+        9: "triangle6",
+        10: "quad9",
+        11: "tetra10",
+        12: "hexahedron27",
+        14: "pyramid14",
+        15: "vertex",
+        16: "quad8",
+        17: "hexahedron20",
+        18: "wedge15",
+        19: "pyramid13"}
+
+eltype_s2n = {}
+for jn in eltype_n2s.keys():
+    eltype_s2n[eltype_n2s[jn]] = jn
+
+def ReadMesh(fn, dim=2):
+    mesh = meshio.read(fn)
+    # file_format="stl",  # optional if filename is a path; inferred from extension
+    if mesh.points.shape[1] > dim: # too much node coordinate
+        # Remove coordinate with minimal std.
+        rmdim = np.argmin(np.std(mesh.points,axis=0))
+        n = np.delete(mesh.points, rmdim, 1)
+    elif mesh.points.shape[1] < dim: # not enough node coordinates
+        n = np.hstack((mesh.points, np.zeros((len(mesh.points),1))))
+    else :
+        n = mesh.points
+    e = dict()
+    for et in mesh.cells_dict.keys():
+        e[eltype_s2n[et]] = mesh.cells_dict[et]
+    m = Mesh(e, n, dim)
+    m.point_data = mesh.point_data
+    m.cell_data = mesh.cell_data
+    return m
+
+def PVDFile(fileName,ext,npart,nstep):
+    """
+    Write PVD file
+    Usage: writePVD("toto","vtu",npart,nstep) 
+    generated file: "toto.pvd" 
+    
+    VTK files must be named as follows:
+    npart=2  and nstep=5  =>  toto_5_2.*  (starts from zero)
+    
+    Parameters
+    ----------
+    fileName : STRING
+        mesh files without numbers and extension
+    ext : STRING
+        extension (vtu, vtk, vtr, vti)
+    npart : INT
+        Number of parts to plot together
+    nstep : INT
+        Number of time steps.
+
+    """
+    rep,fname=os.path.split(fileName)
+    import xml.dom.minidom
+    pvd = xml.dom.minidom.Document()
+    pvd_root = pvd.createElementNS("VTK", "VTKFile")
+    pvd_root.setAttribute("type", "Collection")
+    pvd_root.setAttribute("version", "0.1")
+    pvd_root.setAttribute("byte_order", "LittleEndian")
+    pvd.appendChild(pvd_root)
+    collection = pvd.createElementNS("VTK", "Collection")
+    pvd_root.appendChild(collection)    
+    for jp in range(npart):
+        for js in range(nstep):
+            dataSet = pvd.createElementNS("VTK", "DataSet")
+            dataSet.setAttribute("timestep", str(js))
+            dataSet.setAttribute("group", "")
+            dataSet.setAttribute("part", str(jp))
+            dataSet.setAttribute("file", fname+"_"+str(jp)+"_"+str(js)+"."+ext)
+            collection.appendChild(dataSet)
+    outFile = open(fileName+".pvd", 'w')
+    pvd.writexml(outFile, newl='\n')
+    print("VTK: "+ fileName +".pvd written")
+    outFile.close()
 
 #%%
 class Elem:
@@ -440,9 +529,6 @@ def StructuredMesh(box, dx, typel=3):
 def ShapeFunctions(eltype):
     """For any type of 2D elements, gives the quadrature rule and
     the shape functions and their derivative"""
-    xg = 0
-    yg = 0
-    wg = 0
     if eltype == 1:
         """
         #############
@@ -451,17 +537,24 @@ def ShapeFunctions(eltype):
         """
         def N(x):
             return np.concatenate(
-                (1 - x, x)).reshape((2,len(x))).T
+                (0.5 * (1 - x), 0.5*(x + 1))).reshape((2,len(x))).T
         
         def dN_xi(x):
             return np.concatenate(
-                (-1.0 + 0 * x, 1.0 + 0 * x)).reshape((2,len(x))).T
+                (-0.5 + 0 * x, 0.5 + 0 * x)).reshape((2,len(x))).T
 
-        def dN_eta(x):
-            return False
-
+        # def dN_eta(x):
+        #     return False
+        # 3GP
+        # xg = np.sqrt(3/5) * np.array([-1, 0, 1])
+        # wg = np.array([5., 8., 5.])/9
+        # 2GP
+        # xg = np.sqrt(3)/3 * np.array([-1, 1])
+        # wg = np.array([1., 1.])
+        # 1GP
         xg = np.array([0.])
         wg = np.array([2.])
+        return xg, wg, N, dN_xi
     elif eltype == 8:
         """
         #############
@@ -475,12 +568,11 @@ def ShapeFunctions(eltype):
         def dN_xi(x):
             return np.concatenate(
                 (x - 0.5, -2 * x, x + 1)).reshape((3,len(x))).T
-
-        def dN_eta(x):
-            return False
-        
+        # def dN_eta(x):
+        #     return False        
         xg = np.sqrt(3) / 3 * np.array([-1, 1])
         wg = np.array([1., 1.])
+        return xg, wg, N, dN_xi
     elif eltype == 2:
         """
         #############
@@ -505,6 +597,7 @@ def ShapeFunctions(eltype):
         # xg = np.array([1.0 / 3])
         # yg = np.array([1.0 / 3])
         # wg = np.array([0.5])
+        return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 3:
         """
         #############
@@ -528,6 +621,7 @@ def ShapeFunctions(eltype):
         xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1])
         yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1])
         wg = np.ones(4)
+        return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 9:
         """
         #############
@@ -565,6 +659,7 @@ def ShapeFunctions(eltype):
         a = 0.111690794839005
         b = 0.054975871827661
         wg = np.array([a, a, a, b, b, b])
+        return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 10:
         """
         #############
@@ -615,6 +710,7 @@ def ShapeFunctions(eltype):
         xg = a * np.array([-1, 1, -1, 1, 0, 1, 0, -1, 0])
         yg = a * np.array([-1, -1, 1, 1, -1, 0, 1, 0, 0])
         wg = np.array([25, 25, 25, 25, 40, 40, 40, 40, 64]) / 81
+        return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 16:
         """
         #############
@@ -667,7 +763,67 @@ def ShapeFunctions(eltype):
         xg = a * np.array([-1, 1, -1, 1, 0, 1, 0, -1, 0])
         yg = a * np.array([-1, -1, 1, 1, -1, 0, 1, 0, 0])
         wg = np.array([25, 25, 25, 25, 40, 40, 40, 40, 64]) / 81
-    return xg, yg, wg, N, dN_xi, dN_eta
+        return xg, yg, wg, N, dN_xi, dN_eta
+    elif eltype == 5:
+        """
+        #############
+            Hex8
+        #############
+        """
+        def N(x, y, z):
+            return 0.125 * np.concatenate(((1-x) * (1-y) * (1-z), \
+                                        (1+x) * (1-y) * (1-z), \
+                                        (1+x) * (1+y) * (1-z), \
+                                        (1-x) * (1+y) * (1-z), \
+                                        (1-x) * (1-y) * (1+z), \
+                                        (1+x) * (1-y) * (1+z), \
+                                        (1+x) * (1+y) * (1+z), \
+                                        (1-x) * (1+y) * (1+z))).reshape((8,len(x))).T 
+        def dN_xi(x, y, z):
+            return 0.125 * np.concatenate((-(1-y)*(1-z),  (1-y)*(1-z),\
+                               (1+y)*(1-z), -(1+y)*(1-z),\
+                              -(1-y)*(1+z),  (1-y)*(1+z),\
+                               (1+y)*(1+z), -(1+y)*(1+z))).reshape((8,len(x))).T
+        def dN_eta(x, y, z):
+            return 0.125 * np.concatenate((-(1-x)*(1-z), -(1+x)*(1-z),\
+                               (1+x)*(1-z),  (1-x)*(1-z),\
+                              -(1-x)*(1+z), -(1+x)*(1+z),\
+                               (1+x)*(1+z),  (1-x)*(1+z))).reshape((8,len(x))).T
+        def dN_zeta(x, y, z):
+            return 0.125 * np.concatenate((-(1-x)*(1-y), -(1+x)*(1-y),\
+                              -(1+x)*(1+y), -(1-x)*(1+y),\
+                               (1-x)*(1-y),  (1+x)*(1-y),\
+                               (1+x)*(1+y),  (1-x)*(1+y))).reshape((8,len(x))).T
+        xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1, -1, 1, -1, 1])
+        yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1, -1, -1, 1, 1])
+        zg = np.sqrt(3) / 3 * np.array([-1, -1, -1, -1, 1, 1, 1, 1])
+        wg = np.ones(8)
+        return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
+    elif eltype == 4:
+        """
+        #############
+            Tet4
+        #############
+        """
+        def N(x, y, z):
+            return np.concatenate((1-x-y-z, x, y, z)).reshape((4, len(x))).T
+        def dN_xi(x, y, z):
+            zer = np.zeros(len(x))
+            one = np.ones(len(x))
+            return np.concatenate((-one, one, zer, zer)).reshape((4, len(x))).T
+        def dN_eta(x, y, z):
+            zer = np.zeros(len(x))
+            one = np.ones(len(x))
+            return np.concatenate((-one, zer, one, zer)).reshape((4, len(x))).T
+        def dN_zeta(x, y, z):
+            zer = np.zeros(len(x))
+            one = np.ones(len(x))
+            return np.concatenate((-one, zer, zer, one)).reshape((4, len(x))).T
+        xg = 0.25 * np.array([1])
+        yg = 0.25 * np.array([1])
+        zg = 0.25 * np.array([1])
+        wg = np.array([0.1666666666666666])
+        return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
 
 
 #%% 
@@ -718,6 +874,53 @@ class Mesh:
             ]
         self.ndof = nn * self.dim
 
+    def DOF2Nodes(self, Udof, fillzero=False):
+        """
+        Switch from DOF vector to a table similar to the node coordinate table
+        PYXEL.MESH.N
+
+        Parameters
+        ----------
+        Udof : NUMPY.ARRAY
+            displacement DOF vector:
+            Udof=[u1, u2, ..., uN, v1, v2, ... vN]
+        fillzero : TYPE, optional
+            if in 2D, fill add a full zero column to get a 3D displacement 
+            (useful for VTK for instance)
+
+        Returns
+        -------
+        Unodes : NUMPY.ARRAY
+            Table of the same size as PYXEL.MESH.N
+            Unodes = [[ui, vi, [0]],...]            
+
+        """
+        Unodes = Udof[self.conn]
+        if self.dim == 2 and fillzero:
+            Unodes = np.hstack((Unodes, np.zeros((len(self.n),1))))
+        return Unodes
+
+    def Nodes2DOF(self, Unodes):
+        """
+        Switch from a table similar to the node coordinate table PYXEL.MESH.N
+        to a DOF vector.
+
+        Parameters
+        ----------
+        Unodes : NUMPY.ARRAY
+            Table of the same size as PYXEL.MESH.N
+            Unodes = [[ui, vi, [0]],...]            
+
+        Returns
+        -------
+        Udof : NUMPY.ARRAY
+            displacement DOF vector:
+            Udof=[u1, u2, ..., uN, v1, v2, ... vN]
+        """
+        Udof = np.zeros(self.ndof)
+        Udof[self.conn] = Unodes[:,:self.dim]
+        return Udof
+    
     def DICIntegration(self, cam, G=False, EB=False, tri_same=False):
         """Compute FE-DIC quadrature rule along with FE shape functions operators
     
@@ -756,7 +959,7 @@ class Mesh:
             v = vn[self.e[et]]
             _, _, _, N, Ndx, Ndy = ShapeFunctions(et)
             nfun = N(np.zeros(1), np.zeros(1)).shape[1]
-            if et == 3 or et == 10 or et == 16:  # qua4 or qua9 or qua8
+            if et in (3, 10, 16):  # qua4 or qua9 or qua8
                 dist = np.floor(
                     np.sqrt((u[:, :2] - u[:, 1:3]) ** 2 + (v[:, :2] - v[:, 1:3]) ** 2)
                 ).astype(int)
@@ -808,7 +1011,7 @@ class Mesh:
                         colej[rangeone] = je
                         valej[rangeone] = 1
                     npg += len(xg)
-            elif et == 2 or et == 9:  # tri3 or tri6
+            elif et in (2 ,9):  # tri3 or tri6
                 if et == 2:
                     n0 = np.array([[0, 1], [0, 0], [1, 0]])
                     n2 = np.array([[1, 0], [0, 1], [0, 0]])
@@ -1003,7 +1206,7 @@ class Mesh:
         self.phiy = sp.sparse.csc_matrix(
             (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
 
-    def FastDICIntegElem(self, e, et, n=10, G=False):
+    def __FastDICIntegElem(self, e, et, n=10, G=False):
         # parent element
         _, _, _, N, Ndx, Ndy = ShapeFunctions(et)
         if et in [2, 9]: # Triangles
@@ -1023,7 +1226,7 @@ class Mesh:
             # plt.plot(xg,yg,'k.')
             # plt.plot([0,1,0,0],[0,0,1,0],'k-')
             # plt.axis('equal')
-        elif et in [3, 10, 16]: # Quadrangles
+        elif et in (3, 10, 16): # Quadrangles
             n = max(n, 2) # minimum 2 integration points
             # xi = np.linspace(-1, 1, n+2)[1:-1]
             xi = np.linspace(-1, 1, n+1)[:-1] + 1/n
@@ -1123,7 +1326,7 @@ class Mesh:
             valy = np.array([])
         npg = 0
         for je in self.e.keys():
-            colj, rowj, valj, valxj, valyj, wdetJj = self.FastDICIntegElem(self.e[je], je, n, G=G)
+            colj, rowj, valj, valxj, valyj, wdetJj = self.__FastDICIntegElem(self.e[je], je, n, G=G)
             col = np.append(col, colj)
             row = np.append(row, rowj + npg)
             val = np.append(val, valj)
@@ -1152,112 +1355,300 @@ class Mesh:
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
 
-    def GaussIntegElem(self, e, et):
+    def __GaussIntegElem(self, e, et):
         # parent element
-        xg, yg, wg, N, Ndx, Ndy = ShapeFunctions(et)
-        phi = N(xg, yg)
-        dN_xi = Ndx(xg, yg)
-        dN_eta = Ndy(xg, yg)
-        # elements
-        ne = len(e)  # nb of elements
-        nfun = phi.shape[1]  # nb of shape fun per element
-        npg = len(xg)  # nb of gauss point per element
-        nzv = nfun * npg * ne  # nb of non zero values in dphixdx
-        wdetJ = np.zeros(npg * ne)
-        row = np.zeros(nzv, dtype=int)
-        col = np.zeros(nzv, dtype=int)
-        val = np.zeros(nzv)
-        valx = np.zeros(nzv)
-        valy = np.zeros(nzv)
-        repdof = self.conn[e, 0]
-        xn = self.n[e, 0]
-        yn = self.n[e, 1]
-        for i in range(len(xg)):
-            dxdr = xn @ dN_xi[i, :]
-            dydr = yn @ dN_xi[i, :]
-            dxds = xn @ dN_eta[i, :]
-            dyds = yn @ dN_eta[i, :]
-            detJ = dxdr * dyds - dxds * dydr
-            wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
-            dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi[i, :] + (-dydr / detJ)[
-                :, np.newaxis] * dN_eta[i, :]
-            dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi[i, :] + (dxdr / detJ)[
-                :, np.newaxis] * dN_eta[i, :]
-            repnzv = np.arange(ne * nfun) + i * ne * nfun
-            col[repnzv] = repdof.ravel()
-            row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
-            val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
-            valx[repnzv] = dphidx.ravel()
-            valy[repnzv] = dphidy.ravel()
-        return col, row, val, valx, valy, wdetJ
+        if et in (1, 8): # bar element
+            xg, yg, wg, N, Ndx, Ndy = ShapeFunctions(et)
+            phi = N(xg)
+            dN_xi = Ndx(xg)
+            # elements
+            ne = len(e)  # nb of elements
+            nfun = phi.shape[1]  # nb of shape fun per element
+            npg = len(xg)  # nb of gauss point per element
+            nzv = nfun * npg * ne  # nb of non zero values in dphixdx
+            wdetJ = np.zeros(npg * ne)
+            row = np.zeros(nzv, dtype=int)
+            col = np.zeros(nzv, dtype=int)
+            val = np.zeros(nzv)
+            valx = np.zeros(nzv)
+            valy = np.zeros(nzv)
+            repdof = self.conn[e, 0]
+            xn = self.n[e, 0]
+            yn = self.n[e, 1]
+            v = np.hstack((np.diff(xn), np.diff(yn)))
+            L = np.linalg.norm(v, axis=1)
+            c = v[:,0]/L
+            s = v[:,1]/L
+            for i in range(len(xg)):
+                dxdr = xn @ dN_xi[i, :]
+                dydr = yn @ dN_xi[i, :]
+                detJ = np.sqrt(dxdr**2 + dydr**2)
+                wdetJ[np.arange(ne) + i * ne] = detJ * wg[i]
+                dphidx = (c/detJ)[np.newaxis].T * dN_xi[i,:]
+                dphidy = (s/detJ)[np.newaxis].T * dN_xi[i,:]
+                repnzv = np.arange(ne * nfun) + i * ne * nfun
+                col[repnzv] = repdof.ravel()
+                row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
+                val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
+                valx[repnzv] = dphidx.ravel()
+                valy[repnzv] = dphidy.ravel()
+            return col, row, val, valx, valy, wdetJ
+        elif et in (2, 3, 9, 10, 16): # 2D elements
+            xg, yg, wg, N, Ndx, Ndy = ShapeFunctions(et)
+            phi = N(xg, yg)
+            dN_xi = Ndx(xg, yg)
+            dN_eta = Ndy(xg, yg)
+            # elements
+            ne = len(e)  # nb of elements
+            nfun = phi.shape[1]  # nb of shape fun per element
+            npg = len(xg)  # nb of gauss point per element
+            nzv = nfun * npg * ne  # nb of non zero values in dphixdx
+            wdetJ = np.zeros(npg * ne)
+            row = np.zeros(nzv, dtype=int)
+            col = np.zeros(nzv, dtype=int)
+            val = np.zeros(nzv)
+            valx = np.zeros(nzv)
+            valy = np.zeros(nzv)
+            repdof = self.conn[e, 0]
+            xn = self.n[e, 0]
+            yn = self.n[e, 1]
+            for i in range(len(xg)):
+                dxdr = xn @ dN_xi[i, :]
+                dydr = yn @ dN_xi[i, :]
+                dxds = xn @ dN_eta[i, :]
+                dyds = yn @ dN_eta[i, :]
+                detJ = dxdr * dyds - dxds * dydr
+                wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
+                dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi[i, :] + (-dydr / detJ)[
+                    :, np.newaxis] * dN_eta[i, :]
+                dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi[i, :] + (dxdr / detJ)[
+                    :, np.newaxis] * dN_eta[i, :]
+                repnzv = np.arange(ne * nfun) + i * ne * nfun
+                col[repnzv] = repdof.ravel()
+                row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
+                val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
+                valx[repnzv] = dphidx.ravel()
+                valy[repnzv] = dphidy.ravel()
+            return col, row, val, valx, valy, wdetJ
+        else: # 3D elements
+            xg, yg, zg, wg, N, Ndx, Ndy, Ndz = ShapeFunctions(et)
+            phi = N(xg, yg, zg)
+            dN_xi = Ndx(xg, yg, zg)
+            dN_eta = Ndy(xg, yg, zg)
+            dN_zeta = Ndz(xg, yg, zg)
+            # elements
+            ne = len(e)  # nb of elements
+            nfun = phi.shape[1]  # nb of shape fun per element
+            npg = len(xg)  # nb of gauss point per element
+            nzv = nfun * npg * ne  # nb of non zero values in dphixdx
+            wdetJ = np.zeros(npg * ne)
+            row = np.zeros(nzv, dtype=int)
+            col = np.zeros(nzv, dtype=int)
+            val = np.zeros(nzv)
+            valx = np.zeros(nzv)
+            valy = np.zeros(nzv)
+            valz = np.zeros(nzv)
+            repdof = self.conn[e, 0]
+            xn = self.n[e, 0]
+            yn = self.n[e, 1]
+            zn = self.n[e, 2]
+            for i in range(len(xg)):
+                dxdr = xn @ dN_xi[i, :]
+                dydr = yn @ dN_xi[i, :]
+                dzdr = zn @ dN_xi[i, :]
+                dxds = xn @ dN_eta[i, :]
+                dyds = yn @ dN_eta[i, :]                
+                dzds = zn @ dN_eta[i, :]
+                dxdt = xn @ dN_zeta[i, :]
+                dydt = yn @ dN_zeta[i, :]
+                dzdt = zn @ dN_zeta[i, :]
+                detJ = dxdr * dyds * dzdt + dxds * dydt * dzdr \
+                     + dydr * dzds * dxdt - dzdr * dyds * dxdt \
+                     - dxdr * dzds * dydt - dydr * dxds * dzdt
+                dphidx= ((dyds*dzdt - dzds*dydt)/detJ)[:,np.newaxis]*dN_xi[i, :]-\
+                        ((dydr*dzdt - dzdr*dydt)/detJ)[:,np.newaxis]*dN_eta[i, :]+\
+                        ((dydr*dzds - dzdr*dyds)/detJ)[:,np.newaxis]*dN_zeta[i, :]
+                dphidy=-((dxds*dzdt - dzds*dxdt)/detJ)[:,np.newaxis]*dN_xi[i, :]+\
+                        ((dxdr*dzdt - dzdr*dxdt)/detJ)[:,np.newaxis]*dN_eta[i, :]-\
+                        ((dxdr*dzds - dzdr*dxds)/detJ)[:,np.newaxis]*dN_zeta[i, :]
+                dphidz= ((dxds*dydt - dyds*dxdt)/detJ)[:,np.newaxis]*dN_xi[i, :]-\
+                        ((dxdr*dydt - dydr*dxdt)/detJ)[:,np.newaxis]*dN_eta[i, :]+\
+                        ((dxdr*dyds - dydr*dxds)/detJ)[:,np.newaxis]*dN_zeta[i, :]
+                wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
+                repnzv = np.arange(ne * nfun) + i * ne * nfun
+                col[repnzv] = repdof.ravel()
+                row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
+                val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
+                valx[repnzv] = dphidx.ravel()
+                valy[repnzv] = dphidy.ravel()
+                valz[repnzv] = dphidz.ravel()
+            return col, row, val, valx, valy, valz, wdetJ
 
     def GaussIntegration(self):
         """Builds a Gauss integration scheme"""
         print('Gauss Integration.')
-        self.wdetJ = np.array([])
-        col = np.array([])
-        row = np.array([])
-        val = np.array([])
-        valx = np.array([])
-        valy = np.array([])
-        npg = 0
-        for je in self.e.keys():
-            colj, rowj, valj, valxj, valyj, wdetJj = self.GaussIntegElem(self.e[je], je)
-            col = np.append(col, colj)
-            row = np.append(row, rowj + npg)
-            val = np.append(val, valj)
-            valx = np.append(valx, valxj)
-            valy = np.append(valy, valyj)
-            self.wdetJ = np.append(self.wdetJ, wdetJj)
-            npg += len(wdetJj)
-        self.npg = len(self.wdetJ)
-        self.phix = sp.sparse.csc_matrix(
-            (val, (row, col)), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csc_matrix(
-            (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
-        self.dphixdx = sp.sparse.csc_matrix(
-            (valx, (row, col)), shape=(self.npg, self.ndof))
-        self.dphixdy = sp.sparse.csc_matrix(
-            (valy, (row, col)), shape=(self.npg, self.ndof))
-        self.dphiydx = sp.sparse.csc_matrix(
-            (valx, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
-        self.dphiydy = sp.sparse.csc_matrix(
-            (valy, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
-        rep, = np.where(self.conn[:, 0] >= 0)
-        qx = np.zeros(self.ndof)
-        qx[self.conn[rep, :]] = self.n[rep, :]
-        self.pgx = self.phix.dot(qx)
-        self.pgy = self.phiy.dot(qx)
+        if self.dim == 3:
+            self.wdetJ = np.array([])
+            col = np.array([])
+            row = np.array([])
+            val = np.array([])
+            valx = np.array([])
+            valy = np.array([])
+            valz = np.array([])
+            npg = 0
+            for je in self.e.keys():
+                colj, rowj, valj, valxj, valyj, valzj, wdetJj = self.__GaussIntegElem(self.e[je], je)
+                col = np.append(col, colj)
+                row = np.append(row, rowj + npg)
+                val = np.append(val, valj)
+                valx = np.append(valx, valxj)
+                valy = np.append(valy, valyj)
+                valz = np.append(valz, valzj)
+                self.wdetJ = np.append(self.wdetJ, wdetJj)
+                npg += len(wdetJj)
+            self.npg = len(self.wdetJ)
+            colx = col + 0 * self.ndof // self.dim
+            coly = col + 1 * self.ndof // self.dim
+            colz = col + 2 * self.ndof // self.dim
+            # shape funs
+            self.phix = sp.sparse.csc_matrix(
+                (val, (row, colx)), shape=(self.npg, self.ndof))
+            self.phiy = sp.sparse.csc_matrix(
+                (val, (row, coly)), shape=(self.npg, self.ndof))
+            self.phiz = sp.sparse.csc_matrix(
+                (val, (row, colz)), shape=(self.npg, self.ndof))
+            # phix
+            self.dphixdx = sp.sparse.csc_matrix(
+                (valx, (row, colx)), shape=(self.npg, self.ndof))
+            self.dphixdy = sp.sparse.csc_matrix(
+                (valy, (row, colx)), shape=(self.npg, self.ndof))
+            self.dphixdz = sp.sparse.csc_matrix(
+                (valz, (row, colx)), shape=(self.npg, self.ndof))
+            # phiy
+            self.dphiydx = sp.sparse.csc_matrix(
+                (valx, (row, coly)), shape=(self.npg, self.ndof))
+            self.dphiydy = sp.sparse.csc_matrix(
+                (valy, (row, coly)), shape=(self.npg, self.ndof))
+            self.dphiydz = sp.sparse.csc_matrix(
+                (valz, (row, coly)), shape=(self.npg, self.ndof))
+            # phiz
+            self.dphizdx = sp.sparse.csc_matrix(
+                (valx, (row, colz)), shape=(self.npg, self.ndof))
+            self.dphizdy = sp.sparse.csc_matrix(
+                (valy, (row, colz)), shape=(self.npg, self.ndof))
+            self.dphizdz = sp.sparse.csc_matrix(
+                (valz, (row, colz)), shape=(self.npg, self.ndof))
+            # gp coordinates
+            rep, = np.where(self.conn[:, 0] >= 0)
+            qx = np.zeros(self.ndof)
+            qx[self.conn[rep, :]] = self.n[rep, :]
+            self.pgx = self.phix.dot(qx)
+            self.pgy = self.phiy.dot(qx)
+            self.pgz = self.phiz.dot(qx)
+        else: # dim 2
+            self.wdetJ = np.array([])
+            col = np.array([])
+            row = np.array([])
+            val = np.array([])
+            valx = np.array([])
+            valy = np.array([])
+            npg = 0
+            for je in self.e.keys():
+                colj, rowj, valj, valxj, valyj, wdetJj = self.__GaussIntegElem(self.e[je], je)
+                col = np.append(col, colj)
+                row = np.append(row, rowj + npg)
+                val = np.append(val, valj)
+                valx = np.append(valx, valxj)
+                valy = np.append(valy, valyj)
+                self.wdetJ = np.append(self.wdetJ, wdetJj)
+                npg += len(wdetJj)
+            self.npg = len(self.wdetJ)
+            colx = col + 0 * self.ndof // self.dim
+            coly = col + 1 * self.ndof // self.dim
+            self.phix = sp.sparse.csc_matrix(
+                (val, (row, colx)), shape=(self.npg, self.ndof))
+            self.phiy = sp.sparse.csc_matrix(
+                (val, (row, coly)), shape=(self.npg, self.ndof))
+            self.dphixdx = sp.sparse.csc_matrix(
+                (valx, (row, colx)), shape=(self.npg, self.ndof))
+            self.dphixdy = sp.sparse.csc_matrix(
+                (valy, (row, colx)), shape=(self.npg, self.ndof))
+            self.dphiydx = sp.sparse.csc_matrix(
+                (valx, (row, coly)), shape=(self.npg, self.ndof))
+            self.dphiydy = sp.sparse.csc_matrix(
+                (valy, (row, coly)), shape=(self.npg, self.ndof))
+            rep, = np.where(self.conn[:, 0] >= 0)
+            qx = np.zeros(self.ndof)
+            qx[self.conn[rep, :]] = self.n[rep, :]
+            self.pgx = self.phix.dot(qx)
+            self.pgy = self.phiy.dot(qx)
 
     def Stiffness(self, hooke):
         """Assembles Stiffness Operator"""
         if not hasattr(self, "dphixdx"):
-            m = self.Copy()
-            print('Gauss Integ.')
-            m.GaussIntegration()
-            wdetJ = sp.sparse.diags(m.wdetJ)
+            mn = self.Copy()
+            mn.GaussIntegration()
+            m = mn
+        else:
+            m = self
+        wdetJ = sp.sparse.diags(m.wdetJ)
+        if self.dim == 3:
             Bxy = m.dphixdy + m.dphiydx
-            K = (hooke[0, 0] * m.dphixdx.T @ wdetJ @ m.dphixdx
+            Bxz = m.dphixdz + m.dphizdx
+            Byz = m.dphiydz + m.dphizdy
+            K = (
+                 hooke[0, 0] * m.dphixdx.T @ wdetJ @ m.dphixdx
+               + hooke[1, 1] * m.dphiydy.T @ wdetJ @ m.dphiydy
+               + hooke[2, 2] * m.dphizdz.T @ wdetJ @ m.dphizdz
+               + hooke[3, 3] * Bxy.T @ wdetJ @ Bxy
+               + hooke[4, 4] * Bxz.T @ wdetJ @ Bxz
+               + hooke[5, 5] * Byz.T @ wdetJ @ Byz
+               + hooke[0, 1] * m.dphixdx.T @ wdetJ @ m.dphiydy
+               + hooke[0, 2] * m.dphixdx.T @ wdetJ @ m.dphizdz
+               + hooke[1, 0] * m.dphiydy.T @ wdetJ @ m.dphizdz
+               + hooke[1, 2] * m.dphizdz.T @ wdetJ @ m.dphiydy
+               + hooke[2, 0] * m.dphizdz.T @ wdetJ @ m.dphixdx
+               + hooke[2, 1] * m.dphizdz.T @ wdetJ @ m.dphiydy
+               )
+        else:
+            Bxy = m.dphixdy + m.dphiydx
+            K = (
+                 hooke[0, 0] * m.dphixdx.T @ wdetJ @ m.dphixdx
                + hooke[1, 1] * m.dphiydy.T @ wdetJ @ m.dphiydy
                + hooke[2, 2] * Bxy.T @ wdetJ @ Bxy
                + hooke[0, 1] * m.dphixdx.T @ wdetJ @ m.dphiydy
-               + hooke[0, 2] * m.dphixdx.T @ wdetJ @ Bxy
-               + hooke[1, 2] * m.dphiydy.T @ wdetJ @ Bxy
+               #+ hooke[0, 2] * m.dphixdx.T @ wdetJ @ Bxy
+               #+ hooke[1, 2] * m.dphiydy.T @ wdetJ @ Bxy
                + hooke[1, 0] * m.dphiydy.T @ wdetJ @ m.dphixdx
-               + hooke[2, 0] * Bxy.T @ wdetJ @ m.dphixdx
-               + hooke[2, 1] * Bxy.T @ wdetJ @ m.dphiydy)
+               #+ hooke[2, 0] * Bxy.T @ wdetJ @ m.dphixdx
+               #+ hooke[2, 1] * Bxy.T @ wdetJ @ m.dphiydy
+               )            
+        return K
+    
+    def StiffnessAxi(self, hooke):
+        """Assembles Stiffness Operator"""
+        if not hasattr(self, "dphixdx"):
+            mn = self.Copy()
+            print('Gauss Integ.')
+            mn.GaussIntegration()
+            m = mn
         else:
-            wdetJ = sp.sparse.diags(self.wdetJ)
-            Bxy = self.dphixdy + self.dphiydx
-            K = (hooke[0, 0] * self.dphixdx.T @ wdetJ @ self.dphixdx
-               + hooke[1, 1] * self.dphiydy.T @ wdetJ @ self.dphiydy
-               + hooke[2, 2] * Bxy.T @ wdetJ @ Bxy
-               + hooke[0, 1] * self.dphixdx.T @ wdetJ @ self.dphiydy
-               + hooke[0, 2] * self.dphixdx.T @ wdetJ @ Bxy
-               + hooke[1, 2] * self.dphiydy.T @ wdetJ @ Bxy
-               + hooke[1, 0] * self.dphiydy.T @ wdetJ @ self.dphixdx
-               + hooke[2, 0] * Bxy.T @ wdetJ @ self.dphixdx
-               + hooke[2, 1] * Bxy.T @ wdetJ @ self.dphiydy)
+            m = self
+        wdetJr = sp.sparse.diags(m.wdetJ*m.pgx) # r dr dz !
+        Bxy = m.dphixdy + m.dphiydx
+        Nr = sp.sparse.diags(1/m.pgx) @ m.phix
+        K = (
+             hooke[0, 0] * m.dphixdx.T @ wdetJr @ m.dphixdx
+           + hooke[1, 1] * m.dphiydy.T @ wdetJr @ m.dphiydy
+           + hooke[2, 2] * Nr.T @ wdetJr @ Nr
+           + hooke[3, 3] * Bxy.T @ wdetJr @ Bxy
+           + hooke[0, 1] * m.dphixdx.T @ wdetJr @ m.dphiydy
+           + hooke[0, 2] * m.dphixdx.T @ wdetJr @ Nr
+           + hooke[1, 0] * m.dphiydy.T @ wdetJr @ m.dphixdx
+           + hooke[1, 2] * m.dphiydy.T @ wdetJr @ Nr
+           + hooke[2, 0] * Nr.T @ wdetJr @ m.dphixdx
+           + hooke[2, 1] * Nr.T @ wdetJr @ m.dphiydy
+           )
         return K
     
     def Tikhonov(self):
@@ -1329,62 +1720,6 @@ class Mesh:
               + rho * self.phiy.T @ wdetJ @ self.phiy
         return M
 
-    def VTKMesh(self, filename="mesh"):
-        """
-        Writes a VTK mesh file for vizualisation using Paraview.
-        Usage:
-            m.VTKMesh('FileName')
-        """
-        nnode = self.n.shape[0]
-        if self.n.shape[1] == 2:
-            new_node = np.append(self.n, np.zeros((nnode, 1)), axis=1).ravel()
-        else:
-            new_node = self.n.ravel()
-        new_conn = np.array([], dtype="int")
-        new_offs = np.array([], dtype="int")
-        new_type = np.array([], dtype="int")  # paraview type
-        new_typp = np.array([], dtype="int")  # pyxel (gmsh) type
-        new_num = np.array([], dtype="int")
-        nelem = 0
-        coffs = 0
-        for je in self.e.keys():
-            net = len(self.e[je])  # nb of elements of type je
-            if je == 3:  # quad4
-                nne = 4  # nb of node of this elem
-                typel = 9  # type of elem for paraview
-            elif je == 2:  # tri3
-                nne = 3
-                typel = 5
-            elif je == 9:  # tri6
-                nne = 6
-                typel = 22
-            elif je == 16:  # quad8
-                nne = 8
-                typel = 23
-            elif je == 10:  # quad9
-                nne = 8
-                typel = 23  # qua9 also for Paraview!
-            elif je == 5:  # hex8
-                nne = 8
-                typel = 12
-            else:
-                print("Oops!  That is not a valid element type...")
-            new_type = np.append(new_type, typel * np.ones(net, dtype=int))
-            new_typp = np.append(new_typp, je * np.ones(net, dtype=int))
-            new_conn = np.append(new_conn, self.e[je][:, :nne])
-            new_offs = np.append(new_offs, np.arange(1, net + 1) * nne + coffs)
-            new_num = np.append(new_num, np.arange(net))
-            coffs += nne * net
-            nelem += net
-        vtkfile = VTUWriter(nnode, nelem, new_node, new_conn, new_offs, new_type)
-        vtkfile.addCellData("num", 1, new_num)
-        vtkfile.addCellData("type", 1, new_typp)
-        # Write the VTU file in the VTK dir
-        dir0, filename = os.path.split(filename)
-        if not os.path.isdir(os.path.join("vtk", dir0)):
-            os.makedirs(os.path.join("vtk", dir0))
-        vtkfile.write(os.path.join("vtk", dir0, filename))
-
     def VTKSolSeries(self, filename, UU):
         """
         Writes a set of VTK files for vizualisation using Paraview.
@@ -1398,92 +1733,96 @@ class Mesh:
         for ig in range(UU.shape[1]):
             fname = filename + "_0_" + str(ig)
             self.VTKSol(fname, UU[:, ig])
-        self.PVDFile(filename, "vtu", 1, UU.shape[1])
+        PVDFile(filename, "vtu", 1, UU.shape[1])
 
-    def PVDFile(self, fileName, ext, npart, nstep):
-        dir0, fileName = os.path.split(fileName)
-        if not os.path.isdir(os.path.join("vtk", dir0)):
-            os.makedirs(os.path.join("vtk", dir0))
-        PVDFile(os.path.join("vtk", dir0, fileName), ext, npart, nstep)
+    def Write(self, filename, point_data={}, cell_data={}):
+        """
+        Export a meshfile using meshio.
+        mesh format depends on the chosen extension.
+        Abaqus (.inp), ANSYS msh (.msh), AVS-UCD (.avs), CGNS (.cgns), 
+        DOLFIN XML (.xml), Exodus (.e, .exo), FLAC3D (.f3grid), H5M (.h5m), 
+        Kratos/MDPA (.mdpa), Medit (.mesh, .meshb), MED/Salome (.med), 
+        Nastran (bulk data, .bdf, .fem, .nas), Netgen (.vol, .vol.gz), 
+        Neuroglancer precomputed format, Gmsh (format versions 2.2, 4.0, and 4.1, .msh), 
+        OBJ (.obj), OFF (.off), PERMAS (.post, .post.gz, .dato, .dato.gz), 
+        PLY (.ply), STL (.stl), Tecplot .dat, TetGen .node/.ele, SVG (2D output only) 
+        (.svg), SU2 (.su2), UGRID (.ugrid), VTK (.vtk), VTU (.vtu), WKT (TIN) (.wkt), 
+        XDMF (.xdmf, .xmf).
 
-    def VTKSol(self, filename, U, E=[], S=[], T=[]):
+        Parameters
+        ----------
+        filename : STRING
+            name of the mesh file, including extension
+        U : NUMPY.ARRAY, optional
+            Displacement DOF vector.
+
+        """
+        cells = dict()
+        for et in self.e.keys():
+            cells[eltype_n2s[et]] = self.e[et]
+        points = self.n
+        if self.dim == 2:
+            points = np.hstack((points, np.zeros((len(self.n),1))))
+        mesh = meshio.Mesh(points, cells)
+        mesh.cell_data = cell_data
+        mesh.point_data = point_data
+        mesh.write(filename)
+        print("Meshfile "+ filename +" written.")
+
+    def VTKSol(self, filename, U):
         """
         Writes a VTK Result file for vizualisation using Paraview.
         Usage:
             m.VTKSol('FileName', U)
-        U is a (ndof x 1) Numpy array containing the displacement dofs
-         (ndof is the numer of dofs)
+
+        Parameters
+        ----------
+        filename : STRING
+            mesh file name, without no extension. Example: 'result'
+        U : NUMPY.ARRAY
+            a (ndof x 1) Numpy array containing the displacement dofs
+            (ndof is the numer of dofs)
+
+        Returns
+        -------
+        None.
+
         """
-        nnode = self.n.shape[0]
-        new_node = np.append(self.n, np.zeros((nnode, 1)), axis=1).ravel()
-        # unused nodes displacement
-        conn2 = self.conn.copy()
-        (unused,) = np.where(conn2[:, 0] == -1)
-        conn2[unused, 0] = 0
-        new_u = np.append(U[self.conn], np.zeros((nnode, 1)), axis=1).ravel()
-        new_conn = np.array([], dtype="int")
-        new_offs = np.array([], dtype="int")
-        new_type = np.array([], dtype="int")
-        new_num = np.array([], dtype="int")
-        nelem = 0
-        coffs = 0
-        for je in self.e.keys():
-            net = len(self.e[je])  # nb of elements of type je
-            if je == 3:  # quad4
-                nne = 4  # nb of node of this elem
-                typel = 9  # type of elem for paraview
-            elif je == 2:  # tri3
-                nne = 3
-                typel = 5
-            elif je == 9:  # tri6
-                nne = 6
-                typel = 22
-            elif je == 16:  # quad8
-                nne = 8
-                typel = 23
-            elif je == 10:  # quad9
-                nne = 8
-                typel = 23  # quad9 also for paraview!
-            elif je == 5:  # hex8
-                nne = 8
-                typel = 12
-            else:
-                print("Oops!  That is not a valid element type...")
-            new_type = np.append(new_type, typel * np.ones(net, dtype=int))
-            new_conn = np.append(new_conn, self.e[je][:, :nne])
-            new_offs = np.append(new_offs, np.arange(1, net + 1) * nne + coffs)
-            new_num = np.append(new_num, np.arange(net))
-            coffs += nne * net
-            nelem += net
-        vtkfile = VTUWriter(nnode, nelem, new_node, new_conn, new_offs, new_type)
-        vtkfile.addPointData("displ", 3, new_u)
-        vtkfile.addCellData("num", 1, new_num)
-        if len(T) > 0:
-            vtkfile.addPointData("temp", 1, T[self.conn[:, 0]])
-        # Strain
-        if len(E) == 0:
+        cells = dict()
+        for et in self.e.keys():
+            cells[eltype_n2s[et]] = self.e[et]
+        points = self.n
+        if self.dim == 2:
+            points = np.hstack((points, np.zeros((len(self.n),1))))
+        mesh = meshio.Mesh(points, cells)
+        mesh.cell_data = {}
+        new_u = self.DOF2Nodes(U, fillzero=True)
+        if self.dim == 2:
             Ex, Ey, Exy = self.StrainAtNodes(U)
-            E = np.c_[Ex, Ey, Exy]
+            new_e = np.c_[Ex[self.conn[:, 0]], 
+                          Ey[self.conn[:, 0]],
+                          Exy[self.conn[:, 0]]]
             C = (Ex + Ey) / 2
             R = np.sqrt((Ex - C) ** 2 + Exy ** 2)
             EP = np.sort(np.c_[C + R, C - R], axis=1)
-        new_e = np.c_[
-            E[self.conn[:, 0], 0], E[self.conn[:, 0], 1], E[self.conn[:, 0], 2]
-        ].ravel()
-        vtkfile.addPointData("strain", 3, new_e)
-        new_ep = np.c_[EP[self.conn[:, 0], 0], EP[self.conn[:, 0], 1]].ravel()
-        vtkfile.addPointData("pcpal_strain", 2, new_ep)
-        # Stress
-        if len(S) > 0:
-            new_s = np.c_[
-                S[self.conn[:, 0], 0], S[self.conn[:, 0], 1], S[self.conn[:, 0], 2]
-            ].ravel()
-            vtkfile.addPointData("stress", 3, new_s)
-        # Write the VTU file in the VTK dir
+            new_ep = np.c_[EP[self.conn[:, 0], 0], 
+                           EP[self.conn[:, 0], 1]]
+            mesh.point_data = {'U': new_u, 'strain': new_e, 'pcp_strain': new_ep}
+        else:
+            Ex, Ey, Ez, Exy, Exz, Eyz = self.StrainAtNodes(U)
+            new_e = np.c_[Ex[self.conn[:, 0]], 
+                          Ey[self.conn[:, 0]],
+                          Ez[self.conn[:, 0]],
+                          Exy[self.conn[:, 0]],
+                          Exz[self.conn[:, 0]],
+                          Eyz[self.conn[:, 0]]]
+            mesh.point_data = {'U': new_u, 'strain': new_e}
+        # write
         dir0, filename = os.path.split(filename)
         if not os.path.isdir(os.path.join("vtk", dir0)):
             os.makedirs(os.path.join("vtk", dir0))
-        vtkfile.write(os.path.join("vtk", dir0, filename))
+        mesh.write(os.path.join("vtk", dir0, filename) + '.vtu')
+        print("Meshfile "+ os.path.join("vtk", dir0, filename) + '.vtu' +" written.")
 
     def StrainAtGP(self, U):
         if not hasattr(self, "dphixdx"):
@@ -1498,75 +1837,51 @@ class Mesh:
             epsxy = 0.5 * self.dphixdy @ U + 0.5 * self.dphiydx @ U
         return epsx, epsy, epsxy
 
-    # def StrainAtNodes(self, U):
-    #     nnodes = self.ndof // 2
-    #     m = self.Copy()
-    #     m.GaussIntegration()
-    #     exxgp = m.dphixdx @ U
-    #     eyygp = m.dphiydy @ U
-    #     exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
-    #     EpsXX = np.zeros(nnodes)
-    #     EpsYY = np.zeros(nnodes)
-    #     EpsXY = np.zeros(nnodes)
-    #     for jn in range(len(self.n)):
-    #         if self.conn[jn, 0] >= 0:
-    #             sig = 0  # max over all element types in the neighborhood
-    #             for je in self.e.keys():
-    #                 eljn, _ = np.where(self.e[je] == jn)
-    #                 if len(eljn) != 0:
-    #                     xm = np.mean(self.n[self.e[je][eljn, :], 0], axis=1)
-    #                     ym = np.mean(self.n[self.e[je][eljn, :], 1], axis=1)
-    #                     sig = max(sig, np.max(np.sqrt((xm - self.n[jn, 0]) ** 2
-    #                                                   + (ym - self.n[jn, 1]) ** 2)) / 3)
-    #             D = np.sqrt((m.pgx - self.n[jn, 0]) ** 2 + (m.pgy - self.n[jn, 1]) ** 2)
-    #             gauss = np.exp(-(D ** 2) / (2 * sig ** 2))
-    #             if np.sum(gauss) < 1e-15:
-    #                 print(jn)
-    #             gauss /= np.sum(gauss)
-    #             EpsXX[self.conn[jn, 0]] = gauss @ exxgp
-    #             EpsYY[self.conn[jn, 0]] = gauss @ eyygp
-    #             EpsXY[self.conn[jn, 0]] = gauss @ exygp
-    #     return EpsXX, EpsYY, EpsXY
-
     def StrainAtNodes(self, U):
-        nnodes = self.ndof // 2
-        m = self.Copy()
-        m.GaussIntegration()
-        exxgp = m.dphixdx @ U
-        eyygp = m.dphiydy @ U
-        exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
-        EpsXX = np.zeros(nnodes)
-        EpsYY = np.zeros(nnodes)
-        EpsXY = np.zeros(nnodes)
-        phi = m.phix[:,:nnodes]
-        w = np.array(np.sum(phi, axis=0))[0]
-        phi = phi @ sp.sparse.diags(1/w)
-        EpsXX = phi.T @ exxgp
-        EpsYY = phi.T @ eyygp
-        EpsXY = phi.T @ exygp
-        return EpsXX, EpsYY, EpsXY
-
-
-    # def StrainAtNodesOld(self, UU):
-    #     # LS projection... not working so good!
-    #     m = self.Copy()
-    #     m.GaussIntegration()
-    #     wdetJ = sp.sparse.diags(m.wdetJ)
-    #     phi = m.phix[:, : m.ndof // 2]
-    #     if not hasattr(self, "Bx"):
-    #         self.Bx = splalg.splu(phi.T @ wdetJ @ phi)
-    #     epsx = self.Bx.solve(phi.T @ wdetJ @ m.dphixdx @ UU)
-    #     epsy = self.Bx.solve(phi.T @ wdetJ @ m.dphiydy @ UU)
-    #     epsxy = self.Bx.solve(phi.T @ wdetJ @ (m.dphixdy @ UU + m.dphiydx @ UU)) * 0.5
-    #     return epsx, epsy, epsxy
-
-    def Elem2Node(self, edata):
-        # LS projection... not working so good!
-        wdetJ = sp.sparse.diags(self.wdetJ)
-        phi = self.phix[:, : self.ndof // 2]
-        M = splalg.splu(phi.T.dot(wdetJ.dot(phi)).T)
-        ndata = M.solve(phi.T.dot(wdetJ.dot(edata)))
-        return ndata
+        nnodes = self.ndof // self.dim
+        if not hasattr(self, "dphixdx"):
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
+        if self.dim == 2:
+            exxgp = m.dphixdx @ U
+            eyygp = m.dphiydy @ U
+            exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
+            EpsXX = np.zeros(nnodes)
+            EpsYY = np.zeros(nnodes)
+            EpsXY = np.zeros(nnodes)
+            phi = m.phix[:,:nnodes]
+            w = np.array(np.sum(phi, axis=0))[0]
+            phi = phi @ sp.sparse.diags(1/w)
+            EpsXX = phi.T @ exxgp
+            EpsYY = phi.T @ eyygp
+            EpsXY = phi.T @ exygp
+            return EpsXX, EpsYY, EpsXY
+        else: #dim 3
+            exxgp = m.dphixdx @ U
+            eyygp = m.dphiydy @ U
+            ezzgp = m.dphizdz @ U
+            exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
+            exzgp = 0.5 * m.dphixdz @ U + 0.5 * m.dphizdx @ U
+            eyzgp = 0.5 * m.dphiydz @ U + 0.5 * m.dphizdy @ U
+            EpsXX = np.zeros(nnodes)
+            EpsYY = np.zeros(nnodes)
+            EpsZZ = np.zeros(nnodes)
+            EpsXY = np.zeros(nnodes)
+            EpsXZ = np.zeros(nnodes)
+            EpsYZ = np.zeros(nnodes)
+            phi = m.phix[:,:nnodes]
+            w = np.array(np.sum(phi, axis=0))[0]
+            phi = phi @ sp.sparse.diags(1/w)
+            EpsXX = phi.T @ exxgp
+            EpsYY = phi.T @ eyygp
+            EpsZZ = phi.T @ ezzgp
+            EpsXY = phi.T @ exygp
+            EpsXZ = phi.T @ exzgp
+            EpsYZ = phi.T @ eyzgp
+            return EpsXX, EpsYY, EpsZZ, EpsXY, EpsXZ, EpsYZ
+            
 
     def VTKIntegrationPoints(self, cam, f, g, U, filename="IntPts", iscale=2):
         """
@@ -1586,89 +1901,39 @@ class Mesh:
         """
         cam2 = cam.SubSampleCopy(iscale)
         m2 = self.Copy()
-        m2.DICIntegrationWithGrad(cam2)
+        m2.DICIntegration(cam2)
         nnode = m2.pgx.shape[0]
-        nelem = nnode
-        new_node = np.array([m2.pgx, m2.pgy, 0 * m2.pgx]).T.ravel()
-        new_conn = np.arange(nelem)
-        new_offs = np.arange(nelem) + 1
-        new_type = 2 * np.ones(nelem).astype("int")
-        vtkfile = VTUWriter(nnode, nelem, new_node, new_conn, new_offs, new_type)
+        cells = {'vertex': np.arange(nnode)[np.newaxis].T}
+        points = np.array([m2.pgx, m2.pgy, 0 * m2.pgx]).T
+        mesh = meshio.Mesh(points, cells)
+        mesh.cell_data = {}
+        mesh.point_data = {}        
+        """ Displacement field """
+        pgu = m2.phix.dot(U)
+        pgv = m2.phiy.dot(U)
+        mesh.point_data['U'] = np.array([pgu, pgv]).T
         """ Reference image """
         u, v = cam.P(m2.pgx, m2.pgy)
         if hasattr(f, "tck") == 0:
             f.BuildInterp()
-        imref = f.Interp(u, v)
-        vtkfile.addCellData("f", 1, imref)
+        mesh.point_data['f'] = f.Interp(u, v)
         """ Deformed image """
         if hasattr(g, "tck") == 0:
             g.BuildInterp()
-        imdef = g.Interp(u, v)
-        vtkfile.addCellData("g", 1, imdef)
+        mesh.point_data['g'] = g.Interp(u, v)
         """ Residual Map """
         pgu = m2.phix.dot(U)
         pgv = m2.phiy.dot(U)
         pgxu = m2.pgx + pgu
         pgyv = m2.pgy + pgv
         u, v = cam.P(pgxu, pgyv)
-        imdefu = g.Interp(u, v)
-        vtkfile.addCellData("res", 1, imdefu - imref)
-        """ Advected Deformed image """
-        imdef = g.Interp(u, v)
-        vtkfile.addCellData("gu", 1, imdefu)
-        """ Displacement field """
-        new_u = np.array([pgu, pgv, 0 * pgu]).T.ravel()
-        vtkfile.addPointData("disp", 3, new_u)
-        """ Strain field """
-        epsxx, epsyy, epsxy = m2.StrainAtGP(U)
-        new_eps = np.array([epsxx, epsyy, epsxy]).T.ravel()
-        vtkfile.addCellData("epsilon", 3, new_eps)
-
+        mesh.point_data['res'] = mesh.point_data['f'] - g.Interp(u, v)
         # Write the VTU file in the VTK dir
         dir0, filename = os.path.split(filename)
         if not os.path.isdir(os.path.join("vtk", dir0)):
             os.makedirs(os.path.join("vtk", dir0))
-        vtkfile.write(os.path.join("vtk", dir0, filename))
-
-    def VTKNodes(self, cam, f, g, U, filename="IntPts"):
-        """The same as VTKIntegrationPoints
-        but on nodes instead of quadrature points"""
-        nnode = self.n.shape[0]
-        nelem = nnode
-        new_node = np.array([self.n[:, 0], self.n[:, 1], 0 * self.n[:, 0]]).T.ravel()
-        new_conn = np.arange(nelem)
-        new_offs = np.arange(nelem) + 1
-        new_type = 2 * np.ones(nelem).astype("int")
-        vtkfile = VTUWriter(nnode, nelem, new_node, new_conn, new_offs, new_type)
-        """ Reference image """
-        u, v = cam.P(self.n[:, 0], self.n[:, 1])
-        if hasattr(f, "tck") == 0:
-            f.BuildInterp()
-        imref = f.Interp(u, v)
-        vtkfile.addCellData("f", 1, imref)
-        """ Deformed image """
-        if hasattr(g, "tck") == 0:
-            g.BuildInterp()
-        imdef = g.Interp(u, v)
-        vtkfile.addCellData("g", 1, imdef)
-        """ Residual Map """
-        pgu = U[self.conn[:, 0]]
-        pgv = U[self.conn[:, 1]]
-        pgxu = self.n[:, 0] + pgu
-        pgyv = self.n[:, 1] + pgv
-        u, v = cam.P(pgxu, pgyv)
-        imdefu = g.Interp(u, v)
-        vtkfile.addCellData("gu", 1, (imdefu - imref) / f.Dynamic() * 100)
-        """ Displacement field """
-        new_u = np.array([pgu, pgv, 0 * pgu]).T.ravel()
-        vtkfile.addPointData("disp", 3, new_u)
-
-        # Write the VTU file in the VTK dir
-        # Write the VTU file in the VTK dir
-        dir0, filename = os.path.split(filename)
-        if not os.path.isdir(os.path.join("vtk", dir0)):
-            os.makedirs(os.path.join("vtk", dir0))
-        vtkfile.write(os.path.join("vtk", dir0, filename))
+        mesh.write(os.path.join("vtk", dir0, filename)+'.vtu')
+        print("Meshfile "+ os.path.join("vtk", dir0, filename) + '.vtu' +" written.")
         
     def Morphing(self, U):
         """
@@ -1685,7 +1950,7 @@ class Mesh:
         Prepare the matplotlib collections for a plot
         """
         edgecolor = kwargs.pop("edgecolor", "k")
-        facecolor = kwargs.pop("facecolor", "none")
+        facecolor = kwargs.pop("facecolor", 'none')
         alpha = kwargs.pop("alpha", 0.8)
         """ Plot deformed or undeformes Mesh """
         if n is None:
@@ -1715,8 +1980,14 @@ class Mesh:
         ### Create the collection
         pn = np.unique(pn)
         n = n[pn,:]
-        pc = cols.PolyCollection(nn, facecolor=facecolor, edgecolor=edgecolor, 
-                                 alpha=alpha, **kwargs)
+        if self.dim == 3: # 3D collection
+            pc = art3d.Poly3DCollection(nn)
+            pc.set_color(facecolor)
+            pc.set_edgecolor(edgecolor)
+        else: # 2D collection
+            pc = cols.PolyCollection(nn, facecolor=facecolor, edgecolor=edgecolor, 
+                             alpha=alpha, **kwargs)
+        
         ### Return the matplotlib collection and the list of vertices
         return pc, nn, n
 
@@ -1739,22 +2010,43 @@ class Mesh:
             Supports other Matplotlib arguments:
             m.Plot(U, edgecolor='r', facecolor='b', alpha=0.2)
         """
-        ax = plt.gca()
+        if self.dim == 2:
+            ax = plt.gca()
+        else:
+            ax = Axes3D(plt.figure())
         pc, nn, n = self.PreparePlot(U, coef, n, **kwargs)
-        ax.add_collection(pc)
+        if self.dim == 2:
+            ax.add_collection(pc)
+        else:
+            ax.add_collection3d(pc)
         ax.autoscale()
         edgecolor = kwargs.pop("edgecolor", "k")
         alpha = kwargs.pop("alpha", 0.8)
-        if plotnodes:
-            plt.plot(
-                n[:, 0],
-                n[:, 1],
-                linestyle="None",
-                marker="o",
-                color=edgecolor,
-                alpha=alpha,
-            )
-        plt.axis('equal')
+        if self.dim == 2:
+            plt.axis('equal')
+            if plotnodes:
+                plt.plot(
+                    n[:, 0],
+                    n[:, 1],
+                    linestyle="None",
+                    marker="o",
+                    color=edgecolor,
+                    alpha=alpha,
+                )
+        else:
+            n = np.vstack(nn)
+            X = n[:,0]
+            Y = n[:,1]
+            Z = n[:,2]
+            max_range = np.array([X.max()-X.min(), Y.max()-Y.min(), Z.max()-Z.min()]).max() / 2.0
+            mid_x = (X.max()+X.min()) * 0.5
+            mid_y = (Y.max()+Y.min()) * 0.5
+            mid_z = (Z.max()+Z.min()) * 0.5
+            ax.set_xlim(mid_x - max_range, mid_x + max_range)
+            ax.set_ylim(mid_y - max_range, mid_y + max_range)
+            ax.set_zlim(mid_z - max_range, mid_z + max_range)
+            ax.set_xlim(mid_x - max_range, mid_x + max_range)
+            ax.set_ylim(mid_y - max_range, mid_y + max_range)
         plt.show()
 
     def AnimatedPlot(self, U, coef=1, n=None, timeAnim=5, color=('k','b','r','g','c')):
@@ -1856,18 +2148,36 @@ class Mesh:
         plt.colorbar()
         plt.show()
 
-    def PlotContourDispl(self, U=None, n=None, s=1.0, **kwargs):
+    def PlotContourDispl(self, U=None, n=None, s=1.0, stype='comp', newfig=True, **kwargs):
         """
-        Plots the 2 components of a displacement field using Matplotlib Library.
-        Usage:
-            m.PlotContourDispl(U)
-            where U is the dof vector
+        Plots the displacement field using Matplotlib Library.        
 
-            m.PlotContourDispl(U, s=30)   >  deformation magnification = 30
+        Parameters
+        ----------
+        U : 1D NUMPY.ARRAY
+            displacement dof vector
+        n : NUMPY.ARRAY, optional
+            Coordinate of the nodes. The default is None, which corresponds
+            to using self.n instead.
+        s : FLOAT, optional
+            Deformation scale factor. The default is 1.0.
+        stype : STRING, optional
+            'comp' > plots the 3 components of the strain field
+            'mag' > plots the 'VonMises' equivalent strain
+             The default is 'comp'.
+        newfig : BOOL
+            if TRUE plot in a new figure (default)
+        **kwargs : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
         """
         if n is None:
             n = self.n.copy()
-        n += U[self.conn] * s  # s: amplification scale factor
+            n += U[self.conn] * s  # s: amplification scale factor
         """ Plot mesh and field contour """
         triangles = np.zeros((0, 3), dtype=int)
         for ie in self.e.keys():
@@ -1877,33 +2187,64 @@ class Mesh:
                 )
             elif ie == 2 or ie == 9:  # triangles
                 triangles = np.vstack((triangles, self.e[ie]))
-        plt.figure()
-        plt.tricontourf(n[:, 0], n[:, 1], triangles, U[self.conn[:, 0]], 20)
-        self.Plot(n=n, alpha=0.1)
-        plt.axis("off")
-        plt.title("Ux")
-        plt.colorbar()
-        plt.figure()
-        plt.tricontourf(n[:, 0], n[:, 1], triangles, U[self.conn[:, 1]], 20)
-        self.Plot(n=n, alpha=0.1)
-        plt.axis("equal")
-        plt.title("Uy")
-        plt.axis("off")
-        plt.colorbar()
-        plt.show()
+        alpha = kwargs.pop("alpha", 1)
+        if stype == 'mag':
+            Umag = np.sqrt(U[self.conn[:, 0]]**2 + U[self.conn[:, 1]]**2)
+            if newfig:
+                plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, Umag, 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.title("U_mag")
+            plt.colorbar()
+        else:
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, U[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.title("Ux")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, U[self.conn[:, 1]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("equal")
+            plt.title("Uy")
+            plt.axis("off")
+            plt.colorbar()
+            plt.show()
 
-    def PlotContourStrain(self, U, n=None, s=1.0, **kwargs):
+    def PlotContourStrain(self, U, n=None, s=1.0, stype='comp', newfig=True, **kwargs):
         """
-        Plots the 3 components of a strain field using Matplotlib Library.
-        Usage:
-            m.PlotContourStrain(U)
-            where U is the dof vector
+        Plots the strain field using Matplotlib Library.
+        
+        Parameters
+        ----------
+        U : 1D NUMPY.ARRAY
+            displacement dof vector
+        n : NUMPY.ARRAY, optional
+            Coordinate of the nodes. The default is None, which corresponds
+            to using self.n instead.
+        s : FLOAT, optional
+            Deformation scale factor. The default is 1.0.
+        stype : STRING, optional
+            'comp' > plots the 3 components of the strain field
+            'mag' > plots the 'VonMises' equivalent strain
+            'pcp'> plots the 2 principal strain fields
+            'maxpcp'> plots the maximal principal strain fields
+            The default is 'comp'.
+        newfigure : BOOL
+            if TRUE plot in a new figure (default)
+        **kwargs : TYPE
+            DESCRIPTION.
 
-            m.PlotContourDispl(U, s=30)   >  deformation magnification = 30
+        Returns
+        -------
+        None.
+
         """
         if n is None:
             n = self.n.copy()
-        n += U[self.conn] * s  # s: amplification scale factor
+            n += U[self.conn] * s  # s: amplification scale factor
         triangles = np.zeros((0, 3), dtype=int)
         for ie in self.e.keys():
             if ie == 3 or ie == 16 or ie == 10:  # quadrangles
@@ -1913,31 +2254,74 @@ class Mesh:
             elif ie == 2 or ie == 9:  # triangles
                 triangles = np.vstack((triangles, self.e[ie]))
         EX, EY, EXY = self.StrainAtNodes(U)
-        """ Plot mesh and field contour """
-        plt.figure()
-        plt.tricontourf(n[:, 0], n[:, 1], triangles, EX[self.conn[:, 0]], 20)
-        self.Plot(n=n, alpha=0.1)
-        plt.axis("off")
-        plt.axis("equal")
-        plt.title("EPS_X")
-        plt.colorbar()
-        plt.figure()
-        plt.tricontourf(n[:, 0], n[:, 1], triangles, EY[self.conn[:, 0]], 20)
-        self.Plot(n=n, alpha=0.1)
-        plt.axis("equal")
-        plt.title("EPS_Y")
-        plt.axis("off")
-        plt.colorbar()
-        plt.figure()
-        plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY[self.conn[:, 0]], 20)
-        self.Plot(n=n, alpha=0.1)
-        plt.axis("equal")
-        plt.title("EPS_XY")
-        plt.axis("off")
-        plt.colorbar()
-        plt.show()
+        alpha = kwargs.pop("alpha", 1)
+        if stype == 'pcp':
+            E1 = 0.5*EX + 0.5*EY - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            E2 = 0.5*EX + 0.5*EY + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_1")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_2")
+            plt.colorbar()
+            plt.show()
+        elif stype == 'maxpcp':
+            E1 = 0.5*EX + 0.5*EY - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            E2 = 0.5*EX + 0.5*EY + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            rep, = np.where(abs(E1)<abs(E2))
+            E1[rep] = E2[rep]
+            if newfig:
+                plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_max")
+            plt.colorbar()
+        elif stype == 'mag':
+            EVM = np.sqrt(EX**2 + EY**2 + EX * EY + 3 * EXY**2)
+            if newfig:
+                plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_VM")
+            plt.colorbar()
+        else:
+            """ Plot mesh and field contour """
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EX[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_X")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EY[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("equal")
+            plt.title("EPS_Y")
+            plt.axis("off")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("equal")
+            plt.title("EPS_XY")
+            plt.axis("off")
+            plt.colorbar()
+            plt.show()
 
-    def PlotNodeLabels(self, **kwargs):
+    def PlotNodeLabels(self, d=0, **kwargs):
         """
         Plots the mesh with the node labels (may be slow for large mesh size).
         """
@@ -1945,7 +2329,7 @@ class Mesh:
         color = kwargs.get("edgecolor", "k")
         plt.plot(self.n[:, 0], self.n[:, 1], ".", color=color)
         for i in range(len(self.n[:, 1])):
-            plt.text(self.n[i, 0], self.n[i, 1], str(i), color=color)
+            plt.text(self.n[i, 0] + d, self.n[i, 1], str(i), color=color)
 
     def PlotElemLabels(self, **kwargs):
         """
@@ -1965,41 +2349,41 @@ class Mesh:
                     color=color,
                 )
 
-    def VTKIntegrationPointsTh(self, cam, f, U, filename="IntPtsT"):
-        nnode = self.pgx.shape[0]
-        nelem = nnode
-        new_node = np.array([self.pgx, self.pgy, 0 * self.pgx]).T.ravel()
-        new_conn = np.arange(nelem)
-        new_offs = np.arange(nelem) + 1
-        new_type = 2 * np.ones(nelem).astype("int")
-        vtkfile = VTUWriter(nnode, nelem, new_node, new_conn, new_offs, new_type)
-        """ Reference image """
-        u, v = cam.P(self.pgx, self.pgy)
-        if hasattr(f, "tck") == 0:
-            f.BuildInterp()
-        imref = f.Interp(u, v)
-        vtkfile.addCellData("Th_init", 1, imref)
-        """ ReMaped thermal field """
-        pgu = self.phix.dot(U)
-        pgv = self.phiy.dot(U)
-        pgxu = self.pgx + pgu
-        pgyv = self.pgy + pgv
-        u, v = cam.P(pgxu, pgyv)
-        imdefu = f.Interp(u, v)
-        vtkfile.addCellData("Th_advected", 1, imdefu)
-        """ Displacement field """
-        new_u = np.array([pgu, pgv, 0 * pgu]).T.ravel()
-        vtkfile.addPointData("disp", 3, new_u)
-        """ Strain field """
-        epsxx, epsyy, epsxy = self.StrainAtGP(U)
-        new_eps = np.array([epsxx, epsyy, epsxy]).T.ravel()
-        vtkfile.addCellData("epsilon", 3, new_eps)
+    # def VTKIntegrationPointsTh(self, cam, f, U, filename="IntPtsT"):
+    #     nnode = self.pgx.shape[0]
+    #     nelem = nnode
+    #     new_node = np.array([self.pgx, self.pgy, 0 * self.pgx]).T.ravel()
+    #     new_conn = np.arange(nelem)
+    #     new_offs = np.arange(nelem) + 1
+    #     new_type = 2 * np.ones(nelem).astype("int")
+    #     vtkfile = VTUWriter(nnode, nelem, new_node, new_conn, new_offs, new_type)
+    #     """ Reference image """
+    #     u, v = cam.P(self.pgx, self.pgy)
+    #     if hasattr(f, "tck") == 0:
+    #         f.BuildInterp()
+    #     imref = f.Interp(u, v)
+    #     vtkfile.addCellData("Th_init", 1, imref)
+    #     """ ReMaped thermal field """
+    #     pgu = self.phix.dot(U)
+    #     pgv = self.phiy.dot(U)
+    #     pgxu = self.pgx + pgu
+    #     pgyv = self.pgy + pgv
+    #     u, v = cam.P(pgxu, pgyv)
+    #     imdefu = f.Interp(u, v)
+    #     vtkfile.addCellData("Th_advected", 1, imdefu)
+    #     """ Displacement field """
+    #     new_u = np.array([pgu, pgv, 0 * pgu]).T.ravel()
+    #     vtkfile.addPointData("disp", 3, new_u)
+    #     """ Strain field """
+    #     epsxx, epsyy, epsxy = self.StrainAtGP(U)
+    #     new_eps = np.array([epsxx, epsyy, epsxy]).T.ravel()
+    #     vtkfile.addCellData("epsilon", 3, new_eps)
 
-        # Write the VTU file in the VTK dir
-        dir0, filename = os.path.split(filename)
-        if not os.path.isdir(os.path.join("vtk", dir0)):
-            os.makedirs(os.path.join("vtk", dir0))
-        vtkfile.write(os.path.join("vtk", dir0, filename))
+    #     # Write the VTU file in the VTK dir
+    #     dir0, filename = os.path.split(filename)
+    #     if not os.path.isdir(os.path.join("vtk", dir0)):
+    #         os.makedirs(os.path.join("vtk", dir0))
+    #     vtkfile.write(os.path.join("vtk", dir0, filename))
 
     def FindDOFinBox(self, box):
         """
@@ -2060,6 +2444,25 @@ class Mesh:
             inside = isInBox(roi, v, u)
             self.e[je] = self.e[je][inside, :]
 
+    def RemoveDoubleNodes(self):
+        """
+        Removes the double nodes thus changes connectivity 
+        Warning: both self.e and self.n are modified!
+
+        Usage : 
+            m.RemoveDoubleNodes()
+
+        """
+        nnew = np.unique(self.n, axis=0)
+        table = -1 * np.ones(len(self.n), dtype='int')
+        eps = 1e-5 * self.GetApproxElementSize()
+        for jn in range(len(self.n)):
+            rep, = np.where(np.linalg.norm(nnew-self.n[jn,:][np.newaxis], axis=1) < eps)
+            table[jn] = rep
+        for k in self.e.keys():
+            self.e[k] = table[self.e[k]]
+        self.n = nnew
+    
     def BuildBoundaryMesh(self):
         """
         Builds edge elements corresponding to the edges of 2d Mesh m.
@@ -2171,7 +2574,7 @@ class Mesh:
         plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
 
-    def SelectLine(self):
+    def SelectLine(self, eps=1e-8):
         """
         Selection of the nodes along a line defined by 2 nodes.
         """
@@ -2189,7 +2592,7 @@ class Mesh:
         v = v / nv
         n = np.array([v[1], -v[0]])
         c = n.dot(self.n[n1, :])
-        (rep,) = np.where(abs(self.n.dot(n) - c) < 1e-8)
+        (rep,) = np.where(abs(self.n.dot(n) - c) < eps)
         c1 = v.dot(self.n[n1, :])
         c2 = v.dot(self.n[n2, :])
         nrep = self.n[rep, :]
@@ -2262,3 +2665,32 @@ class Mesh:
         rz = np.zeros(self.ndof)
         rz[self.conn]=v
         return tx, ty, rz
+    
+    def MedianFilter(self, U):
+        """
+        Compute the median filter of a displacement field. Replace the
+        nodal values by the median value of the first neighbors.
+
+        Parameters
+        ----------
+        U : NUMPY.ARRAY
+            DOF vector of the input displacement field
+
+        Returns
+        -------
+        Um : NUMPY.ARRAY
+            DOF vector of the filtered displacement field
+
+        """
+        usnd, = np.where(self.conn[:,0]>-1)
+        Um = U.copy()
+        for j in range(len(usnd)):
+            jn = usnd[j]
+            vjn = np.zeros(0, dtype=int)
+            for et in self.e.keys():
+                e, p = np.where(self.e[et]==jn)
+                vjn = np.append(vjn, self.e[et][e,:].ravel())
+            vjn = np.unique(vjn)
+            Um[self.conn[jn,0]] = np.median(U[self.conn[vjn,0]])
+            Um[self.conn[jn,1]] = np.median(U[self.conn[vjn,1]])
+        return Um

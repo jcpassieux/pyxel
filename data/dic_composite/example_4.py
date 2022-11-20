@@ -14,7 +14,7 @@ import pyxel as px
 f = px.Image('zoom-0053_1.tif').Load()
 g = px.Image('zoom-0070_1.tif').Load()
 
-m = px.ReadMeshINP('abaqus_q4_m.inp')
+m = px.ReadMesh('abaqus_q4_m.inp')
 
 p = np.array([ 1.05449047e+04,  5.12335842e-02, -9.63541211e-02, -4.17489457e-03])
 cam = px.Camera(p)

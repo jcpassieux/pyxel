@@ -14,8 +14,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class ExportPixMap:
-    """ Class Element """
+    """ Class ExportPixMap """
     def __init__(self, f, m, cam):
+        """
+        Class : Export Results to a Pixel Map
+        
+        Parameters
+        ----------
+        f : PYXEL.IMAGE
+            image de ref
+        m : PYXEL.MESH
+            mesh
+        cam : PYXEL.CAMERA
+            camera model
+
+        """
         self.m = m.Copy()
         self.cam = cam
         self.m.DICIntegrationPixel(cam)
@@ -62,7 +75,8 @@ class ExportPixMap:
         plt.imshow(Vmap)
         plt.colorbar()
         plt.title('Displacement V')
-
+        return Umap, Vmap
+    
     def PlotResidual(self, f, g, U):
         R = self.GetResidual(f, g, U)
         plt.figure()
@@ -71,3 +85,4 @@ class ExportPixMap:
         plt.clim(-3 * stdr, 3 * stdr)
         plt.colorbar()
         plt.title('Residual Map')
+        return R

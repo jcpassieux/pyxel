@@ -14,7 +14,8 @@ import pyxel as px
 f = px.Image('zoom-0053_1.tif').Load()
 g = px.Image('zoom-0070_1.tif').Load()
 
-m = px.ReadMeshGMSH('gmsh_t3_mm.msh')
+m = px.ReadMesh('gmsh_t3_mm.msh')
+m.KeepSurfElems() # remove elements of type segments and vertices
 m.Plot()
 
 #%% CAMERA MODEL
@@ -43,6 +44,6 @@ m.DICIntegrationFast(cam)
 U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
 U, res=px.Correlate(f ,g, m, cam, U0=U)
 
-m.PlotContourDispl(U,s=30)
+m.PlotContourDispl(U, s=30)
 
 

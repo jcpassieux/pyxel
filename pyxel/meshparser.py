@@ -1,6 +1,65 @@
 
+
+
+
+
+
+
+""" ************       USELESS 23/3/2022 !!!    *************** """
+
+
+
+
+
+
+
+
+
 import numpy as np
 from .mesh import Mesh
+import meshio
+
+#%%
+
+eltype_n2s = {1: "line",
+        2: "triangle",
+        3: "quad",
+        4: "tetra",
+        5: "hexahedron",
+        6: "wedge",
+        7: "pyramid",
+        8: "line3",
+        9: "triangle6",
+        10: "quad9",
+        11: "tetra10",
+        12: "hexahedron27",
+        14: "pyramid14",
+        15: "vertex",
+        16: "quad8",
+        17: "hexahedron20",
+        18: "wedge15",
+        19: "pyramid13"}
+
+eltype_s2n = {}
+for jn in eltype_n2s.keys():
+    eltype_s2n[eltype_n2s[jn]] = jn
+
+def ReadMesh(fn, dim=2):
+    mesh = meshio.read(fn)
+    # file_format="stl",  # optional if filename is a path; inferred from extension
+    if mesh.points.shape[1] > dim: # too much node coordinate
+        # Remove coordinate with minimal std.
+        rmdim = np.argmin(np.std(mesh.points,axis=0))
+        n = np.delete(mesh.points, rmdim, 1)
+    elif mesh.points.shape[1] < dim: # not enough node coordinates
+        n = np.hstack((mesh.points, np.zeros((len(mesh.points),1))))
+    else :
+        n = mesh.points
+    e = dict()
+    for et in mesh.cells_dict.keys():
+        e[eltype_s2n[et]] = mesh.cells_dict[et]
+    return Mesh(e, n, dim)
+
 
 #%%
 def ReadMeshGMSH(fn, dim=2):
@@ -92,8 +151,9 @@ def ReadMeshINP(fn):
     while line.find("*Node") < 0:
         line = mshfid.readline()
         pass
-    nodes = np.zeros((0, 2))
     line = mshfid.readline()
+    dim = len(line.split(","))-1
+    nodes = np.zeros((0, dim))
     while line.find("*Element") < 0:
         nodes = np.vstack((nodes, np.double(line.split(",")[1:])))
         line = mshfid.readline()
@@ -208,6 +268,7 @@ def ReadMeshINPwithElset(fn):
     m = Mesh(elems, nodes)
     return m, elset
 
+
 def ReadMeshINP3D(fn):
     """BETA"""
     lines = open(fn, "r").readlines()
@@ -228,3 +289,4 @@ def ReadMeshINP3D(fn):
     elems[:, 0] = 5
     m = Mesh(elems, nodes)
     return m
+
