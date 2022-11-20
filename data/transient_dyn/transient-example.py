@@ -22,13 +22,14 @@ a = 2e-4
 b = 1.
 
 ### Plane stress model
-hooke = E / (1-nu**2) * np.array([[1,nu,0],[nu,1,0],[0,0,0.5*(1-nu)]]) 
+hooke = px.Hooke([E, nu], typc='isotropic_2D_ps')
 
 #%%
 #### Loading the mesh
 mesh = px.ReadMesh('support-1.msh')
-#mesh.Plot()
+mesh.KeepSurfElems() # keep only cells of type quad or triangles.
 
+#mesh.Plot()
 
 #### Computing the mass and stiffness matrices
 mesh.Connectivity()                            # Computation of the connectivity

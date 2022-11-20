@@ -824,6 +824,20 @@ def ShapeFunctions(eltype):
         zg = 0.25 * np.array([1])
         wg = np.array([0.1666666666666666])
         return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
+    # elif eltype == 11:
+    #     """
+    #     #############
+    #         Tet10
+    #     #############
+    #     """
+    #     xg = 0.25 * np.array([1])
+    #     yg = 0.25 * np.array([1])
+    #     zg = 0.25 * np.array([1])
+    #     wg = np.array([0.1666666666666666])
+    #     x = np.ones((4, 4))*0.13819660
+        
+    #     0.58541020
+    #     return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
 
 
 #%% 
@@ -895,9 +909,16 @@ class Mesh:
             Unodes = [[ui, vi, [0]],...]            
 
         """
-        Unodes = Udof[self.conn]
+        conn = self.conn.copy()
+        not_used, = np.where(self.conn[:,0]<0)
+        conn[not_used, 0] = np.max(conn[:,0])
+        conn[not_used, 1] = np.max(conn[:,1])
         if self.dim == 2 and fillzero:
+            Unodes = Udof[conn]
             Unodes = np.hstack((Unodes, np.zeros((len(self.n),1))))
+        else:
+            conn[not_used, 2] = np.max(conn[:,2])
+            Unodes = Udof[conn]
         return Unodes
 
     def Nodes2DOF(self, Unodes):
