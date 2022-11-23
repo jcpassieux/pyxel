@@ -36,7 +36,7 @@ repu = m.conn[repu, :]
 
 # Dirichlet BC at y = 0.035 second dof only
 repf, = np.where(m.n[:,1] > 0.03499)
-repf = m.conn[repf, 1]
+repf = m.conn[repf, 2]
 
 U = np.zeros(m.ndof)
 U[repf] = 0.001
@@ -50,8 +50,6 @@ KLU = splalg.splu(K[repk])
 U[rep] = KLU.solve(F[rep])
 
 m.VTKSol('Sol3D', U)
-
-
 
 
 #%% Generating hex20 mesh with GMSH

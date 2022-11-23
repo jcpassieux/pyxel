@@ -834,7 +834,10 @@ def ShapeFunctions(eltype):
     #     yg = 0.25 * np.array([1])
     #     zg = 0.25 * np.array([1])
     #     wg = np.array([0.1666666666666666])
-    #     x = np.ones((4, 4))*0.13819660
+    # x = np.ones((4, 4))*0.13819660 @ np.array([0, 1, 0, 0])
+    # y = np.ones((4, 4))*0.13819660 @ np.array([0, 0, 1, 0])
+    # z = np.ones((4, 4))*0.13819660 @ np.array([0, 0, 0, 1])
+
         
     #     0.58541020
     #     return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
@@ -1122,21 +1125,21 @@ class Mesh:
                 vale = np.append(vale, valej[:npg])
             self.wdetJ = np.append(self.wdetJ, wdetJj[:npg])
         self.npg = len(self.wdetJ)
-        self.phix = sp.sparse.csc_matrix(
+        self.phix = sp.sparse.csr_matrix(
             (val, (row, col)), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csc_matrix(
+        self.phiy = sp.sparse.csr_matrix(
             (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
         if G:
-            self.dphixdx = sp.sparse.csc_matrix(
+            self.dphixdx = sp.sparse.csr_matrix(
                 (valx, (row, col)), shape=(self.npg, self.ndof))
-            self.dphixdy = sp.sparse.csc_matrix(
+            self.dphixdy = sp.sparse.csr_matrix(
                 (valy, (row, col)), shape=(self.npg, self.ndof))
-            self.dphiydx = sp.sparse.csc_matrix(
+            self.dphiydx = sp.sparse.csr_matrix(
                 (valx, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
-            self.dphiydy = sp.sparse.csc_matrix(
+            self.dphiydy = sp.sparse.csr_matrix(
                 (valy, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
         if EB:
-            self.Me = sp.sparse.csc_matrix(
+            self.Me = sp.sparse.csr_matrix(
                 (vale, (rowe, cole)), shape=(self.npg, ne))
         qx = np.zeros(self.ndof)
         (rep,) = np.where(self.conn[:, 0] >= 0)
@@ -1222,9 +1225,9 @@ class Mesh:
             col[rangephi] = repj.ravel()
             val[rangephi] = elem[je].phi.ravel()
             nzv += np.prod(elem[je].phi.shape)
-        self.phix = sp.sparse.csc_matrix(
+        self.phix = sp.sparse.csr_matrix(
             (val, (row, col)), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csc_matrix(
+        self.phiy = sp.sparse.csr_matrix(
             (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
 
     def __FastDICIntegElem(self, e, et, n=10, G=False):
@@ -1357,18 +1360,18 @@ class Mesh:
             self.wdetJ = np.append(self.wdetJ, wdetJj)
             npg += len(wdetJj)
         self.npg = len(self.wdetJ)
-        self.phix = sp.sparse.csc_matrix(
+        self.phix = sp.sparse.csr_matrix(
             (val, (row, col)), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csc_matrix(
+        self.phiy = sp.sparse.csr_matrix(
             (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
         if G:
-            self.dphixdx = sp.sparse.csc_matrix(
+            self.dphixdx = sp.sparse.csr_matrix(
                 (valx, (row, col)), shape=(self.npg, self.ndof))
-            self.dphixdy = sp.sparse.csc_matrix(
+            self.dphixdy = sp.sparse.csr_matrix(
                 (valy, (row, col)), shape=(self.npg, self.ndof))
-            self.dphiydx = sp.sparse.csc_matrix(
+            self.dphiydx = sp.sparse.csr_matrix(
                 (valx, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
-            self.dphiydy = sp.sparse.csc_matrix(
+            self.dphiydy = sp.sparse.csr_matrix(
                 (valy, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
         rep, = np.where(self.conn[:, 0] >= 0)
         qx = np.zeros(self.ndof)
@@ -1532,32 +1535,32 @@ class Mesh:
             coly = col + 1 * self.ndof // self.dim
             colz = col + 2 * self.ndof // self.dim
             # shape funs
-            self.phix = sp.sparse.csc_matrix(
+            self.phix = sp.sparse.csr_matrix(
                 (val, (row, colx)), shape=(self.npg, self.ndof))
-            self.phiy = sp.sparse.csc_matrix(
+            self.phiy = sp.sparse.csr_matrix(
                 (val, (row, coly)), shape=(self.npg, self.ndof))
-            self.phiz = sp.sparse.csc_matrix(
+            self.phiz = sp.sparse.csr_matrix(
                 (val, (row, colz)), shape=(self.npg, self.ndof))
             # phix
-            self.dphixdx = sp.sparse.csc_matrix(
+            self.dphixdx = sp.sparse.csr_matrix(
                 (valx, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphixdy = sp.sparse.csc_matrix(
+            self.dphixdy = sp.sparse.csr_matrix(
                 (valy, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphixdz = sp.sparse.csc_matrix(
+            self.dphixdz = sp.sparse.csr_matrix(
                 (valz, (row, colx)), shape=(self.npg, self.ndof))
             # phiy
-            self.dphiydx = sp.sparse.csc_matrix(
+            self.dphiydx = sp.sparse.csr_matrix(
                 (valx, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphiydy = sp.sparse.csc_matrix(
+            self.dphiydy = sp.sparse.csr_matrix(
                 (valy, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphiydz = sp.sparse.csc_matrix(
+            self.dphiydz = sp.sparse.csr_matrix(
                 (valz, (row, coly)), shape=(self.npg, self.ndof))
             # phiz
-            self.dphizdx = sp.sparse.csc_matrix(
+            self.dphizdx = sp.sparse.csr_matrix(
                 (valx, (row, colz)), shape=(self.npg, self.ndof))
-            self.dphizdy = sp.sparse.csc_matrix(
+            self.dphizdy = sp.sparse.csr_matrix(
                 (valy, (row, colz)), shape=(self.npg, self.ndof))
-            self.dphizdz = sp.sparse.csc_matrix(
+            self.dphizdz = sp.sparse.csr_matrix(
                 (valz, (row, colz)), shape=(self.npg, self.ndof))
             # gp coordinates
             rep, = np.where(self.conn[:, 0] >= 0)
@@ -1586,17 +1589,17 @@ class Mesh:
             self.npg = len(self.wdetJ)
             colx = col + 0 * self.ndof // self.dim
             coly = col + 1 * self.ndof // self.dim
-            self.phix = sp.sparse.csc_matrix(
+            self.phix = sp.sparse.csr_matrix(
                 (val, (row, colx)), shape=(self.npg, self.ndof))
-            self.phiy = sp.sparse.csc_matrix(
+            self.phiy = sp.sparse.csr_matrix(
                 (val, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphixdx = sp.sparse.csc_matrix(
+            self.dphixdx = sp.sparse.csr_matrix(
                 (valx, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphixdy = sp.sparse.csc_matrix(
+            self.dphixdy = sp.sparse.csr_matrix(
                 (valy, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphiydx = sp.sparse.csc_matrix(
+            self.dphiydx = sp.sparse.csr_matrix(
                 (valx, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphiydy = sp.sparse.csc_matrix(
+            self.dphiydy = sp.sparse.csr_matrix(
                 (valy, (row, coly)), shape=(self.npg, self.ndof))
             rep, = np.where(self.conn[:, 0] >= 0)
             qx = np.zeros(self.ndof)
@@ -1725,7 +1728,7 @@ class Mesh:
                     col[nzv + np.arange(4)] = dofn[[0, 1, 0, 1], 2]
                     val[nzv + np.arange(4)] = np.array([1, -1, -1, 1]) / d
                     nzv += 4
-        return sp.sparse.csc_matrix((val, (row, col)), shape=(self.ndof, self.ndof))
+        return sp.sparse.csr_matrix((val, (row, col)), shape=(self.ndof, self.ndof))
 
     def Mass(self, rho):
         """Assembles Mass Matrix"""
@@ -2196,9 +2199,14 @@ class Mesh:
         None.
 
         """
+        if self.ndof % len(U):
+            print('Problem with the number of dofs in U')
+        else:
+            V = np.zeros(self.ndof)
+            V[:len(U)] = U
         if n is None:
             n = self.n.copy()
-            n += U[self.conn] * s  # s: amplification scale factor
+            n += V[self.conn] * s  # s: amplification scale factor
         """ Plot mesh and field contour """
         triangles = np.zeros((0, 3), dtype=int)
         for ie in self.e.keys():
@@ -2210,26 +2218,26 @@ class Mesh:
                 triangles = np.vstack((triangles, self.e[ie]))
         alpha = kwargs.pop("alpha", 1)
         if stype == 'mag':
-            Umag = np.sqrt(U[self.conn[:, 0]]**2 + U[self.conn[:, 1]]**2)
+            Vmag = np.sqrt(V[self.conn[:, 0]]**2 + V[self.conn[:, 1]]**2)
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, Umag, 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, Vmag, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
-            plt.title("U_mag")
+            plt.title("Magnitude")
             plt.colorbar()
         else:
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, U[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 0]], 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
-            plt.title("Ux")
+            plt.title("x")
             plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, U[self.conn[:, 1]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 1]], 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
-            plt.title("Uy")
+            plt.title("y")
             plt.axis("off")
             plt.colorbar()
             plt.show()
