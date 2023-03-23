@@ -16,7 +16,7 @@ import scipy.sparse.linalg as splalg
 from .image import Image
 from .camera import Camera
 from .mesh import StructuredMesh
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 #import pdb
 #pdb.set_trace()
@@ -391,12 +391,14 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             if L is None:
                 L = m.Tikhonov()
             used_nodes = m.conn[:, 0] > 0
+            T = 10 * m.GetApproxElementSize()
             V = np.zeros(m.ndof)
-            V[m.conn[used_nodes, 0]] = np.cos(m.n[used_nodes, 1] / l0 * 2 * np.pi)
+            V[m.conn[used_nodes, 0]] = np.cos(m.n[used_nodes, 1] / T * 2 * np.pi)
             H0 = V.dot(H.dot(V))
             L0 = V.dot(L.dot(V))
-            l = H0 / L0
+            l = (l0/T)**2 * H0 / L0
             H_LU = splalg.splu(H + l * L)
+            print(l)
         else:
             if disp:
                 print("no reg")

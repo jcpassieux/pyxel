@@ -13,15 +13,13 @@ PYthon library for eXperimental mechanics using Finite ELements
 import os
 import numpy as np
 import scipy as sp
-#import scipy.sparse.linalg as splalg
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import art3d
 import matplotlib.pyplot as plt
 import matplotlib.collections as cols
 import matplotlib.animation as animation
-from numba import njit
+#from numba import njit # uncomment for just in time compilation
 from .utils import meshgrid, isInBox
-#from .camera import Camera
 import meshio
 
 def ElTypes():
@@ -219,7 +217,7 @@ def GetPixelsElem(xn, yn, xpix, ypix, eltype):
     xg, yg = InverseFEMapping(xn, yn, xpix[ind], ypix[ind], eltype)
     return xg, yg, xpix[ind], ypix[ind]
 
-@njit(cache=True)
+#@njit(cache=True)
 def SubQuaIso(nx, ny):
     """Subdivide a Quadrilateral to build the quadrature rule"""
     px = 1.0 / nx
@@ -230,7 +228,7 @@ def SubQuaIso(nx, ny):
     wg = 4.0 / (nx * ny)
     return xg.ravel(), yg.ravel(), wg
 
-@njit(cache=True)
+#@njit(cache=True)
 def SubTriIso(nx, ny):
     """Subdivide a Triangle to build the quadrature rule (possibly heterogeneous subdivision)"""
     # M1M2 is divided in nx and M1M3 in ny, the meshing being heterogeneous, we
@@ -280,7 +278,7 @@ def SubTriIso(nx, ny):
     return xg, yg, wg
 
 
-@njit(cache=True)
+#@njit(cache=True)
 def SubTriIso2(nx, ny=None):
     """Subdivide a Triangle to build the quadrature rule (homogeneous subdivision, faster)"""
     # M1M2 and M1M3 are divided into (nx+ny)/2, the meshing being homogeneous, we
@@ -1629,8 +1627,8 @@ class Mesh:
                + hooke[5, 5] * Byz.T @ wdetJ @ Byz
                + hooke[0, 1] * m.dphixdx.T @ wdetJ @ m.dphiydy
                + hooke[0, 2] * m.dphixdx.T @ wdetJ @ m.dphizdz
-               + hooke[1, 0] * m.dphiydy.T @ wdetJ @ m.dphizdz
-               + hooke[1, 2] * m.dphizdz.T @ wdetJ @ m.dphiydy
+               + hooke[1, 0] * m.dphiydy.T @ wdetJ @ m.dphixdx
+               + hooke[1, 2] * m.dphiydy.T @ wdetJ @ m.dphizdz
                + hooke[2, 0] * m.dphizdz.T @ wdetJ @ m.dphixdx
                + hooke[2, 1] * m.dphizdz.T @ wdetJ @ m.dphiydy
                )
@@ -1783,7 +1781,7 @@ class Mesh:
         """
         cells = dict()
         for et in self.e.keys():
-            cells[eltype_n2s[et]] = self.e[et]
+            cells[eltype_n2s[et]] = self.e[et].astype('int32')
         points = self.n
         if self.dim == 2:
             points = np.hstack((points, np.zeros((len(self.n),1))))
@@ -1925,7 +1923,7 @@ class Mesh:
         """
         cam2 = cam.SubSampleCopy(iscale)
         m2 = self.Copy()
-        m2.DICIntegration(cam2)
+        m2.DICIntegrationFast(cam2)
         nnode = m2.pgx.shape[0]
         cells = {'vertex': np.arange(nnode)[np.newaxis].T}
         points = np.array([m2.pgx, m2.pgy, 0 * m2.pgx]).T
@@ -2222,10 +2220,10 @@ class Mesh:
             if newfig:
                 plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, Vmag, 20, alpha=alpha)
+            plt.colorbar()
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.title("Magnitude")
-            plt.colorbar()
         else:
             plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 0]], 20, alpha=alpha)
@@ -2235,11 +2233,11 @@ class Mesh:
             plt.colorbar()
             plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 1]], 20, alpha=alpha)
+            plt.colorbar()
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
             plt.title("y")
             plt.axis("off")
-            plt.colorbar()
             plt.show()
 
     def PlotContourStrain(self, U, n=None, s=1.0, stype='comp', newfig=True, **kwargs):
@@ -2343,6 +2341,118 @@ class Mesh:
             plt.colorbar()
             plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("equal")
+            plt.title("EPS_XY")
+            plt.axis("off")
+            plt.colorbar()
+            plt.show()
+            
+    def PlotContourStress(self, U, hooke, n=None, s=1.0, stype='comp', newfig=True, **kwargs):
+        """
+        Plots the stress field using Matplotlib Library.
+        
+        Parameters
+        ----------
+        U : 1D NUMPY.ARRAY
+            displacement dof vector
+        hooke : Hooke operator
+        n : NUMPY.ARRAY, optional
+            Coordinate of the nodes. The default is None, which corresponds
+            to using self.n instead.
+        s : FLOAT, optional
+            Deformation scale factor. The default is 1.0.
+        stype : STRING, optional
+            'comp' > plots the 3 components of the strain field
+            'mag' > plots the 'VonMises' equivalent strain
+            'pcp'> plots the 2 principal strain fields
+            'maxpcp'> plots the maximal principal strain fields
+            The default is 'comp'.
+        newfigure : BOOL
+            if TRUE plot in a new figure (default)
+        **kwargs : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        if n is None:
+            n = self.n.copy()
+            n += U[self.conn] * s  # s: amplification scale factor
+        triangles = np.zeros((0, 3), dtype=int)
+        for ie in self.e.keys():
+            if ie == 3 or ie == 16 or ie == 10:  # quadrangles
+                triangles = np.vstack(
+                    (triangles, self.e[ie][:, [0, 1, 3]], self.e[ie][:, [1, 2, 3]])
+                )
+            elif ie == 2 or ie == 9:  # triangles
+                triangles = np.vstack((triangles, self.e[ie]))
+        EX, EY, EXY = self.StrainAtNodes(U)
+        SX = EX * hooke[0 ,0] + EY * hooke[0 ,1] + 2 * EXY * hooke[0 ,2] 
+        SY = EX * hooke[1 ,0] + EY * hooke[1 ,1] + 2 * EXY * hooke[1 ,2] 
+        SXY = EX * hooke[2 ,0] + EY * hooke[2 ,1] + 2 * EXY * hooke[2 ,2] 
+        alpha = kwargs.pop("alpha", 1)
+        if stype == 'pcp':
+            E1 = 0.5*SX + 0.5*SY - 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
+            E2 = 0.5*SX + 0.5*SY + 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_1")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_2")
+            plt.colorbar()
+            plt.show()
+        elif stype == 'maxpcp':
+            E1 = 0.5*SX + 0.5*SY - 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
+            E2 = 0.5*SX + 0.5*SY + 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
+            rep, = np.where(abs(E1)<abs(E2))
+            E1[rep] = E2[rep]
+            if newfig:
+                plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_max")
+            plt.colorbar()
+        elif stype == 'mag':
+            EVM = np.sqrt(SX**2 + SY**2 + SX * SY + 3 * SXY**2)
+            if newfig:
+                plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_VM")
+            plt.colorbar()
+        else:
+            """ Plot mesh and field contour """
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, SX[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title("EPS_X")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, SY[self.conn[:, 0]], 20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("equal")
+            plt.title("EPS_Y")
+            plt.axis("off")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, SXY[self.conn[:, 0]], 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
             plt.title("EPS_XY")
@@ -2457,7 +2567,7 @@ class Mesh:
                 newe[je] = self.e[je]
         self.e = newe
 
-    def RemoveElemsOutsideRoi(self, cam, roi):
+    def RemoveElemsOutsideRoi(self, roi, cam=None):
         """
         Removes all the elements whose center lie in the Region of Interest of
         an image f.
@@ -2466,12 +2576,19 @@ class Mesh:
 
         where  roi = f.SelectROI()
         """
-        for je in self.e.keys():
-            xc = np.mean(self.n[self.e[je], 0], axis=1)
-            yc = np.mean(self.n[self.e[je], 1], axis=1)
-            u, v = cam.P(xc, yc)
-            inside = isInBox(roi, v, u)
-            self.e[je] = self.e[je][inside, :]
+        if cam is None:
+            for je in self.e.keys():
+                u = np.mean(self.n[self.e[je], 0], axis=1)
+                v = np.mean(self.n[self.e[je], 1], axis=1)
+                inside = isInBox(roi, u, v)
+                self.e[je] = self.e[je][inside, :]
+        else:
+            for je in self.e.keys():
+                xc = np.mean(self.n[self.e[je], 0], axis=1)
+                yc = np.mean(self.n[self.e[je], 1], axis=1)
+                u, v = cam.P(xc, yc)
+                inside = isInBox(roi, v, u)
+                self.e[je] = self.e[je][inside, :]
 
     def RemoveDoubleNodes(self):
         """
@@ -2491,6 +2608,29 @@ class Mesh:
         for k in self.e.keys():
             self.e[k] = table[self.e[k]]
         self.n = nnew
+
+    def RemoveUnusedNodes(self):
+        """
+        Removes all the nodes that are not connected to an element and renumbers
+        the element table. Both self.e and self.n are changed
+
+        Usage : 
+            m.RemoveUnusedNodes()
+
+        Returns
+        -------
+        None.
+
+        """
+        used_nodes = np.zeros(0, dtype=int)
+        for ie in self.e.keys():
+            used_nodes = np.hstack((used_nodes, self.e[ie].ravel()))
+        used_nodes = np.unique(used_nodes)
+        table = np.zeros(len(self.n), dtype=int)
+        table[used_nodes] = np.arange(len(used_nodes))
+        self.n = self.n[used_nodes, :]
+        for ie in self.e.keys():
+            self.e[ie] = table[self.e[ie]]    
     
     def BuildBoundaryMesh(self):
         """

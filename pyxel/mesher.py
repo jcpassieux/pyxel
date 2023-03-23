@@ -112,6 +112,8 @@ def RayCasting(lsi, p):
 #%% bulk meshing from polygon
 
 def MeshFromLS(ls, lc):
+    # ls list of segments
+    # lc approximate element size
     lsc = np.zeros(len(ls), dtype=int)
     for i in range(len(ls)):
         lsc[i] = lsio(ls[i])    
@@ -152,6 +154,7 @@ def MeshFromLS(ls, lc):
     gmsh.write('tmp.msh')
     gmsh.finalize()
     m = ReadMesh('tmp.msh')
+    print(m.e.keys())
     if 15 in m.e:
         del m.e[15]  # remove vertex
     if 1 in m.e:
@@ -189,8 +192,8 @@ def MeshFromImage(f, h, appls=None):
         # PlotLS(ls,'k.-')
     m = MeshFromLS(ls, h)
     # p = np.array([1, 0., 0., np.pi/2])
-    a = Image('')
-    a.pix = f
+    # a = Image('')
+    # a.pix = f
     m.n = np.c_[m.n[:,1], -m.n[:,0]]
     p = np.array([1, 0., 0., 0])
     cam = Camera(p)

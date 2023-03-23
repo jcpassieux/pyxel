@@ -38,6 +38,7 @@ else:
     p = np.array([ 1.05449047e+04,  5.12335842e-02, -9.63541211e-02, -4.17489457e-03])
     cam = px.Camera(p)
 
+plt.figure()
 px.PlotMeshImage(f,m,cam)
 
 #%% Pre-processing 

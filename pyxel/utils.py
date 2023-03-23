@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+#from numba import njit
 import matplotlib.pyplot as plt
 
 import timeit as time
@@ -11,7 +11,7 @@ class Timer():
         print('Elapsed: %f' % dt)
         return dt
 
-@njit(cache=True)
+#@njit(cache=True)
 def isInBox(b, x, y, z=None):
     """Find whether set of points of coords x, y
     is in the box b = [[xmin, ymin, zmin],
@@ -37,7 +37,7 @@ def isInBox(b, x, y, z=None):
         )
 
 
-@njit(cache=True)
+#@njit(cache=True)
 def meshgrid(a, b):
     A = a.repeat(len(b)).reshape((-1, len(b))).T
     B = b.repeat(len(a)).reshape((-1, len(a)))

@@ -12,8 +12,8 @@ The gray level conservation problem is written in the physical space. It relies 
 
 1. SCRIPT FILE
     - pyxel is a library. For each testcase, a script file must be written.
-    - the input data (images, meshes...) are stored in the `./data` folder.
-    - a set of sample scripts named `example_#.py` is provided to understand the main functionnalities of the library.
+    - a set of sample scripts named `example_#.py` is provided in the `./data` folder
+     to understand the main functionnalities of the library.
 
 2. ABOUT MESHES
     - a mesh is entierly defined by two variables:
@@ -34,11 +34,11 @@ The gray level conservation problem is written in the physical space. It relies 
 3. USING THE LIBRARY
     - Open the mesh: 
       ```python
-      m = px.ReadMeshGMSH('data/mesh.msh')
+      m = px.ReadMesh('mesh.msh')
       ```
     - Open the image:
       ```python
-      f = px.Image('data/image.tif').Load()
+      f = px.Image('image.tif').Load()
       ```
     - Connectivity, quadrature, Interpolation:
       ```python
@@ -62,6 +62,8 @@ The gray level conservation problem is written in the physical space. It relies 
     This program is a free software: you can redistribute it/or modify it. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY.
     **pyxel** is distributed under the terms of CeCILL which is a french free software license agreement in the spirit of GNU GPL
 
+6. DEPENDANCIES 
+    numpy, scipy, meshio, gmsh, cv2 (opencv-python), numba (optional)
 
 # References
 
