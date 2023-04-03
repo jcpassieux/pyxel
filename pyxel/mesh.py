@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import matplotlib.collections as cols
 import matplotlib.animation as animation
 #from numba import njit # uncomment for just in time compilation
-from .utils import meshgrid, isInBox
+from .utils import meshgrid, isInBox, PVDFile
 import meshio
 
 def ElTypes():
@@ -104,49 +104,6 @@ def ReadMesh(fn, dim=2):
     m.cell_data = mesh.cell_data
     return m
 
-def PVDFile(fileName,ext,npart,nstep):
-    """
-    Write PVD file
-    Usage: writePVD("toto","vtu",npart,nstep) 
-    generated file: "toto.pvd" 
-    
-    VTK files must be named as follows:
-    npart=2  and nstep=5  =>  toto_5_2.*  (starts from zero)
-    
-    Parameters
-    ----------
-    fileName : STRING
-        mesh files without numbers and extension
-    ext : STRING
-        extension (vtu, vtk, vtr, vti)
-    npart : INT
-        Number of parts to plot together
-    nstep : INT
-        Number of time steps.
-
-    """
-    rep,fname=os.path.split(fileName)
-    import xml.dom.minidom
-    pvd = xml.dom.minidom.Document()
-    pvd_root = pvd.createElementNS("VTK", "VTKFile")
-    pvd_root.setAttribute("type", "Collection")
-    pvd_root.setAttribute("version", "0.1")
-    pvd_root.setAttribute("byte_order", "LittleEndian")
-    pvd.appendChild(pvd_root)
-    collection = pvd.createElementNS("VTK", "Collection")
-    pvd_root.appendChild(collection)    
-    for jp in range(npart):
-        for js in range(nstep):
-            dataSet = pvd.createElementNS("VTK", "DataSet")
-            dataSet.setAttribute("timestep", str(js))
-            dataSet.setAttribute("group", "")
-            dataSet.setAttribute("part", str(jp))
-            dataSet.setAttribute("file", fname+"_"+str(jp)+"_"+str(js)+"."+ext)
-            collection.appendChild(dataSet)
-    outFile = open(fileName+".pvd", 'w')
-    pvd.writexml(outFile, newl='\n')
-    print("VTK: "+ fileName +".pvd written")
-    outFile.close()
 
 #%%
 class Elem:
@@ -315,6 +272,33 @@ def SubTriIso2(nx, ny=None):
     # plt.plot(wx,wy,'ro')
     return xg, yg, wg
 
+def SubTetIso(n):
+    """Subdivide a Tetraedron to build the quadrature rule (homogeneous subdivision)"""
+    dx = 1 / n
+    x = dx / 2  + np.arange(n) * dx 
+    y = dx / 2  + np.arange(n) * dx 
+    z = dx / 2  + np.arange(n) * dx 
+    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+    iTetra = (Z <= 1 - X - Y)
+    xg = X[iTetra]
+    yg = Y[iTetra]
+    zg = Z[iTetra]
+    wg = np.ones(xg.size)/(6*xg.size)
+    return xg, yg, zg, wg
+
+def SubHexIso(n):
+    """Subdivide a Hexaedron to build the quadrature rule (homogeneous subdivision)"""
+    dx = 2/n  # (subdiving the domain [-1,1])
+    x = -1 + dx/2  + np.arange(n)*dx 
+    y = -1 + dx/2  + np.arange(n)*dx 
+    z = -1 + dx/2  + np.arange(n)*dx 
+    X,Y,Z = np.meshgrid(x,y,z,indexing='ij')
+    xg =  X.ravel() 
+    yg =  Y.ravel() 
+    zg = Z.ravel() 
+    wg = np.ones(xg.size) * 8 / xg.size
+    return xg, yg, zg, wg
+
 def SubTriGmsh(n):
     import gmsh as gmsh
     gmsh.initialize()
@@ -358,170 +342,7 @@ def SubTriGmsh(n):
     gmsh.finalize()
     return c[:,0], c[:,1], a
 
-def StructuredMeshQ4(box, dx):
-    """Build a structured linear Q4 mesh from two points coordinates (box)
-    box = np.array([[xmin, ymin],
-                    [xmax, ymax]])   in mesh unit
-    dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
-    dbox = box[1] - box[0]
-    NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
-    X, Y = meshgrid(np.linspace(box[0, 0], box[1, 0], NE[0] + 1),
-                    np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
-    n = np.vstack((X.T.ravel(), Y.T.ravel())).T
-    nel = np.prod(NE)
-    e = np.zeros((nel, 4), dtype=int)
-    for ix in range(NE[0]):
-        for iy in range(NE[1]):
-            p1 = ix * (NE[1] + 1) + iy
-            p4 = ix * (NE[1] + 1) + iy + 1
-            p2 = ix * (NE[1] + 1) + iy + NE[1] + 1
-            p3 = ix * (NE[1] + 1) + iy + NE[1] + 2
-            e[ix * NE[1] + iy, :] = np.array([p1, p2, p3, p4])
-    el = {3: e}
-    m = Mesh(el, n)
-    return m
 
-def StructuredMeshQ9(box, dx):
-    """Build a structured quadratic Q9 mesh from two points coordinates (box)
-    box = np.array([[xmin, ymin],
-                    [xmax, ymax]])    in mesh unit
-    dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
-    dbox = box[1] - box[0]
-    NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
-    X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], 2 * NE[0] + 1),
-                       np.linspace(box[0, 1], box[1, 1], 2 * NE[1] + 1))
-    n = np.vstack((X.T.ravel(), Y.T.ravel())).T
-    nel = np.prod(NE)
-    e = np.zeros((nel, 9), dtype=int)
-    for ix in range(NE[0]):
-        for iy in range(NE[1]):
-            p1 = 2 * ix * (2 * NE[1] + 1) + 2 * iy
-            p8 = p1 + 1
-            p4 = p1 + 2
-            p5 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * NE[1] + 1
-            p9 = p5 + 1
-            p7 = p5 + 2
-            p2 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * (2 * NE[1] + 1)
-            p6 = p2 + 1
-            p3 = p2 + 2
-            e[ix * NE[1] + iy, :] = np.array([p1, p2, p3, p4, p5, p6, p7, p8, p9])
-    el = {10: e}
-    m = Mesh(el, n)
-    return m
-
-def StructuredMeshQ8(box, dx):
-    """Build a structured quadratic Q8 mesh from two points coordinates (box)
-    box = np.array([[xmin, ymin],
-                    [xmax, ymax]])   in mesh unit
-    dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
-    dbox = box[1] - box[0]
-    NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
-    X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], 2 * NE[0] + 1),
-                       np.linspace(box[0, 1], box[1, 1], 2 * NE[1] + 1))
-    n = np.vstack((X.T.ravel(), Y.T.ravel())).T
-    nel = np.prod(NE)
-    e = np.zeros((nel, 8), dtype=int)
-    for ix in range(NE[0]):
-        for iy in range(NE[1]):
-            p1 = 2 * ix * (2 * NE[1] + 1) + 2 * iy
-            p8 = p1 + 1
-            p4 = p1 + 2
-            p5 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * NE[1] + 1
-            p7 = p5 + 2
-            p2 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * (2 * NE[1] + 1)
-            p6 = p2 + 1
-            p3 = p2 + 2
-            n[p5 + 1,:] = n[0,:] * np.nan
-            e[ix * NE[1] + iy] = np.array([p1, p2, p3, p4, p5, p6, p7, p8])
-    el = {16: e}
-    m = Mesh(el, n)
-    return m
-
-def StructuredMeshT3(box, dx):
-    """Build a structured linear T3 mesh from two points coordinates (box)
-    box = np.array([[xmin, ymin],
-                    [xmax, ymax]])    in mesh unit
-    dx = [dx, dy]: average element size (can be scalar) in mesh unit"""
-    dbox = box[1] - box[0]
-    NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
-    X, Y = meshgrid(np.linspace(box[0, 0], box[1, 0], NE[0] + 1),
-                    np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
-    n = np.vstack((X.T.ravel(), Y.T.ravel())).T
-    nel = np.prod(NE) * 2
-    e = np.zeros((nel, 3), dtype=int)
-    for ix in range(NE[0]):
-        for iy in range(NE[1]):
-            p1 = ix * (NE[1] + 1) + iy
-            p4 = ix * (NE[1] + 1) + iy + 1
-            p2 = ix * (NE[1] + 1) + iy + NE[1] + 1
-            p3 = ix * (NE[1] + 1) + iy + NE[1] + 2
-            e[2 * (ix * NE[1] + iy), :] = np.array([p1, p2, p4])
-            e[2 * (ix * NE[1] + iy) + 1, :] = np.array([p2, p3, p4])
-    el = {2: e}
-    m = Mesh(el, n)
-    return m
-
-def StructuredMeshT6(box, dx):
-    """Build a structured quadratic T6 mesh from two points coordinates (box)
-    box = np.array([[xmin, ymin],
-                    [xmax, ymax]])    in mesh unit
-    dx = [dx, dy]: average element size (can be scalar) in mesh unit"""
-    dbox = box[1] - box[0]
-    NE = (dbox / dx).astype(np.int64)
-    X, Y = meshgrid(np.linspace(box[0, 0], box[1, 0], 2 * NE[0] + 1),
-                       np.linspace(box[0, 1], box[1, 1], 2 * NE[1] + 1))
-    n = np.vstack((X.T.ravel(), Y.T.ravel())).T
-    nel = np.prod(NE) * 2
-    e = np.zeros((nel, 6), dtype=int)
-    for ix in range(NE[0]):
-        for iy in range(NE[1]):
-            p1 = 2 * ix * (2 * NE[1] + 1) + 2 * iy
-            p8 = p1 + 1
-            p4 = p1 + 2
-            p5 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * NE[1] + 1
-            p9 = p5 + 1
-            p7 = p5 + 2
-            p2 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * (2 * NE[1] + 1)
-            p6 = p2 + 1
-            p3 = p2 + 2
-            e[2 * (ix * NE[1] + iy), :] = np.array([p1, p2, p4, p5, p9, p8])
-            e[2 * (ix * NE[1] + iy) + 1, :] = np.array([p2, p3, p4, p6, p7, p9])
-    el = {9: e}
-    m = Mesh(el, n)
-    return m
-
-def StructuredMesh(box, dx, typel=3):
-    """Build a structured mesh from two points coordinates (box)
-    
-    parameters
-    ----------
-    box: numpy.array
-        box = np.array([[xmin, ymin],
-                    [xmax, ymax]])    in mesh unit
-    dx: numpy or python array
-        dx = [dx, dy]: average element size (can be scalar) in mesh unit
-    typel: int
-        Element types: (see pyxel.ElTypes)
-        2: first order triangles (T3)
-        3: first order quadrangles (Q4)
-        9: second order triangles (T6)
-        10: 9-node second order quadrangles (Q9)
-        16: 8-node second order quadrangles (Q8)
-    """
-    if typel == 2:
-        return StructuredMeshT3(box, dx)
-    elif typel == 9:
-        return StructuredMeshT6(box, dx)
-    elif typel == 3:
-        return StructuredMeshQ4(box, dx)
-    elif typel == 16:
-        return StructuredMeshQ8(box, dx)
-    elif typel == 10:
-        return StructuredMeshQ9(box, dx)
     
 #%%
 def ShapeFunctions(eltype):
@@ -1299,7 +1120,7 @@ class Mesh:
                 valy[repnzv] = dphidy.ravel()
         return col, row, val, valx, valy, wdetJ
 
-    def GetApproxElementSize(self, cam=None, method='max'):
+    def GetApproxElementSize(self, cam=None, method='min'):
         """ Estimate average/min/max element size
         input
         -----
@@ -1310,27 +1131,52 @@ class Mesh:
             'min': estimation of the minimum element size
             'mean': estimation of the mean element size
         """
-        if cam is None:
-            u = self.n[:, 0]
-            v = self.n[:, 1]            
-        else:
-            u, v = cam.P(self.n[:,0], self.n[:,1])
-        aes = []
-        for et in self.e.keys():
-            um = u[self.e[et]]-np.mean(u[self.e[et]], axis=1)[:,np.newaxis]
-            vm = v[self.e[et]]-np.mean(v[self.e[et]], axis=1)[:,np.newaxis]
+        if self.dim == 3:
+            aes = []
+            if cam is None:
+                u = self.n[:, 0]
+                v = self.n[:, 1]
+                w = self.n[:, 2]
+            else:
+                u, v, w = cam.P(self.n[:,0], self.n[:,1], self.n[:,2])
+            for et in self.e.keys():
+                eet = self.e[et]
+                x1 = u[eet[:,0]] ; y1 = v[eet[:,0]] ; z1 = w[eet[:,0]]
+                x2 = u[eet[:,1]] ; y2 = v[eet[:,1]] ; z2 = w[eet[:,1]]
+                x3 = u[eet[:,2]] ; y3 = v[eet[:,2]] ; z3 = w[eet[:,2]]
+                x4 = u[eet[:,3]] ; y4 = v[eet[:,3]] ; z4 = w[eet[:,3]]
+                l1 = np.sqrt((x1-x4)**2+(y1-y4)**2+(z1-z4)**2)
+                l2 = np.sqrt((x1-x3)**2+(y1-y3)**2+(z1-z3)**2)
+                l3 = np.sqrt((x1-x2)**2+(y1-y2)**2+(z1-z2)**2)
+                aes = np.append(aes, np.hstack((l1, l2, l3)))
             if method == 'max':
-                aes = np.append(aes, np.max(np.sqrt(um**2 + vm**2), axis=1))
+                return np.mean(aes) + np.std(aes) * 0.5
             elif method == 'min':
-                aes = np.append(aes, np.min(np.sqrt(um**2 + vm**2), axis=1))
+                return np.mean(aes) - np.std(aes) * 0.5
             elif method == 'mean':
-                aes = np.append(aes, np.sqrt(um**2 + vm**2))
-        if method == 'max':
-            return np.mean(aes) + np.std(aes) * 0.5
-        elif method == 'min':
-            return np.mean(aes) - np.std(aes) * 0.5
-        elif method == 'mean':
-            return np.mean(aes)
+                return np.mean(aes)
+        else: # 2D
+            if cam is None:
+                u = self.n[:, 0]
+                v = self.n[:, 1]            
+            else:
+                u, v = cam.P(self.n[:,0], self.n[:,1])
+            aes = []
+            for et in self.e.keys():
+                um = u[self.e[et]]-np.mean(u[self.e[et]], axis=1)[:,np.newaxis]
+                vm = v[self.e[et]]-np.mean(v[self.e[et]], axis=1)[:,np.newaxis]
+                if method == 'max':
+                    aes = np.append(aes, np.max(np.sqrt(um**2 + vm**2), axis=1))
+                elif method == 'min':
+                    aes = np.append(aes, np.min(np.sqrt(um**2 + vm**2), axis=1))
+                elif method == 'mean':
+                    aes = np.append(aes, np.sqrt(um**2 + vm**2))
+            if method == 'max':
+                return np.mean(aes) + np.std(aes) * 0.5
+            elif method == 'min':
+                return np.mean(aes) - np.std(aes) * 0.5
+            elif method == 'mean':
+                return np.mean(aes)
 
     def DICIntegrationFast(self, n=10, G=False):
         """Builds a homogeneous (and fast) integration scheme for DIC"""
@@ -1377,6 +1223,136 @@ class Mesh:
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
 
+    def __DVCIntegElem(self, e, et, n=10, G=False):
+        # parent element
+        _, _, _, _, N, Ndx, Ndy, Ndz = ShapeFunctions(et)
+        if et in [4, ]: # Tet4
+            n = max(n, 1) # minimum 1 integration point for first order
+            xg, yg, zg, wg = SubTetIso(n)
+        elif et in [5, ]: # Hex8
+            n = max(n, 2) # minimum 2 integration points
+            xg, yg, zg, wg = SubHexIso(n) 
+        phi = N(xg, yg, zg)
+        dN_xi = Ndx(xg, yg, zg)
+        dN_eta = Ndy(xg, yg, zg)
+        dN_zeta = Ndz(xg, yg, zg)
+        # elements
+        ne = len(e)  # nb of elements
+        nfun = phi.shape[1]  # nb of shape fun per element
+        npg = len(xg)  # nb of gauss point per element
+        nzv = nfun * npg * ne  # nb of non zero values in dphixdx
+        wdetJ = np.zeros(npg * ne)
+        row = np.zeros(nzv, dtype=int)
+        col = np.zeros(nzv, dtype=int)
+        val = np.zeros(nzv)
+        if G:
+            valx = np.zeros(nzv)
+            valy = np.zeros(nzv)
+            valz = np.zeros(nzv)
+        else :
+            valx = []
+            valy = []
+            valz = []
+        repdof = self.conn[e, 0]
+        xn = self.n[e, 0]
+        yn = self.n[e, 1]
+        zn = self.n[e, 2]
+        for i in range(len(xg)):
+            dxdr = xn @ dN_xi[i, :]
+            dydr = yn @ dN_xi[i, :]
+            dzdr = zn @ dN_xi[i, :]
+            dxds = xn @ dN_eta[i, :]
+            dyds = yn @ dN_eta[i, :]                
+            dzds = zn @ dN_eta[i, :]
+            dxdt = xn @ dN_zeta[i, :]
+            dydt = yn @ dN_zeta[i, :]
+            dzdt = zn @ dN_zeta[i, :]
+            detJ = dxdr * dyds * dzdt + dxds * dydt * dzdr \
+                 + dydr * dzds * dxdt - dzdr * dyds * dxdt \
+                 - dxdr * dzds * dydt - dydr * dxds * dzdt
+            wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
+            repnzv = np.arange(ne * nfun) + i * ne * nfun
+            col[repnzv] = repdof.ravel()
+            row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
+            val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
+            if G:
+                dphidx= ((dyds*dzdt - dzds*dydt)/detJ)[:,np.newaxis]*dN_xi[i, :]-\
+                        ((dydr*dzdt - dzdr*dydt)/detJ)[:,np.newaxis]*dN_eta[i, :]+\
+                        ((dydr*dzds - dzdr*dyds)/detJ)[:,np.newaxis]*dN_zeta[i, :]
+                dphidy=-((dxds*dzdt - dzds*dxdt)/detJ)[:,np.newaxis]*dN_xi[i, :]+\
+                        ((dxdr*dzdt - dzdr*dxdt)/detJ)[:,np.newaxis]*dN_eta[i, :]-\
+                        ((dxdr*dzds - dzdr*dxds)/detJ)[:,np.newaxis]*dN_zeta[i, :]
+                dphidz= ((dxds*dydt - dyds*dxdt)/detJ)[:,np.newaxis]*dN_xi[i, :]-\
+                        ((dxdr*dydt - dydr*dxdt)/detJ)[:,np.newaxis]*dN_eta[i, :]+\
+                        ((dxdr*dyds - dydr*dxds)/detJ)[:,np.newaxis]*dN_zeta[i, :]
+                valx[repnzv] = dphidx.ravel()
+                valy[repnzv] = dphidy.ravel()
+                valz[repnzv] = dphidz.ravel()
+        return col, row, val, valx, valy, valz, wdetJ
+
+    def DVCIntegration(self, n=None, G=False):
+        """Builds a homogeneous (and fast) integration scheme for DVC"""
+        if hasattr(n, 'rz') or n is None:
+            # if n is a camera then n is autocomputed
+            n = self.GetApproxElementSize(n)
+        if type(n) is not int:
+            n = int(n)
+        print('Nb quadrature in each direction = %d' % n)
+        self.wdetJ = np.array([])
+        col = np.array([])
+        row = np.array([])
+        val = np.array([])
+        if G: # compute also the shape function gradients
+            valx = np.array([])
+            valy = np.array([])
+            valz = np.array([])
+        npg = 0
+        for je in self.e.keys():
+            colj, rowj, valj, valxj, valyj, valzj, wdetJj = self.__DVCIntegElem(self.e[je], je, n, G=G)
+            col = np.append(col, colj)
+            row = np.append(row, rowj + npg)
+            val = np.append(val, valj)
+            if G:
+                valx = np.append(valx, valxj)
+                valy = np.append(valy, valyj)
+                valz = np.append(valz, valzj)
+            self.wdetJ = np.append(self.wdetJ, wdetJj)
+            npg += len(wdetJj)
+        self.npg = len(self.wdetJ)
+        self.phix = sp.sparse.csr_matrix(
+            (val, (row, col + 0 * self.ndof // 3)), shape=(self.npg, self.ndof))
+        self.phiy = sp.sparse.csr_matrix(
+            (val, (row, col + 1 * self.ndof // 3)), shape=(self.npg, self.ndof))
+        self.phiz = sp.sparse.csr_matrix(
+           ( val, (row, col + 2 * self.ndof // 3)), shape=(self.npg, self.ndof)) 
+        if G:
+            self.dphixdx = sp.sparse.csr_matrix(
+                (valx, (row, col)), shape=(self.npg, self.ndof))
+            self.dphixdy = sp.sparse.csr_matrix(
+                (valy, (row, col)), shape=(self.npg, self.ndof))
+            self.dphixdz = sp.sparse.csr_matrix(
+                (valz, (row, col)), shape=(self.npg, self.ndof))
+            
+            self.dphiydx = sp.sparse.csr_matrix(
+                (valx, (row, col + self.ndof // 3)), shape=(self.npg, self.ndof))
+            self.dphiydy = sp.sparse.csr_matrix(
+                (valy, (row, col + self.ndof // 3)), shape=(self.npg, self.ndof))
+            self.dphiydz = sp.sparse.csr_matrix(
+                (valz, (row, col + self.ndof // 3)), shape=(self.npg, self.ndof))
+            
+            self.dphizdx = sp.sparse.csr_matrix(
+                (valx, (row, col + 2*self.ndof // 3)), shape=(self.npg, self.ndof)) 
+            self.dphizdy = sp.sparse.csr_matrix(
+                (valy, (row, col + 2*self.ndof // 3)), shape=(self.npg, self.ndof)) 
+            self.dphizdz = sp.sparse.csr_matrix(
+                (valz, (row, col + 2*self.ndof // 3)), shape=(self.npg, self.ndof))     
+        rep, = np.where(self.conn[:, 0] >= 0)
+        qx = np.zeros(self.ndof)
+        qx[self.conn[rep, :]] = self.n[rep, :]
+        self.pgx = self.phix.dot(qx)
+        self.pgy = self.phiy.dot(qx)
+        self.pgz = self.phiz.dot(qx)
+        
     def __GaussIntegElem(self, e, et):
         # parent element
         if et in (1, 8): # bar element
@@ -1608,9 +1584,8 @@ class Mesh:
     def Stiffness(self, hooke):
         """Assembles Stiffness Operator"""
         if not hasattr(self, "dphixdx"):
-            mn = self.Copy()
-            mn.GaussIntegration()
-            m = mn
+            m = self.Copy()
+            m.GaussIntegration()
         else:
             m = self
         wdetJ = sp.sparse.diags(m.wdetJ)
@@ -1650,10 +1625,9 @@ class Mesh:
     def StiffnessAxi(self, hooke):
         """Assembles Stiffness Operator"""
         if not hasattr(self, "dphixdx"):
-            mn = self.Copy()
+            m = self.Copy()
             print('Gauss Integ.')
-            mn.GaussIntegration()
-            m = mn
+            m.GaussIntegration()
         else:
             m = self
         wdetJr = sp.sparse.diags(m.wdetJ*m.pgx) # r dr dz !
@@ -1678,17 +1652,24 @@ class Mesh:
         if not hasattr(self, "dphixdx"):
             m = self.Copy()
             m.GaussIntegration()
-            wdetJ = sp.sparse.diags(m.wdetJ)
-            L = (m.dphixdx.T @ wdetJ @ m.dphixdx
-                + m.dphiydy.T @ wdetJ @ m.dphiydy
-                + m.dphixdy.T @ wdetJ @ m.dphixdy
-                + m.dphiydx.T @ wdetJ @ m.dphiydx)
         else:
-            wdetJ = sp.sparse.diags(self.wdetJ)
-            L = (self.dphixdx.T @ wdetJ @ self.dphixdx
-                + self.dphiydy.T @ wdetJ @ self.dphiydy
-                + self.dphixdy.T @ wdetJ @ self.dphixdy
-                + self.dphiydx.T @ wdetJ @ self.dphiydx)
+            m = self
+        wdetJ = sp.sparse.diags(m.wdetJ)
+        if self.dim == 3:
+            L = m.dphixdx.T @ wdetJ @ m.dphixdx + \
+                m.dphixdy.T @ wdetJ @ m.dphixdy + \
+                m.dphixdz.T @ wdetJ @ m.dphixdz + \
+                m.dphiydx.T @ wdetJ @ m.dphiydx + \
+                m.dphiydy.T @ wdetJ @ m.dphiydy + \
+                m.dphiydz.T @ wdetJ @ m.dphiydz + \
+                m.dphizdx.T @ wdetJ @ m.dphizdx + \
+                m.dphizdy.T @ wdetJ @ m.dphizdy + \
+                m.dphizdz.T @ wdetJ @ m.dphizdz      
+        else:
+            L = m.dphixdx.T @ wdetJ @ m.dphixdx + \
+                m.dphiydy.T @ wdetJ @ m.dphiydy + \
+                m.dphixdy.T @ wdetJ @ m.dphixdy + \
+                m.dphiydx.T @ wdetJ @ m.dphiydx
         return L
 
     def TikoSprings(self, liste, l=None, dim=2):
@@ -2825,15 +2806,32 @@ class Mesh:
             body rotation around direction z.
 
         """
-        tx = np.zeros(self.ndof)
-        tx[self.conn[:,0]]=1
-        ty = np.zeros(self.ndof)
-        ty[self.conn[:,1]]=1
-        v = self.n-np.mean(self.n,axis=0)
-        v = np.c_[-v[:,1],v[:,0]] / np.max(np.linalg.norm(v,axis=1))
-        rz = np.zeros(self.ndof)
-        rz[self.conn]=v
-        return tx, ty, rz
+        if self.dim == 3:
+            tx = np.zeros(self.ndof)
+            tx[self.conn[:,0]]=1
+            ty = np.zeros(self.ndof)
+            ty[self.conn[:,1]]=1
+            tz = np.zeros(self.ndof)
+            tz[self.conn[:,2]]=1
+            v = self.n-np.mean(self.n,axis=0)
+            amp = np.max(np.linalg.norm(v,axis=1))
+            rx = np.zeros(self.ndof)
+            rx[self.conn] = np.c_[0*v[:,0], v[:,2], -v[:,1]] / amp
+            ry = np.zeros(self.ndof)
+            ry[self.conn] = np.c_[-v[:,2], 0*v[:,1], v[:,0]] / amp
+            rz = np.zeros(self.ndof)
+            rz[self.conn] = np.c_[v[:,1], -v[:,0], 0*v[:,2]] / amp
+            return tx, ty, tz, rx, ry, rz
+        else:
+            tx = np.zeros(self.ndof)
+            tx[self.conn[:,0]]=1
+            ty = np.zeros(self.ndof)
+            ty[self.conn[:,1]]=1
+            v = self.n-np.mean(self.n,axis=0)
+            v = np.c_[-v[:,1],v[:,0]] / np.max(np.linalg.norm(v,axis=1))
+            rz = np.zeros(self.ndof)
+            rz[self.conn]=v
+            return tx, ty, rz
     
     def MedianFilter(self, U):
         """

@@ -14,13 +14,15 @@ import numpy as np
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 from .utils import PlotMeshImage
+from .vtktools import VTIWriter
 import cv2
+from skimage import io
 
 class Image:
     def __init__(self, fname):
         """Contructor"""
         self.fname = fname
-
+        
     def LoadPIL(self):
         import PIL.Image as image
         """Load image data using Pillow"""
@@ -220,3 +222,120 @@ class Image:
         )
         plt.show()
         return rs
+
+#%%
+
+class Volume:
+    def __init__(self, fname):
+        """Contructor"""
+        self.fname = fname
+
+    def Load(self):
+        """Load image data"""
+        if os.path.isfile(self.fname):
+            if self.fname.split(".")[-1] == "mat":
+                import scipy.io as spio
+                matf = spio.loadmat(self.fname)
+                print(matf.keys())
+                for k in matf.keys():
+                    if type(matf[k]) == np.ndarray:
+                        print('Opened %s in *.mat file' % (k,))
+                        self.pix  = matf[k].astype('double')
+                        break
+            elif self.fname.split(".")[-1] == "npy":
+                self.pix = np.load(self.fname)
+            else:
+                self.pix = io.imread(self.fname).astype('double')
+        else:
+            print("File "+self.fname+" not in directory "+os.getcwd())
+        return self
+
+    def Copy(self):
+        """Image Copy"""
+        newimg = Volume("Copy")
+        newimg.pix = self.pix.copy()
+        return newimg
+
+    def Save(self, fname='SavedVolume.tiff'):
+        """Image Save"""
+        f = np.round(self.pix).astype("uint8")
+        io.imsave(fname, f)
+
+    def VTKImage(self, fname='SavedVolume'):
+        """Image Save"""
+        fpix = np.round(self.pix).astype("uint8")
+        vtk = VTIWriter(self.pix.shape[0], self.pix.shape[1], self.pix.shape[2])
+        vtk.addCellData('f', 1, fpix.T.ravel())
+        dir0, filename = os.path.split(fname)
+        if not os.path.isdir(os.path.join("vtk", dir0)):
+            os.makedirs(os.path.join("vtk", dir0))
+        vtk.VTIWriter(os.path.join("vtk", dir0, filename))
+        
+    def BuildInterp(self):
+        """build trilinear interp"""
+        x = np.arange(self.pix.shape[0])
+        y = np.arange(self.pix.shape[1])
+        z = np.arange(self.pix.shape[2])
+        self.interp = spi.RegularGridInterpolator((x,y,z), self.pix, method='linear', bounds_error=True, fill_value=None)
+
+    def Interp(self, x, y, z):
+        """Evaluate the continuous representation of the voxels """
+        if not hasattr(self,'interp'):
+            self.BuildInterp()
+        return self.interp(np.vstack((x, y, z)).T) 
+
+    def InterpGrad(self, x, y, z, eps = 1.e-7):
+        """Evaluate the gradient of the continuous representation of the voxels """
+        P_coords = np.vstack((x,y,z)).T
+        df_dP = []
+        for xi in range(3):
+            P_coords_xi_p_dxi = P_coords.copy()
+            P_coords_xi_p_dxi[:, xi] = P_coords_xi_p_dxi[:, xi] + eps/2
+            P_coords_xi_m_dxi = P_coords.copy()
+            P_coords_xi_m_dxi[:, xi] = P_coords_xi_m_dxi[:, xi] - eps/2
+            df_dP.append( (self.interp(P_coords_xi_p_dxi) - self.interp(P_coords_xi_m_dxi))/(eps))
+        return df_dP[0], df_dP[1], df_dP[2]
+
+    def Plot(self):
+        """Plot Image"""
+        nx, ny, nz = self.pix.shape
+        plt.subplot(221)
+        plt.imshow(self.pix[nx//2,:,:], cmap="gray", interpolation="none", origin="upper")
+        plt.xlabel('3')
+        plt.ylabel('2')
+        plt.subplot(223)
+        plt.imshow(self.pix[:,ny//2,:], cmap="gray", interpolation="none", origin="upper")
+        plt.xlabel('3')
+        plt.ylabel('1')
+        plt.subplot(224)
+        plt.imshow(self.pix[:,:,nz//2], cmap="gray", interpolation="none", origin="upper")
+        plt.xlabel('2')
+        plt.ylabel('1')
+        # plt.axis('off')
+        # plt.colorbar()
+
+    def Dynamic(self):
+        """Compute image dynamic"""
+        g = self.pix.ravel()
+        return max(g) - min(g)
+
+    def GaussianFilter(self, sigma=0.7):
+        """Performs a Gaussian filter on image data. 
+
+        Parameters
+        ----------
+        sigma : float
+            variance of the Gauss filter."""
+        from scipy.ndimage import gaussian_filter
+        self.pix = gaussian_filter(self.pix, sigma)
+
+    def PlotHistogram(self):
+        """Plot Histogram of graylevels"""
+        plt.hist(self.pix.ravel(), bins=125, range=(0.0, 255), fc="k", ec="k")
+        plt.show()
+
+    def SubSample(self, n):
+        """Image copy with subsampling for multiscale initialization"""
+        from skimage.transform import downscale_local_mean
+        scale = 2**n
+        self.pix = downscale_local_mean(self.pix, (scale, scale, scale))

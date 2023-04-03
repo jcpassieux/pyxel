@@ -321,7 +321,7 @@ class CameraNL:
         """
         p = self.get_p()
         p[0] /= 2 ** nscale
-        return Camera(p)
+        return CameraNL(p)
 
     def P(self, X, Y):
         """
@@ -507,6 +507,344 @@ class CameraNL:
         """
 
         return None
+
+    def ImageFiles(self, fname, imnums):
+        self.fname = fname
+        self.imnums = imnums
+
+#%%
+# import sympy as sp
+# X, Y, Z, f, rx, ry, rz, tx, ty, tz = sp.symbols('X, Y, Z, f, rx, ry, rz, tx, ty, tz')
+# T = np.array([[1, 0, 0, tx],
+#               [0, 1, 0, ty],
+#               [0, 0, 1, tz],
+#               [0, 0, 0, 1]])
+# R1 = np.array([[sp.cos(rz),-sp.sin(rz), 0, 0],
+#                [sp.sin(rz), sp.cos(rz), 0, 0],
+#                [0, 0, 1, 0],
+#                [0, 0, 0, 1]])
+# R2 = np.array([[1, 0, 0, 0],
+#                [0, sp.cos(rx),-sp.sin(rx), 0],
+#                [0, sp.sin(rx), sp.cos(rx), 0],
+#                [0, 0, 0, 1]])
+# R3 = np.array([[sp.cos(ry), 0 ,-sp.sin(ry), 0],
+#                [0, 1, 0, 0],
+#                [sp.sin(ry), 0, sp.cos(ry), 0],
+#                [0, 0, 0, 1]])
+# v = np.array([X, Y, Z, 1])
+# uvw = f*T@R1@R2@R3@v
+# u = uvw[0]
+# v = uvw[1]
+# w = uvw[2]
+
+# print(sp.pycode(u))
+# print(sp.pycode(v))
+# print(sp.pycode(w))
+
+# print(sp.pycode(u.diff(X, 1)))
+# print(sp.pycode(u.diff(Y, 1)))
+# print(sp.pycode(u.diff(Z, 1)))
+
+# print(sp.pycode(v.diff(X, 1)))
+# print(sp.pycode(v.diff(Y, 1)))
+# print(sp.pycode(v.diff(Z, 1)))
+
+# print(sp.pycode(w.diff(X, 1)))
+# print(sp.pycode(w.diff(Y, 1)))
+# print(sp.pycode(w.diff(Z, 1)))
+
+# print(sp.pycode(u.diff(f, 1)))
+# print(sp.pycode(u.diff(tx, 1)))
+# print(sp.pycode(u.diff(ty, 1)))
+# print(sp.pycode(u.diff(tz, 1)))
+# print(sp.pycode(u.diff(rx, 1)))
+# print(sp.pycode(u.diff(ry, 1)))
+# print(sp.pycode(u.diff(rz, 1)))
+
+# print(sp.pycode(v.diff(f, 1)))
+# print(sp.pycode(v.diff(tx, 1)))
+# print(sp.pycode(v.diff(ty, 1)))
+# print(sp.pycode(v.diff(tz, 1)))
+# print(sp.pycode(v.diff(rx, 1)))
+# print(sp.pycode(v.diff(ry, 1)))
+# print(sp.pycode(v.diff(rz, 1)))
+
+# print(sp.pycode(w.diff(f, 1)))
+# print(sp.pycode(w.diff(tx, 1)))
+# print(sp.pycode(w.diff(ty, 1)))
+# print(sp.pycode(w.diff(tz, 1)))
+# print(sp.pycode(w.diff(rx, 1)))
+# print(sp.pycode(w.diff(ry, 1)))
+# print(sp.pycode(w.diff(rz, 1)))
+
+class CameraVol:
+    def __init__(self, p):
+        self.set_p(p)
+
+    def set_p(self, p):
+        """
+        Set manually the camera parameters.
+
+        Parameters
+        ----------
+        p : NUMPY.ARRAY
+            np.array([f, tx, ty, tz, rx, ry, rz])
+            f: focal length (scaling)
+            tx: x-translation
+            ty: y-translation
+            tz: z-translation
+            rx: x-rotation
+            ry: y-rotation
+            rz: z-rotation
+
+        """
+        self.f = p[0]
+        self.tx = p[1]
+        self.ty = p[2]
+        self.tz = p[3]
+        self.rx = p[4]
+        self.ry = p[5]
+        self.rz = p[6]
+
+    def get_p(self):
+        """
+        Returns the vector of parameters of the camera model
+
+        Returns
+        -------
+        NUMPY.ARRAY
+
+        """
+        return np.array([self.f, self.tx, self.ty, self.tz, self.rx, self.ry, self.rz])
+
+    def SubSampleCopy(self, nscale):
+        """
+        Camera model copy with subsampling (of bining) for multiscale initialization
+        
+        Parameters
+        ----------
+        NSCALE : INT
+            number of scales, such that the scaling is 2**NSCALE
+
+        Returns
+        -------
+        CAM : 1D PYXEL.CAMERA
+            A new camera model that maps the same mesh coord. sys. to the  
+            same image but with a bining of NSCALE. 
+        """
+        p = self.get_p()
+        p[0] /= 2 ** nscale
+        return CameraVol(p)
+
+    def P(self, X, Y, Z):
+        """
+        Camera model projection. Maps a point of the mesh to a point
+        in the image plane
+
+        Parameters
+        ----------
+        X : NUMPY.ARRAY
+            X coordinate in the mesh system of the points to map
+        Y : NUMPY.ARRAY
+            Y coordinate in the mesh system of the points to map
+        Z : NUMPY.ARRAY
+            Z coordinate in the mesh system of the points to map
+
+        Returns
+        -------
+        u : 1D NUMPY.ARRAY
+            u coordinate of the corresponding point in the image system
+        v : 1D NUMPY.ARRAY
+            v coordinate of the corresponding point in the image system
+        w : 1D NUMPY.ARRAY
+            w coordinate of the corresponding point in the image system
+
+        """
+        f = self.f
+        tx = self.tx
+        ty = self.ty
+        tz = self.tz
+        rx = self.rx
+        ry = self.ry
+        rz = self.rz
+        u = X*(f*np.sin(rx)*np.sin(ry)*np.sin(rz) + f*np.cos(ry)*np.cos(rz)) - \
+            Y*f*np.sin(rz)*np.cos(rx) + Z*(f*np.sin(rx)*np.sin(rz)*np.cos(ry) - \
+                                                 f*np.sin(ry)*np.cos(rz)) + f*tx
+        v = X*(-f*np.sin(rx)*np.sin(ry)*np.cos(rz) + f*np.sin(rz)*np.cos(ry)) + \
+            Y*f*np.cos(rx)*np.cos(rz) + Z*(-f*np.sin(rx)*np.cos(ry)*np.cos(rz) - \
+                                               f*np.sin(ry)*np.sin(rz)) + f*ty
+        w = X*f*np.sin(ry)*np.cos(rx) + Y*f*np.sin(rx) + \
+            Z*f*np.cos(rx)*np.cos(ry) + f*tz
+        return u, v, w
+
+    def PinvNL(self, u, v, w):
+        """
+        Inverse of the Camera model. Maps a point in the image to a point
+        in the mesh coordinate sys.
+        (General version for any possibly NL camera models)
+
+        Parameters
+        ----------
+        u : 1D NUMPY.ARRAY
+            u coordinate in the image system of the points to map
+        v : 1D NUMPY.ARRAY
+            v coordinate in the image system of the points to map
+        w : 1D NUMPY.ARRAY
+            w coordinate in the image system of the points to map
+
+        Returns
+        -------
+        X : 1D NUMPY.ARRAY
+            X coordinate of the corresponding position in the mesh system
+        Y : 1D NUMPY.ARRAY
+            Y coordinate of the corresponding position in the mesh system
+        Z : 1D NUMPY.ARRAY
+            Z coordinate of the corresponding position in the mesh system
+
+        """
+        X = np.zeros(len(u))
+        Y = np.zeros(len(u))
+        Z = np.zeros(len(u))
+        for ii in range(10):
+            pnx, pny, pnz = self.P(X, Y, Z)
+            resx = u - pnx
+            resy = v - pny
+            resz = w - pnz
+            print('*************** TODO *******************')
+            raise Exception("Sorry, TODO")
+            dPxdX, dPxdY, dPxdZ, dPydX, dPydY, dPydZ, dPzdX, dPzdY, dPzdZ = self.dPdX(X, Y, Z)
+            detJ = dPxdX * dPydY - dPxdY * dPydX
+            dX = dPydY / detJ * resx - dPxdY / detJ * resy
+            dY = -dPydX / detJ * resx + dPxdX / detJ * resy
+            X += dX
+            Y += dY
+            res = np.linalg.norm(dX) + np.linalg.norm(dY)
+            if res < 1e-4:
+                break
+        return X, Y
+
+    def dPdX(self, X, Y, Z):
+        """
+        Derivative of the Camera model wrt physical position X, Y
+
+        Parameters
+        ----------
+        X : 1D NUMPY.ARRAY
+            X coordinate of the current position in the mesh system
+        Y : 1D NUMPY.ARRAY
+            Y coordinate of the current position in the mesh system
+        Z : 1D NUMPY.ARRAY
+            Z coordinate of the current position in the mesh system
+
+        Returns
+        -------
+        dudx : NUMPY.ARRAY
+            Derivative of coord. u wrt to X
+        dudy : NUMPY.ARRAY
+            Derivative of coord. u wrt to Y
+        dudz : NUMPY.ARRAY
+            Derivative of coord. u wrt to Z
+        dvdx : NUMPY.ARRAY
+            Derivative of coord. v wrt to X
+        dvdy : NUMPY.ARRAY
+            Derivative of coord. v wrt to Y
+        dvdz : NUMPY.ARRAY
+            Derivative of coord. v wrt to Z
+        dwdx : NUMPY.ARRAY
+            Derivative of coord. w wrt to X
+        dwdy : NUMPY.ARRAY
+            Derivative of coord. w wrt to Y
+        dwdz : NUMPY.ARRAY
+            Derivative of coord. w wrt to Z
+
+        """
+        f = self.f
+        rx = self.rx
+        ry = self.ry
+        rz = self.rz
+        ones = np.ones(X.shape[0])
+        dudx = (f*np.sin(rx)*np.sin(ry)*np.sin(rz) + f*np.cos(ry)*np.cos(rz)) * ones
+        dudy = -f*np.sin(rz)*np.cos(rx)*ones
+        dudz = (f*np.sin(rx)*np.sin(rz)*np.cos(ry) - f*np.sin(ry)*np.cos(rz))*ones
+        dvdx = (-f*np.sin(rx)*np.sin(ry)*np.cos(rz) + f*np.sin(rz)*np.cos(ry))*ones
+        dvdy = f*np.cos(rx)*np.cos(rz)*ones
+        dvdz = (-f*np.sin(rx)*np.cos(ry)*np.cos(rz) - f*np.sin(ry)*np.sin(rz))*ones
+        dwdx = f*np.sin(ry)*np.cos(rx)*ones
+        dwdy = f*np.sin(rx)*ones
+        dwdz = f*np.cos(rx)*np.cos(ry)*ones
+        return dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz
+
+    def dPdp(self, X, Y, Z):
+        """
+        First order derivative of the Camera model wrt camera parameters p
+
+        Parameters
+        ----------
+        X : 1D NUMPY.ARRAY
+            X coordinate of the current position in the mesh system
+        Y : 1D NUMPY.ARRAY
+            Y coordinate of the current position in the mesh system
+        Z : 1D NUMPY.ARRAY
+            Z coordinate of the current position in the mesh system
+
+        Returns
+        -------
+        dudp : NUMPY.ARRAY
+            Derivative of coord. u wrt to p
+        dvdp : NUMPY.ARRAY
+            Derivative of coord. v wrt to p
+        dwdp : NUMPY.ARRAY
+            Derivative of coord. w wrt to p
+
+        """
+        f = self.f
+        tx = self.tx
+        ty = self.ty
+        tz = self.tz
+        rx = self.rx
+        ry = self.ry
+        rz = self.rz
+        #
+        dudf = X*(np.sin(rx)*np.sin(ry)*np.sin(rz) + np.cos(ry)*np.cos(rz)) - \
+            Y*np.sin(rz)*np.cos(rx) + Z*(np.sin(rx)*np.sin(rz)*np.cos(ry) - \
+                                             np.sin(ry)*np.cos(rz)) + tx
+        dudtx = f + 0 * X
+        dudty = 0 * X
+        dudtz = 0 * X
+        dudrx = X*f*np.sin(ry)*np.sin(rz)*np.cos(rx) + Y*f*np.sin(rx)*np.sin(rz) + \
+            Z*f*np.sin(rz)*np.cos(rx)*np.cos(ry)
+        dudry = X*(f*np.sin(rx)*np.sin(rz)*np.cos(ry) - f*np.sin(ry)*np.cos(rz)) + \
+            Z*(-f*np.sin(rx)*np.sin(ry)*np.sin(rz) - f*np.cos(ry)*np.cos(rz))
+        dudrz = X*(f*np.sin(rx)*np.sin(ry)*np.cos(rz) - f*np.sin(rz)*np.cos(ry)) - \
+            Y*f*np.cos(rx)*np.cos(rz) + Z*(f*np.sin(rx)*np.cos(ry)*np.cos(rz) + \
+                                               f*np.sin(ry)*np.sin(rz))
+        dvdf = X*(-np.sin(rx)*np.sin(ry)*np.cos(rz) + np.sin(rz)*np.cos(ry)) + \
+            Y*np.cos(rx)*np.cos(rz) + Z*(-np.sin(rx)*np.cos(ry)*np.cos(rz) - \
+                                             np.sin(ry)*np.sin(rz)) + ty
+        # 
+        dvdtx = 0 * X + f
+        dvdty = 0 * X
+        dvdtz = 0 * X
+        dvdrx = -X*f*np.sin(ry)*np.cos(rx)*np.cos(rz) - Y*f*np.sin(rx)*np.cos(rz) - \
+            Z*f*np.cos(rx)*np.cos(ry)*np.cos(rz)
+        dvdry = X*(-f*np.sin(rx)*np.cos(ry)*np.cos(rz) - f*np.sin(ry)*np.sin(rz)) + \
+            Z*(f*np.sin(rx)*np.sin(ry)*np.cos(rz) - f*np.sin(rz)*np.cos(ry))
+        dvdrz = X*(f*np.sin(rx)*np.sin(ry)*np.sin(rz) + f*np.cos(ry)*np.cos(rz)) - \
+            Y*f*np.sin(rz)*np.cos(rx) + Z*(f*np.sin(rx)*np.sin(rz)*np.cos(ry) - \
+                                               f*np.sin(ry)*np.cos(rz))
+        #                 
+        dwdf = X*np.sin(ry)*np.cos(rx) + Y*np.sin(rx) + Z*np.cos(rx)*np.cos(ry) + tz
+        dwdtx = 0 * X
+        dwdty = 0 * X
+        dwdtz = 0 * X + f
+        dwdrx = -X*f*np.sin(rx)*np.sin(ry) + Y*f*np.cos(rx) - Z*f*np.sin(rx)*np.cos(ry)
+        dwdry = X*f*np.cos(rx)*np.cos(ry) - Z*f*np.sin(ry)*np.cos(rx)
+        dwdrz = 0 * X 
+        #
+        dudp = np.c_[dudf, dudtx, dudty, dudtz, dudrx, dudry, dudrz]
+        dvdp = np.c_[dvdf, dvdtx, dvdty, dvdtz, dvdrx, dvdry, dvdrz]
+        dwdp = np.c_[dwdf, dwdtx, dwdty, dwdtz, dwdrx, dwdry, dwdrz]        
+        return dudp, dvdp, dwdp
 
     def ImageFiles(self, fname, imnums):
         self.fname = fname

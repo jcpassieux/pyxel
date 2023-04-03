@@ -56,9 +56,9 @@ import os
 
 class VTKData:
     def __init__(self,name,numb,vals):
-        self.name=name
-        self.numb=numb
-        if numb>1:
+        self.name = name
+        self.numb = numb
+        if numb > 1:
             self.vals=vals.T.ravel() 
         else:
             self.vals=vals
@@ -294,6 +294,79 @@ class VTRWriter():
         outFile = open(fileName, 'w')
         doc.writexml(outFile, newl='\n')
         print("VTK: "+ fileName +".vtr written")
+        outFile.close()
+
+class VTIWriter():
+    def __init__(self, nx, ny, nz):
+        self.clearData()
+        self.nx = nx
+        self.ny = ny
+        self.nz = nz
+    def addCellData(self, varName, numb, data):
+        cdnew = VTKData(varName, numb, data)
+        self.cd = np.append(self.cd, cdnew)
+    def addPointData(self, varName, numb, data):
+        pdnew = VTKData(varName, numb, data)
+        self.pd = np.append(self.pd, pdnew)
+    def clearData(self):
+        self.cd = np.empty(0, dtype=object)
+        self.pd = np.empty(0, dtype=object)
+    def VTIWriter(self, fileName='output'):
+        import xml.dom.minidom    
+        # Document and root element
+        doc = xml.dom.minidom.Document()
+        root_element = doc.createElementNS("VTK", "VTKFile")
+        root_element.setAttribute("type", "ImageData")
+        root_element.setAttribute("version", "0.1")
+        root_element.setAttribute("byte_order", "LittleEndian")
+        doc.appendChild(root_element)
+    
+        # ImageData element
+        ImageData = doc.createElementNS("VTK", "ImageData")
+        extent=np.array([0, self.nx, 0, self.ny, 0, self.nz])
+        ImageData.setAttribute("WholeExtent", array2string(extent))
+        ImageData.setAttribute("Origin", "-0.5 -0.5 -0.5")
+        ImageData.setAttribute("Spacing", "1 1 1")
+        root_element.appendChild(ImageData)
+    
+        # Piece 0 (only one)
+        piece = doc.createElementNS("VTK", "Piece")
+        piece.setAttribute("Extent", array2string(extent))
+        ImageData.appendChild(piece)
+    
+        #### Cell data  ####
+        cell_data = doc.createElementNS("VTK", "CellData")
+        piece.appendChild(cell_data)
+        for ic in range(len(self.cd)):
+            # Cell Data
+            cell_data_array = doc.createElementNS("VTK", "DataArray")
+            cell_data_array.setAttribute("Name", self.cd[ic].name )
+            cell_data_array.setAttribute("NumberOfComponents", str(self.cd[ic].numb))
+            cell_data_array.setAttribute("type", "Float32")
+            cell_data_array.setAttribute("format", "ascii")
+            cell_data.appendChild(cell_data_array)
+            cell_data_array_Data = doc.createTextNode(array2string(self.cd[ic].vals))
+            cell_data_array.appendChild(cell_data_array_Data)
+
+        #### Point data  ####
+        point_data = doc.createElementNS("VTK", "PointData")
+        piece.appendChild(point_data)
+        for ic in range(len(self.pd)):
+            # Point Data
+            point_data_array = doc.createElementNS("VTK", "DataArray")
+            point_data_array.setAttribute("Name", self.pd[ic].name )
+            point_data_array.setAttribute("NumberOfComponents", str(self.pd[ic].numb))
+            point_data_array.setAttribute("type", "Float32")
+            point_data_array.setAttribute("format", "ascii")
+            point_data.appendChild(point_data_array)
+            point_data_array_Data = doc.createTextNode(array2string(self.pd[ic].vals))
+            point_data_array.appendChild(point_data_array_Data)
+    
+        # Write to file and exit
+        fileName += '.vti'
+        outFile = open(fileName, 'w')
+        doc.writexml(outFile, newl='\n')
+        print("VTI: "+ fileName +" written")
         outFile.close()
     
 def PVDFile(fileName,ext,npart,nstep):    

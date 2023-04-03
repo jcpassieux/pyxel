@@ -1,14 +1,14 @@
 # pyxel
 >**py**thon library for e**x**perimental mechanics using finite **el**ements
 
-**pyxel** is an open-source Finite Element (FE) Digital Image Correlation (DIC) library for experimental mechanics application. It is freely available for research and teaching. It is based on `numpy`, `scipy` and `matplotlib`
+**pyxel** is an open-source Finite Element (FE) Digital Image/Volume Correlation (DIC/DVC) library for experimental mechanics application. It is freely available for research and teaching.
 
 <p align="center">
   <img src="https://github.com/jcpassieux/pyxel/blob/master/pyxel.png" width="150" title="hover text">
 </p>
 
-In its present form, it is restricted to 2D-DIC. Stereo (SDIC) and Digital Volume Correlation (DVC) will be updated later. 
-The gray level conservation problem is written in the physical space. It relies on camera models (which must be calibrated) and on a dedicated quadrature rule in the FE mesh space. Considering only 2D-DIC and front-parallel camera settings, the implemented camera model is a simplified pinhole model (including only 4 parameters: 2 translations, 1 rotation and the focal length). More complex camera models (including distorsions) could easily be implemented within this framework (next update?). The library natively includes linear and quadratic triangles and quadrilateral elements. The library also exports the results in different format such that the measurements can be post-processed ether with MatPlotLib or using Paraview.
+In its present form, it is restricted to 2D-DIC and 3D-DVC. Stereo (SDIC) will be updated later. 
+The gray level conservation problem is written in the physical space. It relies on camera models (which must be calibrated) and on a dedicated quadrature rule in the FE mesh space. Considering front-parallel camera settings, the implemented camera model is a simplified pinhole model (including only 4 parameters 2D: 2 translations, 1 rotation and the focal length and 7 parameters in 3D: focal length, 3 rotations, 3 translations) . More complex camera models (including distorsions) could easily be implemented within this framework (next update?). The library natively includes linear and quadratic triangles, quadrilateral, tetraedral, hexaedral elements. The library also exports the results in different format such that the measurements can be post-processed ether with MatPlotLib or using Paraview.
 
 1. SCRIPT FILE
     - pyxel is a library. For each testcase, a script file must be written.
@@ -27,11 +27,10 @@ The gray level conservation problem is written in the physical space. It relies 
         ```python
         n = np.array([[x0, y0], [x1, y1], ...])
         ```
-    - There is an home made mesher for parallelipedic domains, given the approximate elements size in each direction (see examples).
-    - a (not robust) parser for GMSH and Abaqus meshes is also embeded in the library. 
-        But prefer using existing open-source python parsers. 
+    - There is an home made mesher for parallelipedic domains, given the approximate elements size in each direction (see examples). We recommand to use external meshers like, for instance, `gmsh`
+    - To read/write the meshes, we rely on the library `meshio`. 
 
-3. USING THE LIBRARY
+3. USING THE LIBRARY FOR A 2D ANALYSIS
     - Open the mesh: 
       ```python
       m = px.ReadMesh('mesh.msh')
@@ -63,7 +62,7 @@ The gray level conservation problem is written in the physical space. It relies 
     **pyxel** is distributed under the terms of CeCILL which is a french free software license agreement in the spirit of GNU GPL
 
 6. DEPENDANCIES 
-    numpy, scipy, meshio, gmsh, cv2 (opencv-python), numba (optional)
+    `numpy`, `scipy`, `matplotlib`, `opencv-python`, `scikit-image`, `meshio`, `gmsh`
 
 # References
 

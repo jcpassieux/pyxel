@@ -11,11 +11,11 @@ PYthon library for eXperimental mechanics using Finite ELements
 """
 import os
 import numpy as np
-import scipy as sp
 import scipy.sparse.linalg as splalg
+import scipy.sparse as sps 
 from .image import Image
-from .camera import Camera
-from .mesh import StructuredMesh
+from .camera import Camera, CameraVol
+from .mesher import StructuredMesh, TetraMeshBox
 #import matplotlib.pyplot as plt
 
 #import pdb
@@ -55,93 +55,15 @@ class DICEngine:
         fdxr, fdyr = f.InterpGrad(pgu, pgv)
         Jxx, Jxy, Jyx, Jyy = cam.dPdX(m.pgx, m.pgy)
         phiJdf = (
-            sp.sparse.diags(fdxr * Jxx + fdyr * Jyx) @ m.phix
-            + sp.sparse.diags(fdxr * Jxy + fdyr * Jyy) @ m.phiy
+            sps.diags(fdxr * Jxx + fdyr * Jyx) @ m.phix
+            + sps.diags(fdxr * Jxy + fdyr * Jyy) @ m.phiy
         )
-        self.wphiJdf = sp.sparse.diags(m.wdetJ) @ phiJdf
+        self.wphiJdf = sps.diags(m.wdetJ) @ phiJdf
         self.dyn = np.max(self.f) - np.min(self.f)
         self.mean0 = np.mean(self.f)
         self.std0 = np.std(self.f)
         self.f -= self.mean0
         return phiJdf.T @ self.wphiJdf
-
-    def ComputeLHS_EB(self, f, m, cam):
-        """Compute the FE-DIC Left hand side operator with the modified GN
-        and with elementary correction of brigthness and contrast
-    
-        Parameters
-        ----------
-        f : pyxel.Image
-            Reference State Image
-        m : pyxel.Mesh
-            The FE mesh
-        cam : pyxel.Camera
-            Calibrated Camera model.
-            
-        Returns
-        -------
-        scipy sparse
-            The DIC Hessian (in the modified GN sense)
-    
-        """
-        if hasattr(f, "tck") == 0:
-            f.BuildInterp()
-        pgu, pgv = cam.P(m.pgx, m.pgy)
-        self.f = f.Interp(pgu, pgv)
-        fdxr, fdyr = f.InterpGrad(pgu, pgv)
-        Jxx, Jxy, Jyx, Jyy = cam.dPdX(m.pgx, m.pgy)
-        phiJdf = (
-            sp.sparse.diags(fdxr * Jxx + fdyr * Jyx) @ m.phix
-            + sp.sparse.diags(fdxr * Jxy + fdyr * Jyy) @ m.phiy
-        )
-        self.wphiJdf = sp.sparse.diags(m.wdetJ) @ phiJdf
-        self.dyn = np.max(self.f) - np.min(self.f)
-        ff = sp.sparse.diags(self.f) @ m.Me
-        mean0 = np.asarray(np.mean(ff, axis=0))[0]
-        self.std0 = np.asarray(np.sqrt(np.mean(ff.power(2), axis=0) - mean0 ** 2))[0]
-        self.f -= m.Me @ mean0.T
-        return phiJdf.T @ self.wphiJdf
-
-    def ComputeLHS2(self, f, g, m, cam, U):
-        """Compute the FE-DIC right hand side operator with the true Gauss Newton
-    
-        Parameters
-        ----------
-        f : pyxel.Image
-            Reference State Image
-        g : pyxel.Image
-            Deformed State Image
-        m : pyxel.Mesh
-            The FE mesh
-        cam : pyxel.Camera
-            Calibrated Camera model.
-        U : Numpy Array (OPTIONAL)
-            The running displacement dof vector.
-            
-        Returns
-        -------
-        scipy sparse
-            The DIC Hessian (in the GN sense)
-    
-        """
-        if hasattr(f, "tck") == 0:
-            f.BuildInterp()
-        if hasattr(g, "tck") == 0:
-            g.BuildInterp()
-        pgu, pgv = cam.P(m.pgx, m.pgy)
-        self.f = f.Interp(pgu, pgv)
-        pgu, pgv = cam.P(m.pgx + m.phix.dot(U), m.pgy + m.phiy.dot(U))
-        fdxr, fdyr = g.InterpGrad(pgu, pgv)
-        Jxx, Jxy, Jyx, Jyy = cam.dPdX(m.pgx, m.pgy)
-        phiJdf = sp.sparse.diags(fdxr * Jxx + fdyr * Jyx).dot(m.phix) + sp.sparse.diags(
-            fdxr * Jxy + fdyr * Jyy
-        ).dot(m.phiy)
-        self.wphiJdf = sp.sparse.diags(m.wdetJ).dot(phiJdf)
-        self.dyn = np.max(self.f) - np.min(self.f)
-        self.mean0 = np.mean(self.f)
-        self.std0 = np.std(self.f)
-        self.f -= self.mean0
-        return phiJdf.T.dot(self.wphiJdf)
 
     def ComputeRHS(self, g, m, cam, U=[]):
         """Compute the FE-DIC right hand side operator with the modified GN
@@ -177,6 +99,122 @@ class DICEngine:
         B = self.wphiJdf.T @ res
         return B, res
 
+    def ComputeLHS_EB(self, f, m, cam):
+        """Compute the FE-DIC Left hand side operator with the modified GN
+        and with elementary correction of brigthness and contrast
+    
+        Parameters
+        ----------
+        f : pyxel.Image
+            Reference State Image
+        m : pyxel.Mesh
+            The FE mesh
+        cam : pyxel.Camera
+            Calibrated Camera model.
+            
+        Returns
+        -------
+        scipy sparse
+            The DIC Hessian (in the modified GN sense)
+    
+        """
+        if hasattr(f, "tck") == 0:
+            f.BuildInterp()
+        pgu, pgv = cam.P(m.pgx, m.pgy)
+        self.f = f.Interp(pgu, pgv)
+        fdxr, fdyr = f.InterpGrad(pgu, pgv)
+        Jxx, Jxy, Jyx, Jyy = cam.dPdX(m.pgx, m.pgy)
+        phiJdf = (
+            sps.diags(fdxr * Jxx + fdyr * Jyx) @ m.phix
+            + sps.diags(fdxr * Jxy + fdyr * Jyy) @ m.phiy
+        )
+        self.wphiJdf = sps.diags(m.wdetJ) @ phiJdf
+        self.dyn = np.max(self.f) - np.min(self.f)
+        ff = sps.diags(self.f) @ m.Me
+        mean0 = np.asarray(np.mean(ff, axis=0))[0]
+        self.std0 = np.asarray(np.sqrt(np.mean(ff.power(2), axis=0) - mean0 ** 2))[0]
+        self.f -= m.Me @ mean0.T
+        return phiJdf.T @ self.wphiJdf
+
+    def ComputeRHS_EB(self, g, m, cam, U=[]):
+        """Compute the FE-DIC right hand side operator with the modified GN
+        and with elementary correction of brigthness and contrast
+    
+        Parameters
+        ----------
+        g : pyxel.Image
+            Deformed State Image
+        m : pyxel.Mesh
+            The FE mesh
+        cam : pyxel.Camera
+            Calibrated Camera model.
+        U : Numpy Array (OPTIONAL)
+            The running displacement dof vector.
+            
+        Returns
+        -------
+        Numpy array
+            DIC right hand side vector
+        Numpy array
+            The residual vector.
+        """
+        if hasattr(g, "tck") == 0:
+            g.BuildInterp()
+        if len(U) != m.ndof:
+            U = np.zeros(m.ndof)
+        pgxu = m.pgx + m.phix.dot(U)
+        pgyv = m.pgy + m.phiy.dot(U)
+        u, v = cam.P(pgxu, pgyv)
+        res = g.Interp(u, v)
+        ff = sps.diags(res).dot(m.Me)
+        mean0 = np.asarray(np.mean(ff, axis=0))[0]
+        std0 = np.asarray(np.sqrt(np.mean(ff.power(2), axis=0) - mean0 ** 2))[0]
+        res -= m.Me @ mean0
+        res = self.f - sps.diags(m.Me @ (self.std0 / std0)) @ res
+        B = self.wphiJdf.T @ res
+        return B, res
+            
+    def ComputeLHS2(self, f, g, m, cam, U):
+        """Compute the FE-DIC right hand side operator with the true Gauss Newton
+    
+        Parameters
+        ----------
+        f : pyxel.Image
+            Reference State Image
+        g : pyxel.Image
+            Deformed State Image
+        m : pyxel.Mesh
+            The FE mesh
+        cam : pyxel.Camera
+            Calibrated Camera model.
+        U : Numpy Array (OPTIONAL)
+            The running displacement dof vector.
+            
+        Returns
+        -------
+        scipy sparse
+            The DIC Hessian (in the GN sense)
+    
+        """
+        if hasattr(f, "tck") == 0:
+            f.BuildInterp()
+        if hasattr(g, "tck") == 0:
+            g.BuildInterp()
+        pgu, pgv = cam.P(m.pgx, m.pgy)
+        self.f = f.Interp(pgu, pgv)
+        pgu, pgv = cam.P(m.pgx + m.phix.dot(U), m.pgy + m.phiy.dot(U))
+        fdxr, fdyr = g.InterpGrad(pgu, pgv)
+        Jxx, Jxy, Jyx, Jyy = cam.dPdX(m.pgx, m.pgy)
+        phiJdf = sps.diags(fdxr * Jxx + fdyr * Jyx).dot(m.phix) + sps.diags(
+            fdxr * Jxy + fdyr * Jyy
+        ).dot(m.phiy)
+        self.wphiJdf = sps.diags(m.wdetJ).dot(phiJdf)
+        self.dyn = np.max(self.f) - np.min(self.f)
+        self.mean0 = np.mean(self.f)
+        self.std0 = np.std(self.f)
+        self.f -= self.mean0
+        return phiJdf.T.dot(self.wphiJdf)
+
     def ComputeRHS2(self, g, m, cam, U=[]):
         """Compute the FE-DIC right hand side operator with the true Gauss-Newton
     
@@ -211,13 +249,13 @@ class DICEngine:
         fdxr, fdyr = g.InterpGrad(u, v)
         Jxx, Jxy, Jyx, Jyy = cam.dPdX(m.pgx, m.pgy)
         wphiJdf = (
-            sp.sparse.diags(m.wdetJ * (fdxr * Jxx + fdyr * Jyx)) @ m.phix
-            + sp.sparse.diags(m.wdetJ * (fdxr * Jxy + fdyr * Jyy)) @ m.phiy
+            sps.diags(m.wdetJ * (fdxr * Jxx + fdyr * Jyx)) @ m.phix
+            + sps.diags(m.wdetJ * (fdxr * Jxy + fdyr * Jyy)) @ m.phiy
         )
         B = wphiJdf.T @ res
         return B, res
 
-    def ComputeRES(self, g, m, cam, U=[]):
+    def ComputeRES(self, g, m, cam, U=None):
         """Compute the FE-DIC residual
     
         Parameters
@@ -239,7 +277,7 @@ class DICEngine:
         """
         if hasattr(g, "tck") == 0:
             g.BuildInterp()
-        if len(U) != m.ndof:
+        if U is None:
             U = np.zeros(m.ndof)
         pgxu = m.pgx + m.phix.dot(U)
         pgyv = m.pgy + m.phiy.dot(U)
@@ -250,9 +288,60 @@ class DICEngine:
         res = self.f - self.std0 / std1 * res
         return res
 
-    def ComputeRHS_EB(self, g, m, cam, U=[]):
+#%% 
+
+class DVCEngine: 
+    def __init__(self):        
+        self.f = []
+        self.wphiJdf = []
+        self.dyn = []
+        self.mean0 = []
+        self.std0 = []
+        
+    def ComputeLHS(self, f, m, cam):
+        """Compute the FE-DIC Left hand side operator with the modified GN
+    
+        Parameters
+        ----------
+        f : Image object 
+            Reference State Image
+        m : Mesh object 
+            The FE mesh
+            
+        Returns
+        -------
+        scipy sparse
+            The DIC Hessian (in the modified GN sense)
+    
+        """
+        pgu, pgv, pgw = cam.P(m.pgx, m.pgy, m.pgz)
+        self.f = f.Interp(pgu, pgv, pgw)
+        fdxr, fdyr, fdzr = f.InterpGrad(pgu, pgv, pgw)
+        Jxx, Jxy, Jxz, Jyx, Jyy, Jyz, Jzx, Jzy, Jzz = cam.dPdX(m.pgx, m.pgy, m.pgz)
+        phiJdf = (
+            sps.diags(fdxr * Jxx + fdyr * Jyx + fdzr * Jzx) @ m.phix + \
+            sps.diags(fdxr * Jxy + fdyr * Jyy + fdzr * Jzy) @ m.phiy + \
+            sps.diags(fdxr * Jxz + fdyr * Jyz + fdzr * Jzz) @ m.phiz 
+        )
+        self.wphiJdf = sps.diags(m.wdetJ) @ phiJdf
+        self.dyn = np.max(self.f) - np.min(self.f)
+        self.mean0 = np.mean(self.f)
+        self.std0  = np.std(self.f)
+        self.f     -= self.mean0
+        return phiJdf.T @ self.wphiJdf
+        
+        # self.f = f.Interp( m.pgx , m.pgy, m.pgz)
+        # dfdx, dfdy, dfdz = f.InterpGrad( m.pgx, m.pgy, m.pgz )
+        # phidf = sps.diags(dfdx).dot(m.phix ) + sps.diags(dfdy).dot(m.phiy) + sps.diags(dfdz).dot(m.phiz)
+        # self.wphidf = sps.diags(m.wdetJ) @ phidf 
+        # self.dyn = np.max(self.f) - np.min(self.f)
+        # self.mean0 = np.mean(self.f)
+        # self.std0  = np.std(self.f)
+        # self.f     -= self.mean0
+        # return phidf.T @ self.wphidf
+
+    def ComputeRHS(self, g, m, cam=None, U=None): 
         """Compute the FE-DIC right hand side operator with the modified GN
-        and with elementary correction of brigthness and contrast
     
         Parameters
         ----------
@@ -260,8 +349,6 @@ class DICEngine:
             Deformed State Image
         m : pyxel.Mesh
             The FE mesh
-        cam : pyxel.Camera
-            Calibrated Camera model.
         U : Numpy Array (OPTIONAL)
             The running displacement dof vector.
             
@@ -271,27 +358,56 @@ class DICEngine:
             DIC right hand side vector
         Numpy array
             The residual vector.
+    
         """
-        if hasattr(g, "tck") == 0:
-            g.BuildInterp()
-        if len(U) != m.ndof:
+        if U is None:
             U = np.zeros(m.ndof)
-        pgxu = m.pgx + m.phix.dot(U)
-        pgyv = m.pgy + m.phiy.dot(U)
-        u, v = cam.P(pgxu, pgyv)
-        res = g.Interp(u, v)
-        ff = sp.sparse.diags(res).dot(m.Me)
-        mean0 = np.asarray(np.mean(ff, axis=0))[0]
-        std0 = np.asarray(np.sqrt(np.mean(ff.power(2), axis=0) - mean0 ** 2))[0]
-        res -= m.Me @ mean0
-        res = self.f - sp.sparse.diags(m.Me @ (self.std0 / std0)) @ res
-        B = self.wphiJdf.T @ res
-        return B, res
+        x =  m.pgx + m.phix @ U    
+        y =  m.pgy + m.phiy @ U 
+        z =  m.pgz + m.phiz @ U 
+        #
+        pgu, pgv, pgw = cam.P(x, y, z)
+        res = g.Interp(pgu, pgv, pgw)
+        # res = g.Interp(x,y,z) 
+        res -= np.mean(res)
+        std1 = np.std(res)
+        res = self.f - self.std0 / std1 * res
+        # b = self.wphidf.T @ res
+        b = self.wphiJdf.T @ res
+        return b, res
+    
+    def ComputeRES(self, g, m, cam=None, U=None):
+        """Compute the FE-DIC residual
+    
+        Parameters
+        ----------
+        g : pyxel.Image
+            Deformed State Image
+        m : pyxel.Mesh
+            The FE mesh
+        U : Numpy Array (OPTIONAL)
+            The displacement dof vector.
+        Returns
+        -------
+        Numpy array
+            the residual vector.
+    
+        """
+        if U is None:
+            U = np.zeros(m.ndof)
+        x = m.pgx + m.phix.dot(U)
+        y = m.pgy + m.phiy.dot(U)
+        z = m.pgz + m.phiz.dot(U)  
+        pgu, pgv, pgw = cam.P(x, y, z)
+        res = g.Interp(pgu, pgv, pgw)
+        res -= np.mean(res)
+        std1 = np.std(res)
+        res = self.f - self.std0 / std1 * res
+        return res            
 
 #%% 
 
-
-def MeshFromROI(roi, dx, f, typel=3):
+def MeshFromROI(roi, dx, typel=3):
     """Build a structured FE mesh and a pyxel.camera object from a region
     of interest (ROI) selected in an image f
 
@@ -319,12 +435,21 @@ def MeshFromROI(roi, dx, f, typel=3):
                       and copy - paste the roi in the python terminal
     m, cam = px.MeshFromROI(roi, [20, 20], f)
     """
-    m = StructuredMesh(roi, dx, typel=typel)
-    m.n[:,1] *= -1
-    p = np.array([1., 0., 0., 0.])
-    cam = Camera(p)
-    return m, cam
-
+    if typel in [4, 5]: #volume elements
+        if typel == 4:
+            m = TetraMeshBox(roi, dx)
+        else:
+            m = StructuredMesh(roi, dx, typel=typel)
+        xm = np.mean(m.n, axis=0)
+        m.n -= xm[np.newaxis]
+        cam = CameraVol([1, xm[0], xm[1], xm[2], 0, 0, 0])
+        return m, cam
+    else:
+        m = StructuredMesh(roi, dx, typel=typel)
+        m.n[:,1] *= -1
+        p = np.array([1., 0., 0., 0.])
+        cam = Camera(p)
+        return m, cam
 
 def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None, 
               L=None, eps=None, maxiter=30, disp=True):
@@ -366,8 +491,14 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         Residual vector
 
     """
+    analysis = 'dic'
+    if len(f.pix.shape) == 3:
+        analysis = 'dvc'
     if dic is None:
-        dic = DICEngine()
+        if analysis == 'dvc':
+            dic = DVCEngine()
+        else:
+            dic = DICEngine()
     if len(m.conn) == 0:
         m.Connectivity()
     if U0 is None:
@@ -375,7 +506,10 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
     else:
         U = U0.copy()
     if m.phix is None:
-        m.DICIntegration(cam)
+        if analysis == 'dvc':
+            m.DVCIntegration(cam)
+        else:
+            m.DICIntegration(cam)
     if H is None:
         H = dic.ComputeLHS(f, m, cam)
     if eps is None:
@@ -384,7 +518,6 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         # Reduced Basis
         print('reduced basis')
         H_LU = splalg.splu(Basis.T @ H @ Basis)
-        print(Basis.T @ H @ Basis)
     else:
         if l0 is not None:
             # Tikhonov regularisation
@@ -398,7 +531,7 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             L0 = V.dot(L.dot(V))
             l = (l0/T)**2 * H0 / L0
             H_LU = splalg.splu(H + l * L)
-            print(l)
+            print('Regularization param = %2.3f' % l)
         else:
             if disp:
                 print("no reg")
@@ -411,7 +544,6 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             dU = Basis @ da
         elif l0 is not None:
             dU = H_LU.solve(b - l * L.dot(U))
-            err = np.max(abs(dU))
         else:
             dU = H_LU.solve(b)
         U += dU
@@ -419,11 +551,11 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         stdr = np.std(res)
         if disp:
             print("Iter # %2d | std(res)=%2.2f gl | dU/U=%1.2e" % (ik + 1, stdr, err))
-        if err < eps or abs(stdr - stdr_old) < 1e-3:
+        if err < eps :
+            # if err < eps or abs(stdr - stdr_old) < 1e-3:
             break
         stdr_old = stdr
     return U, res
-
 
 def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
                    Basis=None, eps=None, disp=True):
@@ -474,7 +606,10 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         #     n1 = m.n[m.e[et][:, 0]]
         #     n2 = m.n[m.e[et][:, 1]]
         #     l0 = max(l0, 4 * min(np.linalg.norm(n1 - n2, axis=1)))
-        l0 = 30/cam.get_p()[0]
+        if cam is None:
+            l0 = 30
+        else:
+            l0 = 30/cam.get_p()[0]
         print('Auto reg. length l0 = %2.3e' % l0)
     if l0 == 0:
         l0 = None
@@ -493,9 +628,15 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         f.SubSample(iscale)
         g = img.Copy()
         g.SubSample(iscale)
-        cam2 = cam.SubSampleCopy(iscale)
+        if cam is not None:
+            cam2 = cam.SubSampleCopy(iscale)
+        else:
+            cam2 = None
         m2 = m.Copy()
-        m2.DICIntegrationFast(aes // (2**iscale))
+        if len(f.pix.shape) == 3:
+            m2.DVCIntegration(aes // (2**iscale))
+        else:
+            m2.DICIntegrationFast(aes // (2**iscale))
         # m2.DICIntegration(cam2)
         # plt.figure()
         # g.Plot()
