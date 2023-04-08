@@ -577,6 +577,9 @@ class CameraNL:
 # print(sp.pycode(w.diff(ry, 1)))
 # print(sp.pycode(w.diff(rz, 1)))
 
+
+
+
 class CameraVol:
     def __init__(self, p):
         self.set_p(p)
@@ -677,7 +680,26 @@ class CameraVol:
             Z*f*np.cos(rx)*np.cos(ry) + f*tz
         return u, v, w
 
-    def PinvNL(self, u, v, w):
+    # import sympy as sp
+    # dPxdX, dPxdY, dPxdZ, dPydX, dPydY, dPydZ, dPzdX, dPzdY, dPzdZ = \
+    #    sp.symbols('dPxdX, dPxdY, dPxdZ, dPydX, dPydY, dPydZ, dPzdX, dPzdY, dPzdZ')    
+    # J = sp.Matrix([[dPxdX, dPxdY, dPxdZ],
+    #                [dPydX, dPydY, dPydZ],
+    #                [dPzdX, dPzdY, dPzdZ]])
+    # detJ = sp.det(J)
+    # print(sp.pycode(detJ))
+    # Jinv = J.inv()*detJ
+    # print(Jinv[0,0])
+    # print(Jinv[0,1])
+    # print(Jinv[0,2])
+    # print(Jinv[1,0])
+    # print(Jinv[1,1])
+    # print(Jinv[1,2])    
+    # print(Jinv[2,0])
+    # print(Jinv[2,1])
+    # print(Jinv[2,2])
+
+    def Pinv(self, u, v, w):
         """
         Inverse of the Camera model. Maps a point in the image to a point
         in the mesh coordinate sys.
@@ -702,26 +724,33 @@ class CameraVol:
             Z coordinate of the corresponding position in the mesh system
 
         """
-        X = np.zeros(len(u))
-        Y = np.zeros(len(u))
-        Z = np.zeros(len(u))
+        X = np.zeros_like(u)
+        Y = np.zeros_like(u)
+        Z = np.zeros_like(u)
         for ii in range(10):
             pnx, pny, pnz = self.P(X, Y, Z)
             resx = u - pnx
             resy = v - pny
             resz = w - pnz
-            print('*************** TODO *******************')
-            raise Exception("Sorry, TODO")
             dPxdX, dPxdY, dPxdZ, dPydX, dPydY, dPydZ, dPzdX, dPzdY, dPzdZ = self.dPdX(X, Y, Z)
-            detJ = dPxdX * dPydY - dPxdY * dPydX
-            dX = dPydY / detJ * resx - dPxdY / detJ * resy
-            dY = -dPydX / detJ * resx + dPxdX / detJ * resy
+            detJ = dPxdX*dPydY*dPzdZ - dPxdX*dPydZ*dPzdY - dPxdY*dPydX*dPzdZ + \
+                dPxdY*dPydZ*dPzdX + dPxdZ*dPydX*dPzdY - dPxdZ*dPydY*dPzdX
+            dX = ((dPydY*dPzdZ - dPydZ*dPzdY) * resx + \
+                (-dPxdY*dPzdZ + dPxdZ*dPzdY) * resy + \
+                 (dPxdY*dPydZ - dPxdZ*dPydY) * resz) / detJ
+            dY = ((-dPydX*dPzdZ + dPydZ*dPzdX) * resx + \
+                   (dPxdX*dPzdZ - dPxdZ*dPzdX) * resy + \
+                  (-dPxdX*dPydZ + dPxdZ*dPydX) * resz ) / detJ
+            dZ = ((dPydX*dPzdY - dPydY*dPzdX) * resx + \
+                 (-dPxdX*dPzdY + dPxdY*dPzdX) * resy + \
+                  (dPxdX*dPydY - dPxdY*dPydX) * resz ) / detJ
             X += dX
             Y += dY
-            res = np.linalg.norm(dX) + np.linalg.norm(dY)
+            Z += dZ
+            res = np.linalg.norm(dX) + np.linalg.norm(dY) + np.linalg.norm(dZ)
             if res < 1e-4:
                 break
-        return X, Y
+        return X, Y, Z
 
     def dPdX(self, X, Y, Z):
         """
