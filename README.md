@@ -37,15 +37,15 @@ The gray level conservation problem is written in the physical space. It relies 
 3. MINIMAL SAMPLE CODE
     - to run a simple 2D-DIC analysis:
       ```python
-      f = px.Image('ref_img.tif').Load()
-      g = px.Image('def_img.tif').Load()
-      roi = np.array([[ 537,   24], [ 850,  488]])
+      f = px.Image('img-0.tif').Load()
+      g = px.Image('img-1.tif').Load()
+      roi = np.array([[ 100,   100], [ 500,  500]])
       m, cam = px.MeshFromROI(roi, 50, f, typel=3)
-      U, res = px.Correlate(f, g, m[k], cam, U0=U)
+      U, res = px.Correlate(f, g, m, cam, U0=U)
       ```
     - A multiscale initialization is usually required
       ```python
-      U = px.MultiscaleInit(f, g, m[k], cam, scales=[3, 2, 1], l0=30)
+      U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1], l0=30)
       ```
 4. OUTPUT FILES
     - It is possible to post-process the results directly using matplotlib.
