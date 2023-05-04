@@ -2,7 +2,7 @@
 """
 Finite Element Digital Image Correlation method 
 
-@author: JC Passieux, INSA Toulouse, 2021
+@author: JC Passieux, INSA Toulouse, 2023
 
 pyxel
 
@@ -411,12 +411,12 @@ def ShapeFunctions(eltype):
             return np.concatenate(
                 (-1.0 + 0 * x, 0.0 * x, 1.0 + 0 * x)).reshape((3,len(x))).T 
 
-        xg = np.array([1. / 6, 2. / 3, 1. / 6])
-        yg = np.array([1. / 6, 1. / 6, 2. / 3])
-        wg = 1. / 6 * np.ones(3)
-        # xg = np.array([1.0 / 3])
-        # yg = np.array([1.0 / 3])
-        # wg = np.array([0.5])
+        # xg = np.array([1. / 6, 2. / 3, 1. / 6])
+        # yg = np.array([1. / 6, 1. / 6, 2. / 3])
+        # wg = 1. / 6 * np.ones(3)
+        xg = np.array([1.0 / 3])
+        yg = np.array([1.0 / 3])
+        wg = np.array([0.5])
         return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 3:
         """
@@ -468,17 +468,17 @@ def ShapeFunctions(eltype):
                 ).reshape((6,len(x))).T 
         
         # quadrature using 3 gp
-        # xg = np.array([1. / 6, 2. / 3, 1. / 6])
-        # yg = np.array([1. / 6, 1. / 6, 2. / 3])
-        # wg = 1. / 6 * np.ones(3)
+        xg = np.array([1. / 6, 2. / 3, 1. / 6])
+        yg = np.array([1. / 6, 1. / 6, 2. / 3])
+        wg = 1. / 6 * np.ones(3)
         # quadrature using 6 gp
-        a = 0.445948490915965
-        b = 0.091576213509771
-        xg = np.array([a, 1 - 2 * a, a, b, 1 - 2 * b, b])
-        yg = np.array([a, a, 1 - 2 * a, b, b, 1 - 2 * b])
-        a = 0.111690794839005
-        b = 0.054975871827661
-        wg = np.array([a, a, a, b, b, b])
+        # a = 0.445948490915965
+        # b = 0.091576213509771
+        # xg = np.array([a, 1 - 2 * a, a, b, 1 - 2 * b, b])
+        # yg = np.array([a, a, 1 - 2 * a, b, b, 1 - 2 * b])
+        # a = 0.111690794839005
+        # b = 0.054975871827661
+        # wg = np.array([a, a, a, b, b, b])
         return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 10:
         """
@@ -898,24 +898,38 @@ class Mesh:
         m.wdetJ = self.wdetJ.copy()
         return m
 
-    def Connectivity(self):
+    def Connectivity(self, order='C'):
+        """
+        Associate DOFs to each node
+
+        Parameters
+        ----------
+        order : STRING, optional
+            DESCRIPTION. The default is 'C'.
+            'C' ordered by component.
+            'N' ordered by node.
+
+        """
         print("Connectivity.")
-        """ Computes connectivity """
         used_nodes = np.zeros(0, dtype=int)
         for je in self.e.keys():
             used_nodes = np.unique(np.append(used_nodes, self.e[je].ravel()))
         nn = len(used_nodes)
-        self.conn = -np.ones(self.n.shape[0], dtype=int)
-        self.conn[used_nodes] = np.arange(nn)
-        if self.dim == 2:
-            self.conn = np.c_[self.conn, self.conn + nn * (self.conn >= 0)]
-        else:
-            self.conn = np.c_[
-                self.conn,
-                self.conn + nn * (self.conn >= 0),
-                self.conn + 2 * nn * (self.conn >= 0),
-            ]
         self.ndof = nn * self.dim
+        if order == 'C':
+            self.conn = -np.ones(self.n.shape[0], dtype=int)
+            self.conn[used_nodes] = np.arange(nn)
+            if self.dim == 2:
+                self.conn = np.c_[self.conn, self.conn + nn * (self.conn >= 0)]
+            else:
+                self.conn = np.c_[
+                    self.conn,
+                    self.conn + nn * (self.conn >= 0),
+                    self.conn + 2 * nn * (self.conn >= 0),
+                ]
+        elif order == 'N':
+            self.conn = -np.ones((self.n.shape[0], self.dim), dtype=int)
+            self.conn[used_nodes] = np.arange(self.ndof).reshape(nn, self.dim)
 
     def DOF2Nodes(self, Udof, fillzero=False):
         """
@@ -942,12 +956,13 @@ class Mesh:
         not_used, = np.where(self.conn[:,0]<0)
         conn[not_used, 0] = np.max(conn[:,0])
         conn[not_used, 1] = np.max(conn[:,1])
-        if self.dim == 2 and fillzero:
+        if self.dim == 2:
             Unodes = Udof[conn]
-            Unodes = np.hstack((Unodes, np.zeros((len(self.n),1))))
+            if fillzero:
+                Unodes = np.hstack((Unodes, np.zeros((len(self.n),1))))
         else:
             conn[not_used, 2] = np.max(conn[:,2])
-            Unodes = Udof[conn]
+            Unodes = Udof[conn]            
         return Unodes
 
     def Nodes2DOF(self, Unodes):
@@ -1002,7 +1017,8 @@ class Mesh:
         ne = 0
         for et in self.e.keys():
             ne += len(self.e[et])
-            repdof = self.conn[self.e[et], 0]
+            # repdof = self.conn[self.e[et], 0]
+            repdof = self.e[et]
             xn = self.n[self.e[et], 0]
             yn = self.n[self.e[et], 1]
             u = un[self.e[et]]
@@ -1152,18 +1168,18 @@ class Mesh:
             self.wdetJ = np.append(self.wdetJ, wdetJj[:npg])
         self.npg = len(self.wdetJ)
         self.phix = sp.sparse.csr_matrix(
-            (val, (row, col)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
         self.phiy = sp.sparse.csr_matrix(
-            (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         if G:
             self.dphixdx = sp.sparse.csr_matrix(
-                (valx, (row, col)), shape=(self.npg, self.ndof))
+                (valx, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
             self.dphixdy = sp.sparse.csr_matrix(
-                (valy, (row, col)), shape=(self.npg, self.ndof))
+                (valy, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
             self.dphiydx = sp.sparse.csr_matrix(
-                (valx, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
+                (valx, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
             self.dphiydy = sp.sparse.csr_matrix(
-                (valy, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
+                (valy, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         if EB:
             self.Me = sp.sparse.csr_matrix(
                 (vale, (rowe, cole)), shape=(self.npg, ne))
@@ -1191,13 +1207,13 @@ class Mesh:
             nelem += len(self.e[et])
         elem = np.empty(nelem, dtype=object)
         for et in self.e.keys():
-            repdof = self.conn[self.e[et], 0]
+            # repdof = self.conn[self.e[et], 0]
             u = un[self.e[et]]
             v = vn[self.e[et]]
             _, _, _, N, _, _ = ShapeFunctions(et)
             for je in range(len(self.e[et])):
                 elem[ne] = Elem()
-                elem[ne].repx = repdof[je]
+                elem[ne].repx = self.e[et] #repdof[je]
                 rx = np.arange(
                     np.floor(min(u[je])), np.ceil(max(u[je])) + 1
                 ).astype("int")
@@ -1240,8 +1256,8 @@ class Mesh:
 
         """ Builds the FE interpolation """
         self.wdetJ = np.ones(self.npg) / cam.f**2 # f**2 = area of a pixel
-        row = np.zeros(nzv)
-        col = np.zeros(nzv)
+        row = np.zeros(nzv, dtype=int)
+        col = np.zeros(nzv, dtype=int)
         val = np.zeros(nzv)
         nzv = 0
         for je in range(len(elem)):
@@ -1252,9 +1268,9 @@ class Mesh:
             val[rangephi] = elem[je].phi.ravel()
             nzv += np.prod(elem[je].phi.shape)
         self.phix = sp.sparse.csr_matrix(
-            (val, (row, col)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
         self.phiy = sp.sparse.csr_matrix(
-            (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
 
     def __FastDICIntegElem(self, e, et, n=10, G=False):
         # parent element
@@ -1304,7 +1320,7 @@ class Mesh:
         else :
             valx = []
             valy = []
-        repdof = self.conn[e, 0]
+        #repdof = self.conn[e, 0]
         xn = self.n[e, 0]
         yn = self.n[e, 1]
         for i in range(len(xg)):
@@ -1315,7 +1331,7 @@ class Mesh:
             detJ = dxdr * dyds - dxds * dydr
             wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
             repnzv = np.arange(ne * nfun) + i * ne * nfun
-            col[repnzv] = repdof.ravel()
+            col[repnzv] = e.ravel() #repdof.ravel()
             row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
             val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
             if G:
@@ -1393,8 +1409,8 @@ class Mesh:
         if type(n) is not int:
             n = int(n)
         self.wdetJ = np.array([])
-        col = np.array([])
-        row = np.array([])
+        col = np.array([], dtype=int)
+        row = np.array([], dtype=int)
         val = np.array([])
         if G: # compute also the shape function gradients
             valx = np.array([])
@@ -1412,18 +1428,18 @@ class Mesh:
             npg += len(wdetJj)
         self.npg = len(self.wdetJ)
         self.phix = sp.sparse.csr_matrix(
-            (val, (row, col)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
         self.phiy = sp.sparse.csr_matrix(
-            (val, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         if G:
             self.dphixdx = sp.sparse.csr_matrix(
-                (valx, (row, col)), shape=(self.npg, self.ndof))
+                (valx, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
             self.dphixdy = sp.sparse.csr_matrix(
-                (valy, (row, col)), shape=(self.npg, self.ndof))
+                (valy, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
             self.dphiydx = sp.sparse.csr_matrix(
-                (valx, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
+                (valx, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
             self.dphiydy = sp.sparse.csr_matrix(
-                (valy, (row, col + self.ndof // 2)), shape=(self.npg, self.ndof))
+                (valy, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         rep, = np.where(self.conn[:, 0] >= 0)
         qx = np.zeros(self.ndof)
         qx[self.conn[rep, :]] = self.n[rep, :]
@@ -1460,7 +1476,7 @@ class Mesh:
             valx = []
             valy = []
             valz = []
-        repdof = self.conn[e, 0]
+        #repdof = self.conn[e, 0]
         xn = self.n[e, 0]
         yn = self.n[e, 1]
         zn = self.n[e, 2]
@@ -1479,7 +1495,8 @@ class Mesh:
                  - dxdr * dzds * dydt - dydr * dxds * dzdt
             wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
             repnzv = np.arange(ne * nfun) + i * ne * nfun
-            col[repnzv] = repdof.ravel()
+            col[repnzv] = e.ravel()
+            #col[repnzv] = repdof.ravel()
             row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
             val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
             if G:
@@ -1506,8 +1523,8 @@ class Mesh:
             n = int(n)
         print('Nb quadrature in each direction = %d' % n)
         self.wdetJ = np.array([])
-        col = np.array([])
-        row = np.array([])
+        col = np.array([], dtype=int)
+        row = np.array([], dtype=int)
         val = np.array([])
         if G: # compute also the shape function gradients
             valx = np.array([])
@@ -1527,32 +1544,32 @@ class Mesh:
             npg += len(wdetJj)
         self.npg = len(self.wdetJ)
         self.phix = sp.sparse.csr_matrix(
-            (val, (row, col + 0 * self.ndof // 3)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col,0])), shape=(self.npg, self.ndof))
         self.phiy = sp.sparse.csr_matrix(
-            (val, (row, col + 1 * self.ndof // 3)), shape=(self.npg, self.ndof))
+            (val, (row, self.conn[col,1])), shape=(self.npg, self.ndof))
         self.phiz = sp.sparse.csr_matrix(
-           ( val, (row, col + 2 * self.ndof // 3)), shape=(self.npg, self.ndof)) 
+            (val, (row, self.conn[col,2])), shape=(self.npg, self.ndof)) 
         if G:
             self.dphixdx = sp.sparse.csr_matrix(
-                (valx, (row, col)), shape=(self.npg, self.ndof))
+                (valx, (row, self.conn[col,0])), shape=(self.npg, self.ndof))
             self.dphixdy = sp.sparse.csr_matrix(
-                (valy, (row, col)), shape=(self.npg, self.ndof))
+                (valy, (row, self.conn[col,0])), shape=(self.npg, self.ndof))
             self.dphixdz = sp.sparse.csr_matrix(
-                (valz, (row, col)), shape=(self.npg, self.ndof))
+                (valz, (row, self.conn[col,0])), shape=(self.npg, self.ndof))
             
             self.dphiydx = sp.sparse.csr_matrix(
-                (valx, (row, col + self.ndof // 3)), shape=(self.npg, self.ndof))
+                (valx, (row, self.conn[col,1])), shape=(self.npg, self.ndof))
             self.dphiydy = sp.sparse.csr_matrix(
-                (valy, (row, col + self.ndof // 3)), shape=(self.npg, self.ndof))
+                (valy, (row, self.conn[col,1])), shape=(self.npg, self.ndof))
             self.dphiydz = sp.sparse.csr_matrix(
-                (valz, (row, col + self.ndof // 3)), shape=(self.npg, self.ndof))
+                (valz, (row, self.conn[col,1])), shape=(self.npg, self.ndof))
             
             self.dphizdx = sp.sparse.csr_matrix(
-                (valx, (row, col + 2*self.ndof // 3)), shape=(self.npg, self.ndof)) 
+                (valx, (row, self.conn[col,2])), shape=(self.npg, self.ndof)) 
             self.dphizdy = sp.sparse.csr_matrix(
-                (valy, (row, col + 2*self.ndof // 3)), shape=(self.npg, self.ndof)) 
+                (valy, (row, self.conn[col,2])), shape=(self.npg, self.ndof)) 
             self.dphizdz = sp.sparse.csr_matrix(
-                (valz, (row, col + 2*self.ndof // 3)), shape=(self.npg, self.ndof))     
+                (valz, (row, self.conn[col,2])), shape=(self.npg, self.ndof))     
         rep, = np.where(self.conn[:, 0] >= 0)
         qx = np.zeros(self.ndof)
         qx[self.conn[rep, :]] = self.n[rep, :]
@@ -1577,7 +1594,7 @@ class Mesh:
             val = np.zeros(nzv)
             valx = np.zeros(nzv)
             valy = np.zeros(nzv)
-            repdof = self.conn[e, 0]
+            # repdof = self.conn[e, 0]
             xn = self.n[e, 0]
             yn = self.n[e, 1]
             v = np.hstack((np.diff(xn), np.diff(yn)))
@@ -1592,7 +1609,7 @@ class Mesh:
                 dphidx = (c/detJ)[np.newaxis].T * dN_xi[i,:]
                 dphidy = (s/detJ)[np.newaxis].T * dN_xi[i,:]
                 repnzv = np.arange(ne * nfun) + i * ne * nfun
-                col[repnzv] = repdof.ravel()
+                col[repnzv] = e.ravel() # repdof.ravel()
                 row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
                 val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
                 valx[repnzv] = dphidx.ravel()
@@ -1614,7 +1631,7 @@ class Mesh:
             val = np.zeros(nzv)
             valx = np.zeros(nzv)
             valy = np.zeros(nzv)
-            repdof = self.conn[e, 0]
+            # repdof = self.conn[e, 0]
             xn = self.n[e, 0]
             yn = self.n[e, 1]
             for i in range(len(xg)):
@@ -1629,7 +1646,7 @@ class Mesh:
                 dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi[i, :] + (dxdr / detJ)[
                     :, np.newaxis] * dN_eta[i, :]
                 repnzv = np.arange(ne * nfun) + i * ne * nfun
-                col[repnzv] = repdof.ravel()
+                col[repnzv] = e.ravel() # repdof.ravel()
                 row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
                 val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
                 valx[repnzv] = dphidx.ravel()
@@ -1653,7 +1670,7 @@ class Mesh:
             valx = np.zeros(nzv)
             valy = np.zeros(nzv)
             valz = np.zeros(nzv)
-            repdof = self.conn[e, 0]
+            # repdof = self.conn[e, 0]
             xn = self.n[e, 0]
             yn = self.n[e, 1]
             zn = self.n[e, 2]
@@ -1681,7 +1698,7 @@ class Mesh:
                         ((dxdr*dyds - dydr*dxds)/detJ)[:,np.newaxis]*dN_zeta[i, :]
                 wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
                 repnzv = np.arange(ne * nfun) + i * ne * nfun
-                col[repnzv] = repdof.ravel()
+                col[repnzv] = e.ravel() # repdof.ravel()
                 row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
                 val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
                 valx[repnzv] = dphidx.ravel()
@@ -1694,8 +1711,8 @@ class Mesh:
         print('Gauss Integration.')
         if self.dim == 3:
             self.wdetJ = np.array([])
-            col = np.array([])
-            row = np.array([])
+            col = np.array([], dtype=int)
+            row = np.array([], dtype=int)
             val = np.array([])
             valx = np.array([])
             valy = np.array([])
@@ -1712,9 +1729,9 @@ class Mesh:
                 self.wdetJ = np.append(self.wdetJ, wdetJj)
                 npg += len(wdetJj)
             self.npg = len(self.wdetJ)
-            colx = col + 0 * self.ndof // self.dim
-            coly = col + 1 * self.ndof // self.dim
-            colz = col + 2 * self.ndof // self.dim
+            colx = self.conn[col, 0]
+            coly = self.conn[col, 1]
+            colz = self.conn[col, 2]
             # shape funs
             self.phix = sp.sparse.csr_matrix(
                 (val, (row, colx)), shape=(self.npg, self.ndof))
@@ -1752,8 +1769,8 @@ class Mesh:
             self.pgz = self.phiz.dot(qx)
         else: # dim 2
             self.wdetJ = np.array([])
-            col = np.array([])
-            row = np.array([])
+            col = np.array([], dtype=int)
+            row = np.array([], dtype=int)
             val = np.array([])
             valx = np.array([])
             valy = np.array([])
@@ -1768,8 +1785,8 @@ class Mesh:
                 self.wdetJ = np.append(self.wdetJ, wdetJj)
                 npg += len(wdetJj)
             self.npg = len(self.wdetJ)
-            colx = col + 0 * self.ndof // self.dim
-            coly = col + 1 * self.ndof // self.dim
+            colx = self.conn[col, 0]
+            coly = self.conn[col, 1]
             self.phix = sp.sparse.csr_matrix(
                 (val, (row, colx)), shape=(self.npg, self.ndof))
             self.phiy = sp.sparse.csr_matrix(
@@ -1887,8 +1904,8 @@ class Mesh:
           liste=np.array([[0, 1, 1(, 1)],
                           [1, 2, 0(, 1)]])"""
         nzv = np.sum(liste[:, -dim:], dtype=int) * 4
-        row = np.zeros(nzv)
-        col = np.zeros(nzv)
+        row = np.zeros(nzv, dtype=int)
+        col = np.zeros(nzv, dtype=int)
         val = np.zeros(nzv)
         nzv = 0
         for ei in liste:
@@ -2008,24 +2025,18 @@ class Mesh:
         mesh.cell_data = {}
         new_u = self.DOF2Nodes(U, fillzero=True)
         if self.dim == 2:
-            Ex, Ey, Exy = self.StrainAtNodes(U)
-            new_e = np.c_[Ex[self.conn[:, 0]], 
-                          Ey[self.conn[:, 0]],
-                          Exy[self.conn[:, 0]]]
+            ES, EN = self.StrainAtNodes(U)
+            Ex = ES[:,0]
+            Ey = ES[:,1]
+            Exy = EN[:,0]
+            new_e = np.c_[Ex, Ey, Exy]
             C = (Ex + Ey) / 2
             R = np.sqrt((Ex - C) ** 2 + Exy ** 2)
-            EP = np.sort(np.c_[C + R, C - R], axis=1)
-            new_ep = np.c_[EP[self.conn[:, 0], 0], 
-                           EP[self.conn[:, 0], 1]]
+            new_ep = np.sort(np.c_[C + R, C - R], axis=1)
             mesh.point_data = {'U': new_u, 'strain': new_e, 'pcp_strain': new_ep}
         else:
-            Ex, Ey, Ez, Exy, Exz, Eyz = self.StrainAtNodes(U)
-            new_e = np.c_[Ex[self.conn[:, 0]], 
-                          Ey[self.conn[:, 0]],
-                          Ez[self.conn[:, 0]],
-                          Exy[self.conn[:, 0]],
-                          Exz[self.conn[:, 0]],
-                          Eyz[self.conn[:, 0]]]
+            EN, ES = self.StrainAtNodes(U)
+            new_e = np.c_[EN, ES]
             mesh.point_data = {'U': new_u, 'strain': new_e}
         # write
         dir0, filename = os.path.split(filename)
@@ -2048,7 +2059,6 @@ class Mesh:
         return epsx, epsy, epsxy
 
     def StrainAtNodes(self, U):
-        nnodes = self.ndof // self.dim
         if not hasattr(self, "dphixdx"):
             m = self.Copy()
             m.GaussIntegration()
@@ -2058,16 +2068,14 @@ class Mesh:
             exxgp = m.dphixdx @ U
             eyygp = m.dphiydy @ U
             exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
-            EpsXX = np.zeros(nnodes)
-            EpsYY = np.zeros(nnodes)
-            EpsXY = np.zeros(nnodes)
-            phi = m.phix[:,:nnodes]
-            w = np.array(np.sum(phi, axis=0))[0]
-            phi = phi @ sp.sparse.diags(1/w)
-            EpsXX = phi.T @ exxgp
-            EpsYY = phi.T @ eyygp
-            EpsXY = phi.T @ exygp
-            return EpsXX, EpsYY, EpsXY
+            wx = np.sum(m.phix, axis=0).A[0] + 1e-12
+            wy = np.sum(m.phiy, axis=0).A[0] + 1e-12
+            EpsN = sp.sparse.diags(1/wx) @ m.phix.T @ exxgp +\
+                   sp.sparse.diags(1/wy) @ m.phiy.T @ eyygp
+            EpsS = sp.sparse.diags(1/wx) @ m.phix.T @ exygp
+            EpsN = self.DOF2Nodes(EpsN)
+            EpsS = self.DOF2Nodes(EpsS)
+            return EpsN, EpsS
         else: #dim 3
             exxgp = m.dphixdx @ U
             eyygp = m.dphiydy @ U
@@ -2075,22 +2083,18 @@ class Mesh:
             exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
             exzgp = 0.5 * m.dphixdz @ U + 0.5 * m.dphizdx @ U
             eyzgp = 0.5 * m.dphiydz @ U + 0.5 * m.dphizdy @ U
-            EpsXX = np.zeros(nnodes)
-            EpsYY = np.zeros(nnodes)
-            EpsZZ = np.zeros(nnodes)
-            EpsXY = np.zeros(nnodes)
-            EpsXZ = np.zeros(nnodes)
-            EpsYZ = np.zeros(nnodes)
-            phi = m.phix[:,:nnodes]
-            w = np.array(np.sum(phi, axis=0))[0]
-            phi = phi @ sp.sparse.diags(1/w)
-            EpsXX = phi.T @ exxgp
-            EpsYY = phi.T @ eyygp
-            EpsZZ = phi.T @ ezzgp
-            EpsXY = phi.T @ exygp
-            EpsXZ = phi.T @ exzgp
-            EpsYZ = phi.T @ eyzgp
-            return EpsXX, EpsYY, EpsZZ, EpsXY, EpsXZ, EpsYZ
+            wx = np.sum(m.phix, axis=0).A[0] + 1e-12
+            wy = np.sum(m.phiy, axis=0).A[0] + 1e-12
+            wz = np.sum(m.phiz, axis=0).A[0] + 1e-12
+            EpsN = sp.sparse.diags(1/wx) @ m.phix.T @ exxgp +\
+                   sp.sparse.diags(1/wy) @ m.phiy.T @ eyygp +\
+                   sp.sparse.diags(1/wz) @ m.phiz.T @ ezzgp
+            EpsS = sp.sparse.diags(1/wx) @ m.phix.T @ exygp +\
+                   sp.sparse.diags(1/wy) @ m.phiy.T @ exzgp +\
+                   sp.sparse.diags(1/wz) @ m.phiz.T @ eyzgp
+            EpsN = self.DOF2Nodes(EpsN)
+            EpsS = self.DOF2Nodes(EpsS)
+            return EpsN, EpsS
             
 
     def VTKIntegrationPoints(self, cam, f, g, U, filename="IntPts", iscale=2):
@@ -2468,7 +2472,10 @@ class Mesh:
                 )
             elif ie == 2 or ie == 9:  # triangles
                 triangles = np.vstack((triangles, self.e[ie]))
-        EX, EY, EXY = self.StrainAtNodes(U)
+        EN, ES = self.StrainAtNodes(U)
+        EX = EN[:, 0]
+        EY = EN[:, 1]
+        EXY = ES[:,0]
         alpha = kwargs.pop("alpha", 1)
         if stype == 'pcp':
             E1 = 0.5*EX + 0.5*EY - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
@@ -2495,7 +2502,7 @@ class Mesh:
             E1[rep] = E2[rep]
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
@@ -2505,7 +2512,7 @@ class Mesh:
             EVM = np.sqrt(EX**2 + EY**2 + EX * EY + 3 * EXY**2)
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
@@ -2514,21 +2521,21 @@ class Mesh:
         else:
             """ Plot mesh and field contour """
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EX[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EX, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
             plt.title("EPS_X")
             plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EY[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EY, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
             plt.title("EPS_Y")
             plt.axis("off")
             plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
             plt.title("EPS_XY")
@@ -2577,7 +2584,10 @@ class Mesh:
                 )
             elif ie == 2 or ie == 9:  # triangles
                 triangles = np.vstack((triangles, self.e[ie]))
-        EX, EY, EXY = self.StrainAtNodes(U)
+        EN, ES = self.StrainAtNodes(U)
+        EX = EN[:, 0]
+        EY = EN[:, 1]
+        EXY = ES[:,0]
         SX = EX * hooke[0 ,0] + EY * hooke[0 ,1] + 2 * EXY * hooke[0 ,2] 
         SY = EX * hooke[1 ,0] + EY * hooke[1 ,1] + 2 * EXY * hooke[1 ,2] 
         SXY = EX * hooke[2 ,0] + EY * hooke[2 ,1] + 2 * EXY * hooke[2 ,2] 
@@ -2586,14 +2596,14 @@ class Mesh:
             E1 = 0.5*SX + 0.5*SY - 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
             E2 = 0.5*SX + 0.5*SY + 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
             plt.title("EPS_1")
             plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
@@ -2607,7 +2617,7 @@ class Mesh:
             E1[rep] = E2[rep]
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
@@ -2617,7 +2627,7 @@ class Mesh:
             EVM = np.sqrt(SX**2 + SY**2 + SX * SY + 3 * SXY**2)
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
@@ -2626,21 +2636,21 @@ class Mesh:
         else:
             """ Plot mesh and field contour """
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, SX[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, SX, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
             plt.title("EPS_X")
             plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, SY[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, SY, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
             plt.title("EPS_Y")
             plt.axis("off")
             plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, SXY[self.conn[:, 0]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, SXY, 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
             plt.title("EPS_XY")
