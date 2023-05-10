@@ -441,7 +441,9 @@ def MeshFromLS(ls, lc):
     # lc approximate element size
     lsc = np.zeros(len(ls), dtype=int)
     for i in range(len(ls)):
-        lsc[i] = lsio(ls[i])    
+        lsc[i] = lsio(ls[i])
+    if np.max(lsc) == 0:
+        raise Exception('in pyxel::MeshFromLS, Only counterclockwise list of segments, use flipud')
     white, = np.where(lsc==0)
     black, = np.where(lsc)
     connect = -np.ones(len(ls))
@@ -473,7 +475,7 @@ def MeshFromLS(ls, lc):
                 cvl = np.append(cvl ,-curvedloop[j])
             gmsh.model.geo.addCurveLoop(cvl, ncl)
             gmsh.model.geo.addPlaneSurface([ncl], ncl)
-            ncl += 1    
+            ncl += 1
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(2)
     gmsh.write('tmp.msh')
@@ -523,3 +525,10 @@ def MeshFromImage(fpix, h, appls=None):
     p = np.array([1, 0., 0., 0])
     cam = Camera(p)
     return m, cam
+
+xi = np.arange(-50,51)
+X, Y = np.meshgrid(xi, xi)
+Z = np.sqrt(X**2+Y**2)
+fpix = Z<20
+
+plt.imshow(fpix)
