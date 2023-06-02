@@ -1231,6 +1231,7 @@ class Mesh:
             for je in range(len(self.e[et])):
                 elem[ne] = Elem()
                 elem[ne].repx = self.e[et][je] #repdof[je]
+                #elem[ne].repx = self.e[et] #repdof[je]
                 rx = np.arange(
                     np.floor(min(u[je])), np.ceil(max(u[je])) + 1
                 ).astype("int")

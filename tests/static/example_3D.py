@@ -15,9 +15,9 @@ import scipy.sparse.linalg as splalg
 eltype = 'hex8'   # linear hexaedra
 # or
 eltype = 'hex20'  # quadratic hexaedra
-# # or
+# or
 eltype = 'tet4'   # linear tetraedra
-# # or
+# or
 eltype = 'tet10'  # quadratic tetraedra
 
 fn = os.path.join(eltype+'.msh')
