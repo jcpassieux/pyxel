@@ -23,6 +23,8 @@ from .utils import meshgrid, isInBox
 from .vtktools import PVDFile
 import meshio
 
+
+#%%
 def ElTypes():
     """
     Returns a dictionnary of GMSH element types which some of them are used in the library.
@@ -343,7 +345,16 @@ def SubTriGmsh(n):
     gmsh.finalize()
     return c[:,0], c[:,1], a
 
+#%%
 
+def AddChildElem(child_list, new_child, sorted_child_list):
+    sorted_new_child = tuple(np.sort(new_child))
+    if sorted_new_child in child_list.keys():
+        child_list[sorted_new_child] += 1
+    else:
+        child_list[sorted_new_child] = 1
+        sorted_child_list[sorted_new_child] = new_child
+    return child_list, sorted_child_list
     
 #%%
 def ShapeFunctions(eltype):
@@ -438,9 +449,14 @@ def ShapeFunctions(eltype):
             return 0.25 * np.concatenate(
                 (x - 1, -1 - x, 1 + x, 1 - x)).reshape((4,len(x))).T 
 
-        xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1])
-        yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1])
-        wg = np.ones(4)
+        # reduced integration
+        xg = np.array([0])
+        yg = np.array([0])
+        wg = np.array([4])
+        # full integration        
+        # xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1])
+        # yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1])
+        # wg = np.ones(4)
         return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 9:
         """
@@ -982,8 +998,9 @@ class Mesh:
             displacement DOF vector:
             Udof=[u1, u2, ..., uN, v1, v2, ... vN]
         """
+        used_nodes = np.where(self.conn[:,0]>-1)
         Udof = np.zeros(self.ndof)
-        Udof[self.conn] = Unodes[:,:self.dim]
+        Udof[self.conn[used_nodes]] = Unodes[used_nodes,:self.dim]
         return Udof
     
     def DICIntegration(self, cam, G=False, EB=False, tri_same=False):
@@ -1213,14 +1230,15 @@ class Mesh:
             _, _, _, N, _, _ = ShapeFunctions(et)
             for je in range(len(self.e[et])):
                 elem[ne] = Elem()
-                elem[ne].repx = self.e[et] #repdof[je]
+                elem[ne].repx = self.e[et][je] #repdof[je]
+                #elem[ne].repx = self.e[et] #repdof[je]
                 rx = np.arange(
                     np.floor(min(u[je])), np.ceil(max(u[je])) + 1
                 ).astype("int")
                 ry = np.arange(
                     np.floor(min(v[je])), np.ceil(max(v[je])) + 1
                 ).astype("int")
-                [ypix, xpix] = meshgrid(ry, rx)
+                [ypix, xpix] = np.meshgrid(ry, rx)
                 [xg, yg, elem[ne].pgx, elem[ne].pgy] = GetPixelsElem(
                     u[je], v[je], xpix.ravel(), ypix.ravel(), et
                 )
@@ -1261,7 +1279,7 @@ class Mesh:
         val = np.zeros(nzv)
         nzv = 0
         for je in range(len(elem)):
-            [repj, repi] = meshgrid(elem[je].repx, elem[je].repg)
+            [repj, repi] = np.meshgrid(elem[je].repx, elem[je].repg)
             rangephi = nzv + np.arange(np.prod(elem[je].phi.shape))
             row[rangephi] = repi.ravel()
             col[rangephi] = repj.ravel()
@@ -2095,7 +2113,6 @@ class Mesh:
             EpsN = self.DOF2Nodes(EpsN)
             EpsS = self.DOF2Nodes(EpsS)
             return EpsN, EpsS
-            
 
     def VTKIntegrationPoints(self, cam, f, g, U, filename="IntPts", iscale=2):
         """
@@ -2164,7 +2181,7 @@ class Mesh:
         Prepare the matplotlib collections for a plot
         """
         edgecolor = kwargs.pop("edgecolor", "k")
-        facecolor = kwargs.pop("facecolor", 'none')
+        facecolor = kwargs.pop("facecolor", "w")
         alpha = kwargs.pop("alpha", 0.8)
         """ Plot deformed or undeformes Mesh """
         if n is None:
@@ -2188,16 +2205,14 @@ class Mesh:
                 bar = np.vstack((bar, self.e[ie][:, :2]))
                 if ie == 8:
                     pn = np.append(pn, self.e[ie].ravel())
-
         ### Join the 2 lists of vertices
-        nn = n[qua].tolist() + n[tri].tolist() + n[bar].tolist()
+        nn = tuple(n[qua]) + tuple(n[tri]) + tuple(n[bar])
         ### Create the collection
         pn = np.unique(pn)
         n = n[pn,:]
         if self.dim == 3: # 3D collection
-            pc = art3d.Poly3DCollection(nn)
-            pc.set_color(facecolor)
-            pc.set_edgecolor(edgecolor)
+            pc = art3d.Poly3DCollection(nn, facecolors=facecolor, edgecolor=edgecolor,
+                             alpha=alpha)
         else: # 2D collection
             pc = cols.PolyCollection(nn, facecolor=facecolor, edgecolor=edgecolor, 
                              alpha=alpha, **kwargs)
@@ -2224,44 +2239,56 @@ class Mesh:
             Supports other Matplotlib arguments:
             m.Plot(U, edgecolor='r', facecolor='b', alpha=0.2)
         """
-        if self.dim == 2:
-            ax = plt.gca()
-        else:
-            ax = Axes3D(plt.figure())
-        pc, nn, n = self.PreparePlot(U, coef, n, **kwargs)
-        if self.dim == 2:
-            ax.add_collection(pc)
-        else:
-            ax.add_collection3d(pc)
-        ax.autoscale()
+        # if Volumetric mesh > build surface mesh and plot it
+        alpha = kwargs.pop("alpha", 1)
         edgecolor = kwargs.pop("edgecolor", "k")
-        alpha = kwargs.pop("alpha", 0.8)
-        if self.dim == 2:
-            plt.axis('equal')
-            if plotnodes:
-                plt.plot(
-                    n[:, 0],
-                    n[:, 1],
-                    linestyle="None",
-                    marker="o",
-                    color=edgecolor,
-                    alpha=alpha,
-                )
-        else:
-            n = np.vstack(nn)
-            X = n[:,0]
-            Y = n[:,1]
-            Z = n[:,2]
-            max_range = np.array([X.max()-X.min(), Y.max()-Y.min(), Z.max()-Z.min()]).max() / 2.0
-            mid_x = (X.max()+X.min()) * 0.5
-            mid_y = (Y.max()+Y.min()) * 0.5
-            mid_z = (Z.max()+Z.min()) * 0.5
-            ax.set_xlim(mid_x - max_range, mid_x + max_range)
-            ax.set_ylim(mid_y - max_range, mid_y + max_range)
-            ax.set_zlim(mid_z - max_range, mid_z + max_range)
-            ax.set_xlim(mid_x - max_range, mid_x + max_range)
-            ax.set_ylim(mid_y - max_range, mid_y + max_range)
-        plt.show()
+        if list(self.e.keys())[0] in [5, 4, 11, 17]:
+            mb = self.BuildBoundaryMesh()
+            mb.conn = self.conn
+            facecolor = kwargs.pop("facecolor", "w")
+            mb.Plot(U, coef, n, plotnodes, alpha=alpha, edgecolor=edgecolor, 
+                    facecolor=facecolor, **kwargs)            
+        else: # otherwise
+            if self.dim == 2:
+                facecolor = kwargs.pop("facecolor", "None")
+                ax = plt.gca()
+            else:
+                facecolor = kwargs.pop("facecolor", "w")
+                ax = Axes3D(plt.figure())
+                # ax = plt.figure().add_subplot(projection='3d')
+            pc, nn, n = self.PreparePlot(U, coef, n, alpha=alpha, edgecolor=edgecolor, facecolor=facecolor, **kwargs)
+
+            if self.dim == 2:
+                ax.add_collection(pc)
+            else:
+                ax.add_collection3d(pc)
+            ax.autoscale()
+            if self.dim == 2:
+                plt.axis('equal')
+                if plotnodes:
+                    plt.plot(
+                        n[:, 0],
+                        n[:, 1],
+                        linestyle="None",
+                        marker="o",
+                        color=edgecolor,
+                        alpha=alpha,
+                    )
+            else:
+                n = np.vstack(nn)
+                X = n[:,0]
+                Y = n[:,1]
+                Z = n[:,2]
+                max_range = np.array([X.max()-X.min(), Y.max()-Y.min(), Z.max()-Z.min()]).max() / 2.0
+                mid_x = (X.max()+X.min()) * 0.5
+                mid_y = (Y.max()+Y.min()) * 0.5
+                mid_z = (Z.max()+Z.min()) * 0.5
+                ax.set_xlim(mid_x - max_range, mid_x + max_range)
+                ax.set_ylim(mid_y - max_range, mid_y + max_range)
+                ax.set_zlim(mid_z - max_range, mid_z + max_range)
+                ax.set_xlim(mid_x - max_range, mid_x + max_range)
+                ax.set_ylim(mid_y - max_range, mid_y + max_range)
+            plt.show()
 
     def AnimatedPlot(self, U, coef=1, n=None, timeAnim=5, color=('k','b','r','g','c')):
         """
@@ -2658,15 +2685,17 @@ class Mesh:
             plt.colorbar()
             plt.show()
 
-    def PlotNodeLabels(self, d=0, **kwargs):
+    def PlotNodeLabels(self, d=[0, 0], **kwargs):
         """
         Plots the mesh with the node labels (may be slow for large mesh size).
         """
+        if type(d) is float:
+            d = [0.707*d, 0.707*d]
         self.Plot(**kwargs)
         color = kwargs.get("edgecolor", "k")
         plt.plot(self.n[:, 0], self.n[:, 1], ".", color=color)
         for i in range(len(self.n[:, 1])):
-            plt.text(self.n[i, 0] + d, self.n[i, 1], str(i), color=color)
+            plt.text(self.n[i, 0] + d[0], self.n[i, 1] + d[1], str(i), color=color)
 
     def PlotElemLabels(self, **kwargs):
         """
@@ -2832,12 +2861,16 @@ class Mesh:
     
     def BuildBoundaryMesh(self):
         """
-        Builds edge elements corresponding to the edges of 2d Mesh m.
+        Builds edge elements corresponding to the edges of 2d Mesh m and Tet in 3d.
         """
-        edgel = {} #lin
-        edgeq = {} #qua
+        edgel = {} #edge lin
+        edgeq = {} #edge qua
+        tril = {} #tri face lin
+        tril_sort = {}
+        qual = {} #qua face lin
+        qual_sort = {}
         for je in self.e.keys():
-            if je in [9, 16, 10]: # quadratic
+            if je in [9, 16, 10]: # quadratic 2d
                 if je in [16, 10]: # qua8 et qua9
                     n1 = self.e[je][:,:4].ravel()
                     n2 = np.c_[self.e[je][:, 1:4], self.e[je][:, 0]].ravel()
@@ -2853,7 +2886,7 @@ class Mesh:
                         edgeq[tedge] += 1
                     else:
                         edgeq[tedge] = 1
-            else: #linear
+            elif je in [2, 3] : # linear 2d
                 n1 = self.e[je].ravel()
                 n2 = np.c_[self.e[je][:, 1:], self.e[je][:, 0]].ravel()
                 a = np.sort(np.c_[n1, n2], axis=1)
@@ -2863,8 +2896,24 @@ class Mesh:
                         edgel[tedge] += 1
                     else:
                         edgel[tedge] = 1
-        # linear edges
+            elif je in [4, 11] : # tet4
+                for ie in range(len(self.e[je])):
+                    ei = self.e[je][ie, :4]
+                    tril, tril_sort = AddChildElem(tril, ei[[0,1,2]], tril_sort)
+                    tril, tril_sort = AddChildElem(tril, ei[[0,1,3]], tril_sort)
+                    tril, tril_sort = AddChildElem(tril, ei[[0,2,3]], tril_sort)
+                    tril, tril_sort = AddChildElem(tril, ei[[1,2,3]], tril_sort)
+            elif je in [5, 17] : # hex8
+                for ie in range(len(self.e[je])):
+                    ei = self.e[je][ie][:8]
+                    qual, qual_sort = AddChildElem(qual, ei[[0,1,2,3]], qual_sort)
+                    qual, qual_sort = AddChildElem(qual, ei[[4,5,6,7]], qual_sort)
+                    qual, qual_sort = AddChildElem(qual, ei[[0,1,5,4]], qual_sort)
+                    qual, qual_sort = AddChildElem(qual, ei[[1,2,6,5]], qual_sort)
+                    qual, qual_sort = AddChildElem(qual, ei[[2,3,7,6]], qual_sort)
+                    qual, qual_sort = AddChildElem(qual, ei[[0,3,7,4]], qual_sort)
         elems = dict()
+        # linear edges
         if len(edgel):
             (rep,) = np.where(np.array(list(edgel.values())) == 1)
             edgel = np.array(list(edgel.keys()))[rep, :]
@@ -2874,7 +2923,17 @@ class Mesh:
             (rep,) = np.where(np.array(list(edgeq.values())) == 1)
             edgeq = np.array(list(edgeq.keys()))[rep, :]
             elems[8] = edgeq
-        edgem = Mesh(elems, self.n)
+        # tri faces
+        if len(tril):
+            (rep,) = np.where(np.array(list(tril.values())) == 1)
+            tril = np.array(list(tril_sort.values()))[rep, :]
+            elems[2] = tril
+        # qua faces
+        if len(qual):
+            (rep,) = np.where(np.array(list(qual.values())) == 1)
+            qual = np.array(list(qual_sort.values()))[rep, :]
+            elems[3] = qual
+        edgem = Mesh(elems, self.n, self.dim)
         return edgem
 
     def SelectPoints(self, n=-1, title=None):
@@ -2884,7 +2943,12 @@ class Mesh:
         plt.figure()
         self.Plot()
         figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        if hasattr(figManager.window, 'showMaximized'):
+            figManager.window.showMaximized()
+        else:
+            if hasattr(figManager.window, 'maxsize'):
+                figManager.resize(figManager.window.maxsize())
+
         if title is None:
             if n < 0:
                 plt.title("Select several points... and press enter")

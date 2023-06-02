@@ -10,7 +10,6 @@ import numpy as np
 import pyxel as px
 import scipy.sparse.linalg as splalg
 
-
 #%% Testcase with 3D solid elements
 
 eltype = 'hex8'   # linear hexaedra
@@ -25,6 +24,8 @@ fn = os.path.join(eltype+'.msh')
 
 m = px.ReadMesh(fn, 3)
 m.KeepVolElems()
+# m.KeepSurfElems()
+m.Plot()
 
 # m.Write('Mesh.vtu')
 m.Connectivity()
@@ -38,7 +39,7 @@ repu = m.conn[repu, :]
 
 # Dirichlet BC at y = 0.035 second dof only
 repf, = np.where(m.n[:,1] > 0.03499)
-repf = m.conn[repf, 2]
+repf = m.conn[repf, 1]
 
 U = np.zeros(m.ndof)
 U[repf] = 0.001
@@ -53,6 +54,7 @@ U[rep] = KLU.solve(F[rep])
 
 m.VTKSol('Sol3D_'+eltype, U)
 
+m.Plot(U, 10)
 
 #%% Generating hex8 and hex20 (second order incomplete) mesh with GMSH
 import gmsh

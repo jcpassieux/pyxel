@@ -417,8 +417,6 @@ def MeshFromROI(roi, dx, typel=3):
         The Region of Interest made using  f.SelectROI(), f being a pyxel.Image
     dx : numpy or python array
         dx  = [dx, dy]: average element size (can be scalar) in pixels
-    f : pyxel.Image
-        The image on which is defined the region of interest
     typel : int
         type of element: {3: 'qua4',2: 'tri3',9: 'tri6',16: 'qua8',10: 'qua9'}
 
@@ -433,7 +431,7 @@ def MeshFromROI(roi, dx, typel=3):
     -------
     f.SelectROI()  -> select the region with rectangle selector
                       and copy - paste the roi in the python terminal
-    m, cam = px.MeshFromROI(roi, [20, 20], f)
+    m, cam = px.MeshFromROI(roi, [20, 20], 3)
     """
     if typel in [4, 5]: #volume elements
         if typel == 4:
@@ -635,7 +633,8 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         if len(f.pix.shape) == 3:
             m2.DVCIntegration(aes // (2**iscale))
         else:
-            m2.DICIntegrationFast(aes // (2**iscale))
+            aes2 = max(aes // (2**iscale), 2)
+            m2.DICIntegrationFast(aes2)
         # m2.DICIntegration(cam2)
         # plt.figure()
         # g.Plot()

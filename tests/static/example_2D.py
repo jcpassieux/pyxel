@@ -53,7 +53,8 @@ U[rep] = KLU.solve(F[rep])
 
 m.VTKSol('Sol2D_'+test, U)
 
-
+m.Plot(U, 10)
+m.PlotContourStrain(U)
 
 #%% Generating 2D meshes with GMSH
 import gmsh

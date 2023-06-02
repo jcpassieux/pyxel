@@ -33,6 +33,8 @@ f.VTKImage('RefVol')
 cpos = np.array([50, 155, 153])
 m = px.TetraMeshCylinder(cpos[0], cpos[1], cpos[2], 110, 300, 15)
 m.n -= cpos[np.newaxis]
+m.Plot()
+
 m.Write('mesh.vtk')
 cam = px.CameraVol([1, cpos[0], cpos[1], cpos[2], 0, -np.pi/2, 0])
 px.PlotMeshImage3d(f, m, cam)

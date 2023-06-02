@@ -436,7 +436,7 @@ def RayCasting(lsi, p):
 
 #%% bulk meshing from polygon
 
-def MeshFromLS(ls, lc):
+def MeshFromLS(ls, lc, typel='tri'):
     # ls list of segments
     # lc approximate element size
     lsc = np.zeros(len(ls), dtype=int)
@@ -477,6 +477,9 @@ def MeshFromLS(ls, lc):
             gmsh.model.geo.addPlaneSurface([ncl], ncl)
             ncl += 1
     gmsh.model.geo.synchronize()
+    if typel == 'quad':
+        gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    # gmsh.fltk.run()
     gmsh.model.mesh.generate(2)
     gmsh.write('tmp.msh')
     gmsh.finalize()
@@ -490,7 +493,7 @@ def MeshFromLS(ls, lc):
         del m.e[8]  # remove quadratic segments
     return m
 
-def MeshFromImage(fpix, h, appls=None):
+def MeshFromImage(fpix, h, appls=None, typel='tri'):
     """
     Builds a mesh from a graylevel image.
 
@@ -511,13 +514,17 @@ def MeshFromImage(fpix, h, appls=None):
         mesh of the domain where f equals to 0
 
     """
+    fpix[:, 0] = 0
+    fpix[0, :] = 0
+    fpix[:,-1] = 0
+    fpix[-1,:] = 0
     pix = ((1-fpix)*255).astype('uint8')
     ls = measure.find_contours(pix, 127 ,fully_connected='low') 
     #PlotLS(ls,'r.-')
     if appls is not None:
         ls = [measure.approximate_polygon(i, appls) for i in ls]
         # PlotLS(ls,'k.-')
-    m = MeshFromLS(ls, h)
+    m = MeshFromLS(ls, h, typel)
     # p = np.array([1, 0., 0., np.pi/2])
     # a = Image('')
     # a.pix = f
@@ -526,9 +533,9 @@ def MeshFromImage(fpix, h, appls=None):
     cam = Camera(p)
     return m, cam
 
-xi = np.arange(-50,51)
-X, Y = np.meshgrid(xi, xi)
-Z = np.sqrt(X**2+Y**2)
-fpix = Z<20
+# xi = np.arange(-50,51)
+# X, Y = np.meshgrid(xi, xi)
+# Z = np.sqrt(X**2+Y**2)
+# fpix = Z<20
 
-plt.imshow(fpix)
+# plt.imshow(fpix)
