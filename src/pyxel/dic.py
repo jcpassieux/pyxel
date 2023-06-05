@@ -521,7 +521,7 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             # Tikhonov regularisation
             if L is None:
                 L = m.Tikhonov()
-            used_nodes = m.conn[:, 0] > 0
+            used_nodes = m.conn[:, 0] > -1
             T = 10 * m.GetApproxElementSize()
             V = np.zeros(m.ndof)
             V[m.conn[used_nodes, 0]] = np.cos(m.n[used_nodes, 1] / T * 2 * np.pi)

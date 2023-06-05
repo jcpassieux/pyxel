@@ -450,13 +450,13 @@ def ShapeFunctions(eltype):
                 (x - 1, -1 - x, 1 + x, 1 - x)).reshape((4,len(x))).T 
 
         # reduced integration
-        xg = np.array([0])
-        yg = np.array([0])
-        wg = np.array([4])
+        # xg = np.array([0])
+        # yg = np.array([0])
+        # wg = np.array([4])
         # full integration        
-        # xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1])
-        # yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1])
-        # wg = np.ones(4)
+        xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1])
+        yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1])
+        wg = np.ones(4)
         return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 9:
         """
@@ -2389,7 +2389,7 @@ class Mesh:
         plt.colorbar()
         plt.show()
 
-    def PlotContourDispl(self, U=None, n=None, s=1.0, stype='comp', newfig=True, **kwargs):
+    def PlotContourDispl(self, U=None, n=None, s=1.0, stype='comp', newfig=True, plotmesh=True, cmap='RdBu', **kwargs):
         """
         Plots the displacement field using Matplotlib Library.        
 
@@ -2438,22 +2438,27 @@ class Mesh:
             Vmag = np.sqrt(V[self.conn[:, 0]]**2 + V[self.conn[:, 1]]**2)
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, Vmag, 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, Vmag, 20, alpha=alpha, cmap=cmap)
             plt.colorbar()
-            self.Plot(n=n, alpha=0.1)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
+            plt.axis('equal')
             plt.axis("off")
             plt.title("Magnitude")
         else:
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 0]], 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 0]], 20, alpha=alpha, cmap=cmap)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
+            plt.axis('equal')
             plt.axis("off")
             plt.title("x")
             plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 1]], 20, alpha=alpha)
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 1]], 20, alpha=alpha, cmap=cmap)
             plt.colorbar()
-            self.Plot(n=n, alpha=0.1)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
             plt.title("y")
             plt.axis("off")
@@ -2759,10 +2764,12 @@ class Mesh:
         box = np.array([[xmin, ymin],
                         [xmax, ymax]])    in mesh unit
         """
-        dofs = np.zeros((0, 2), dtype="int")
-        for jn in range(len(self.n)):
-            if isInBox(box, self.n[jn, 0], self.n[jn, 1]):
-                dofs = np.vstack((dofs, self.conn[jn]))
+        if self.dim == 2:
+            rep, = np.where(isInBox(box, self.n[:,0], self.n[:,1]))
+        else:
+            rep, = np.where(isInBox(box, self.n[:,0], self.n[:,1], self.n[:,2]))
+        reprep, = np.where(self.conn[rep, 0]>-1)
+        dofs = self.conn[rep[reprep]]
         return dofs
 
     def KeepEdgeElems(self):
@@ -2803,19 +2810,26 @@ class Mesh:
 
         where  roi = f.SelectROI()
         """
-        if cam is None:
+        if self.dim == 3:
+            if cam is None:
+                u, v, w = self.n[:,0], self.n[:,1], self.n[:,2]
+            else:
+                u, v, w = cam.P(self.n[:,0], self.n[:,1], self.n[:,2])
             for je in self.e.keys():
-                u = np.mean(self.n[self.e[je], 0], axis=1)
-                v = np.mean(self.n[self.e[je], 1], axis=1)
-                inside = isInBox(roi, u, v)
-                self.e[je] = self.e[je][inside, :]
+                umoy = np.mean(u[self.e[je]], axis=1)
+                vmoy = np.mean(v[self.e[je]], axis=1)
+                wmoy = np.mean(w[self.e[je]], axis=1)
+                inside = isInBox(roi, umoy, vmoy, wmoy)
         else:
+            if cam is None:
+                u, v = self.n[:,0], self.n[:,1]
+            else:
+                u, v = cam.P(self.n[:,0], self.n[:,1])
             for je in self.e.keys():
-                xc = np.mean(self.n[self.e[je], 0], axis=1)
-                yc = np.mean(self.n[self.e[je], 1], axis=1)
-                u, v = cam.P(xc, yc)
-                inside = isInBox(roi, v, u)
-                self.e[je] = self.e[je][inside, :]
+                umoy = np.mean(u[self.e[je]], axis=1)
+                vmoy = np.mean(v[self.e[je]], axis=1)
+                inside = isInBox(roi, umoy, vmoy)
+        self.e[je] = self.e[je][inside, :]
 
     def RemoveDoubleNodes(self):
         """
@@ -2946,9 +2960,8 @@ class Mesh:
         if hasattr(figManager.window, 'showMaximized'):
             figManager.window.showMaximized()
         else:
-            if hasattr(figManager.window, 'maxsize'):
-                figManager.resize(figManager.window.maxsize())
-
+            if hasattr(figManager.window, 'maximize'):
+                figManager.resize(figManager.window.maximize())
         if title is None:
             if n < 0:
                 plt.title("Select several points... and press enter")
@@ -2967,7 +2980,11 @@ class Mesh:
         plt.figure()
         self.Plot()
         figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        if hasattr(figManager.window, 'showMaximized'):
+            figManager.window.showMaximized()
+        else:
+            if hasattr(figManager.window, 'maximize'):
+                figManager.resize(figManager.window.maximize())
         plt.title("Select " + str(n) + " points... and press enter")
         pts1 = np.array(plt.ginput(n, timeout=0))
         plt.close()
@@ -2990,7 +3007,11 @@ class Mesh:
         plt.figure()
         self.Plot()
         figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        if hasattr(figManager.window, 'showMaximized'):
+            figManager.window.showMaximized()
+        else:
+            if hasattr(figManager.window, 'maximize'):
+                figManager.resize(figManager.window.maximize())
         plt.title("Select 2 points... and press enter")
         pts1 = np.array(plt.ginput(2, timeout=0))
         plt.close()
@@ -3012,7 +3033,11 @@ class Mesh:
         plt.figure()
         self.Plot()
         figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        if hasattr(figManager.window, 'showMaximized'):
+            figManager.window.showMaximized()
+        else:
+            if hasattr(figManager.window, 'maximize'):
+                figManager.resize(figManager.window.maximize())
         plt.title("Select 2 points of a line... and press enter")
         pts1 = np.array(plt.ginput(2, timeout=0))
         plt.close()
@@ -3040,7 +3065,11 @@ class Mesh:
         plt.figure()
         self.Plot()
         figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        if hasattr(figManager.window, 'showMaximized'):
+            figManager.window.showMaximized()
+        else:
+            if hasattr(figManager.window, 'maximize'):
+                figManager.resize(figManager.window.maximize())
         plt.title("Select 3 points on a circle... and press enter")
         pts1 = np.array(plt.ginput(3, timeout=0))
         plt.close()
