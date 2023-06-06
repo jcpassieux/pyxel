@@ -109,10 +109,16 @@ def PlotMeshImage3d(f, m, cam=None, U=None):
         u, v, w = n[:, 0], n[:, 1], n[:, 2]
     else:
         u, v, w = cam.P(n[:, 0], n[:, 1], n[:, 2])
+    # if volume elements, build surface mesh
+    if list(m.e.keys())[0] in [5, 4, 11, 17]:
+        mb = m.BuildBoundaryMesh()
+    else:
+        mb = m.Copy()
+    mb.dim = 2
     plt.subplot(221)
-    plt.plot(w, v, "yo", alpha=0.6)
+    mb.Plot(n = np.c_[w, v], edgecolor='y', alpha=0.6)
     plt.subplot(223)
-    plt.plot(w, u, "yo", alpha=0.6)
+    mb.Plot(n = np.c_[w, u], edgecolor='y', alpha=0.6)
     plt.subplot(224)
-    plt.plot(v, u, "yo", alpha=0.6)
+    mb.Plot(n = np.c_[v, u], edgecolor='y', alpha=0.6)
 
