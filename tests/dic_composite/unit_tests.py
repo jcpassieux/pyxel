@@ -13,108 +13,139 @@ import pyxel as px
 INTERACTIVE = False
 PLOT = True
 
-#%% Test functions
+# %% Test functions
+
 
 def one_element_integration_test(m, cam):
     m.Connectivity()
     m.GaussIntegration()
     M0 = m.Mass(1).A
-    K0 = m.Stiffness(px.Hooke([11,0.33])).A
-    L0 = m.Tikhonov().A
+    K0 = m.Stiffness(px.Hooke([11, 0.33])).A
+    L0 = m.Laplacian().A
     plt.figure()
     m.Plot()
-    plt.plot(m.pgx,m.pgy,'k.')
+    plt.plot(m.pgx, m.pgy, 'k.')
     plt.title('GaussIntegration')
-    
+
     m.DICIntegration(cam, G=True)
-    M1=m.Mass(1).A
-    K1=m.Stiffness(px.Hooke([11,0.33])).A
-    L1 = m.Tikhonov().A
+    M1 = m.Mass(1).A
+    K1 = m.Stiffness(px.Hooke([11, 0.33])).A
+    L1 = m.Laplacian().A
     plt.figure()
     m.Plot()
-    plt.plot(m.pgx,m.pgy,'k.')
+    plt.plot(m.pgx, m.pgy, 'k.')
     plt.title('DICIntegration (optimised rule)')
 
     m.DICIntegrationFast(cam, G=True)
-    M3=m.Mass(1).A
-    K3=m.Stiffness(px.Hooke([11,0.33])).A
-    L3 = m.Tikhonov().A
+    M3 = m.Mass(1).A
+    K3 = m.Stiffness(px.Hooke([11, 0.33])).A
+    L3 = m.Laplacian().A
     plt.figure()
     m.Plot()
-    plt.plot(m.pgx,m.pgy,'k.')
+    plt.plot(m.pgx, m.pgy, 'k.')
     plt.title('DICIntegration (Fast rule)')
-    
+
     m.DICIntegrationPixel(cam)
-    M2=m.Mass(1).A
+    M2 = m.Mass(1).A
     plt.figure()
     m.Plot()
-    plt.plot(m.pgx,m.pgy,'k.')
+    plt.plot(m.pgx, m.pgy, 'k.')
     plt.title('Pixel Integration')
-    
-    print("MASS Gauss vs Opt %2f %%" % (np.linalg.norm(M0 - M1) / np.linalg.norm(M0) * 100, ) )
-    print("MASS Gauss vs Pixel %2f %%" % (np.linalg.norm(M2 - M0) / np.linalg.norm(M0) * 100, ) )
-    print("MASS Gauss vs Fast %2f %%" % (np.linalg.norm(M3 - M0) / np.linalg.norm(M0) * 100, ) )
-    print("STIFFNESS Gauss vs Opt %2f %%" % (np.linalg.norm(K0 - K1) / np.linalg.norm(K0) * 100, ) )
-    print("STIFFNESS Gauss vs Fast %2f %%" % (np.linalg.norm(K0 - K3) / np.linalg.norm(K0) * 100, ) )
-    print("TIKO Gauss vs Opt %2f %%" % (np.linalg.norm(L0 - L1) / np.linalg.norm(L0) * 100, ) )
-    print("TIKO Gauss vs Fast %2f %%" % (np.linalg.norm(L0 - L3) / np.linalg.norm(L0) * 100, ) )
-    
+
+    print("MASS Gauss vs Opt %2f %%" % (np.linalg.norm(np.sum(M0 - M1, axis=0))
+                                / np.linalg.norm(np.sum(M0, axis=0)) * 100, ))
+    print("MASS Gauss vs Pixel %2f %%" % (np.linalg.norm(np.sum(M0 - M2, axis=0))
+                                / np.linalg.norm(np.sum(M0, axis=0)) * 100, ))
+    print("MASS Gauss vs Fast %2f %%" % (np.linalg.norm(np.sum(M0 - M3, axis=0))
+                                / np.linalg.norm(np.sum(M0, axis=0)) * 100, ))
+    print("STIFFNESS Gauss vs Opt %2f %%" % (np.linalg.norm(K0 - K1)
+                                             / np.linalg.norm(K0) * 100, ))
+    print("STIFFNESS Gauss vs Fast %2f %%" % (np.linalg.norm(K0 - K3)
+                                              / np.linalg.norm(K0) * 100, ))
+    print("TIKO Gauss vs Opt %2f %%" % (np.linalg.norm(L0 - L1)
+                                        / np.linalg.norm(L0) * 100, ))
+    print("TIKO Gauss vs Fast %2f %%" % (np.linalg.norm(L0 - L3)
+                                         / np.linalg.norm(L0) * 100, ))
+
+
 def postpro_test(f, g, m, cam, U, res):
     if PLOT:
         plt.figure()
         m.Plot()
-        plt.plot(m.pgx,m.pgy,'k.')
+        plt.plot(m.pgx, m.pgy, 'k.')
         plt.title('Mesh and Integration Points')
-        
+
         plt.figure()
         m.Plot(edgecolor='#CCCCCC')
         m.Plot(U, 30, facecolor='r')
         px.PlotMeshImage(f, m, cam)
         px.PlotMeshImage(g, m, cam, U)
-        
+
         m.PlotContourDispl(U, s=30)
         m.PlotContourStrain(U)
         m.PlotResidualMap(res, cam, 1e5)
-    
-    m.VTKMesh('unitary_test_0')
+
+    m.Write('unitary_test_0.vtu')
     m.VTKSol('unitary_test_1', U)
-    
-#%% Standard test Q4
+
+# %% Standard test Q4
+
+
 imagefile = 'zoom-0%03d_1.tif'
 imref = imagefile % 53
 f = px.Image(imref).Load()
 imdef = imagefile % 70
 g = px.Image(imdef).Load()
-m = px.ReadMeshINP('abaqus_q4_m.inp')
-p = np.array([1.05449047e+04, 5.12335842e-02, -9.63541211e-02, -4.17489457e-03])
+m = px.ReadMesh('abaqus_q4_m.inp')
+p = np.array([1.05449047e+04, 5.12335842e-02,
+              -9.63541211e-02, -4.17489457e-03])
 cam = px.Camera(p)
-
 m.Connectivity()
-conn = np.c_[np.arange(1500),np.arange(1500) + 1500]
+conn = np.c_[np.arange(1500), np.arange(1500) + 1500]
 res, _ = np.where(m.conn != conn)
 if m.ndof != 3000 or len(res) != 0:
     print('************** PB in Connectivity')
 
 m.GaussIntegration()
-if m.npg != 5616 \
-or int(np.sum(m.wdetJ) * 1e12) != 2623910771 \
-or int(np.std(m.wdetJ) * 1e15) != 520884059:
-    print('************** PB in GaussIntegration')
+if m.npg == 5616:  # 4 gauss points
+    if int(np.sum(m.wdetJ) * 1e12) != 2623910771:
+        print('************** PB in GaussIntegration')
 
-K = m.Stiffness(px.Hooke([11,0.33]))
-if int(np.sum(K.diagonal()) * 1e10) != 664248104871388 \
-or int(np.std(K.diagonal()) * 1e12) != 5645081239462:
-    print('************** PB in Stiffness')
+    K = m.Stiffness(px.Hooke([11, 0.33]))
+    if int(np.sum(K.diagonal()) * 1e10) != 664248104871388 \
+       or int(np.std(K.diagonal()) * 1e12) != 5645081239462:
+        print('************** PB in Stiffness')
 
-L = m.Tikhonov()
-if int(np.sum(L.diagonal()) * 1e10) != 80614434627292 \
-or int(np.std(L.diagonal()) * 1e12) != 502557306565:
-    print('************** PB in Tikhonov')
+    L = m.Laplacian()
+    if int(np.sum(L.diagonal()) * 1e10) != 80614434627292 \
+       or int(np.std(L.diagonal()) * 1e12) != 502557306565:
+        print('************** PB in Laplacian')
 
-M = m.Mass(1.8)
-if int(np.sum(M.diagonal()) * 1e15) != 4198257234574 \
-or int(np.std(M.diagonal()) * 1e15) != 1562119459:
-    print('************** PB in Mass')
+    M = m.Mass(1.8)
+    if int(np.sum(M.diagonal()) * 1e15) != 4198257234574 \
+       or int(np.std(M.diagonal()) * 1e15) != 1562119459:
+        print('************** PB in Mass')
+elif m.npg == 1404:  # 1 gauss points
+    if int(np.sum(m.wdetJ) * 1e12) != 2623910771 \
+       or int(np.std(m.wdetJ) * 1e15) != 2083150191:
+        print('************** PB in GaussIntegration')
+
+    K = m.Stiffness(px.Hooke([11, 0.33]))
+    if int(np.sum(K.diagonal()) * 1e10) != 497839242551961 \
+       or int(np.std(K.diagonal()) * 1e12) != 4268731881435:
+        print('************** PB in Stiffness')
+
+    L = m.Laplacian()
+    if int(np.sum(L.diagonal()) * 1e10) != 60418733270419 \
+       or int(np.std(L.diagonal()) * 1e12) != 382347805035:
+        print('************** PB in Laplacian')
+
+    M = m.Mass(1.8)
+    if int(np.sum(M.diagonal()) * 1e15) != 1180759847224 \
+       or int(np.std(M.diagonal()) * 1e15) != 735057631:
+        print('************** PB in Mass')
+else:
+    print('************** PB in the number of Gauss Points')
 
 m.DICIntegrationPixel(cam)
 X, Y = cam.P(m.pgx, m.pgy)
@@ -131,9 +162,9 @@ or int(m.phiy.diagonal().std() * 1e10) != 160595932:
     print('************** PB in DICIntegration')
 
 U = px.MultiscaleInit(f, g, m, cam, scales=[3,2,1])
-print('SCALE  3\nIter #  9 | std(res)=5.23 gl | dU/U=8.23e-04')
-print('SCALE  2\nIter #  5 | std(res)=7.43 gl | dU/U=8.25e-04')
-print('SCALE  1\nIter #  4 | std(res)=6.52 gl | dU/U=2.53e-04')
+print('SCALE  3\nIter #  9 | std(res)=4.25 gl | dU/U=5.41e-04')
+print('SCALE  2\nIter #  6 | std(res)=6.65 gl | dU/U=6.35e-04')
+print('SCALE  1\nIter #  4 | std(res)=6.13 gl | dU/U=8.82e-04')
 
 U, res = px.Correlate(f, g, m, cam, U0=U)
 print('Iter #  3 | std(res)=2.28 gl | dU/U=2.93e-04')
@@ -162,7 +193,8 @@ m.e[3] = m.e[3][[0],:]
 one_element_integration_test(m, cam)
 
 #%% TRI3 mesh
-m = px.ReadMeshGMSH('gmsh_t3_mm.msh')
+m = px.ReadMesh('gmsh_t3_mm.msh')
+m.KeepSurfElems()
 cam = px.Camera(np.array([-10.528098, -50.848452, 6.430594, -1.574282]))
 if PLOT:
     m.Plot()
@@ -180,12 +212,14 @@ postpro_test(f, g, m, cam, U, res)
 
 #%% TRI3 mesh
 
-m = px.ReadMeshGMSH('gmsh_t3_mm.msh')
+m = px.ReadMesh('gmsh_t3_mm.msh')
+m.KeepSurfElems()
 m.Connectivity()
 m.GaussIntegration()
 K = m.Stiffness(px.Hooke([11,0.33]))
 
-m = px.ReadMeshGMSH('gmsh_t3_mm.msh')
+m = px.ReadMesh('gmsh_t3_mm.msh')
+m.KeepSurfElems()
 m.Connectivity()
 m.DICIntegration(cam, G=True)
 K2 = m.Stiffness(px.Hooke([11,0.33]))
@@ -240,7 +274,7 @@ m.DICIntegrationFast(cam, G=True)
 fig,axes=plt.subplots(1,1)
 m.Plot()
 plt.plot(m.pgx,m.pgy,'k.')
-plt.title('DICIntegration (Standard)')
+plt.title('DICIntegration (Fast)')
 axes.set_xticks(ticks_x)
 axes.set_yticks(ticks_y)
 axes.grid()
@@ -260,7 +294,7 @@ axes.grid()
 fn=os.path.join('C:\\','Users','passieux','Documents','ICA','Supervized-M2R',\
                       '20-Mohammed ElMourabit','pyxel-master','data','DIC_LSCM_Zone0',\
                           'Mesh_In718-Zone1_coarse3.inp')
-m, elset = px.ReadMeshINPwithElset(fn)
+m = px.ReadMesh(fn)
 if PLOT:
     m.Plot()
 p = np.array([1.96737087e+00, 2.91505872e+02, -2.22102909e+02, -2.47410146e-03])
@@ -275,7 +309,7 @@ px.PlotMeshImage(f, m, cam)
 
 U = px.MultiscaleInit(f, g, m, cam, scales=[3,2,1], l0=30)
 l0 = 20
-L = m.Tikhonov()
+L = m.Laplacian()
 U, res = px.Correlate(f, g, m, cam, U0=U, L=L, l0=l0)
 
 postpro_test(f, g, m, cam, U, res)

@@ -1,7 +1,7 @@
 #!/usr/bin
 # -*- coding: utf-8 -*-
-""" Finite Element Digital Image Correlation method 
-    JC Passieux, INSA Toulouse, 2021   
+""" Finite Element Digital Image Correlation method
+    JC Passieux, INSA Toulouse, 2021
 
     Example 1 : BASIC
     Analyse only one image with a INP Qua4 mesh in m.
@@ -11,72 +11,69 @@
 import numpy as np
 import pyxel as px
 
-#%% IMAGES
+# %% IMAGES
 f = px.Image('zoom-0053_1.tif').Load()
 f.Plot()
 g = px.Image('zoom-0070_1.tif').Load()
 g.Plot()
 
-#%% MESH
-
+# %% MESH
 m = px.ReadMesh('abaqus_q4_m.inp')
 m.Plot()
 
-#%% CAMERA MODEL
+# %% CAMERA MODEL
 
 do_calibration = False
 
 if do_calibration:
-    ls = px.LSCalibrator(f,m)
+    ls = px.LSCalibrator(f, m)
     ls.NewCircle()
     ls.NewLine()
     ls.NewLine()
     ls.FineTuning()
-    cam=ls.Calibration()
+    cam = ls.Calibration()
 else:
     # reuse previous calibration parameters
-    p = np.array([ 1.05449047e+04,  5.12335842e-02, -9.63541211e-02, -4.17489457e-03])
+    p = np.array([1.05449047e+04, 5.12335842e-02,
+                 -9.63541211e-02, -4.17489457e-03])
     cam = px.Camera(p)
 
-plt.figure()
-px.PlotMeshImage(f,m,cam)
+px.PlotMeshImage(f, m, cam)
 
-#%% Pre-processing 
-
+# %% Pre-processing
 m.Connectivity()
 m.DICIntegration(cam)
 
-#%% Do Correlation
+# %% Do Correlation
 U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
-U, res = px.Correlate(f ,g, m, cam, U0=U)
+U, res = px.Correlate(f, g, m, cam, U0=U)
 
-#%%  Post-processing 
-
+# %%  Post-processing
 # Visualization: Scaled deformation of the mesh
 m.Plot(edgecolor='#CCCCCC')
-m.Plot(U,30)
+m.Plot(U, 30)
 
 # Visualization: displacement fields
-m.PlotContourDispl(U,s=30)
+m.PlotContourDispl(U, s=30)
 
 # Visualization: strain fields
 m.PlotContourStrain(U)
 
 # Plot deformed Mesh on deformed state image
-px.PlotMeshImage(g,m,cam,U)
+px.PlotMeshImage(g, m, cam, U)
 
 # Plot residual
-m.PlotResidualMap(res,cam,1e5)
+m.PlotResidualMap(res, cam, 1e5)
 
 # Export for Paraview
-m.VTKSol('example_1',U)
+m.VTKSol('example_1', U)
 
 # Export for Paraview at integration points (residual map)
 m.VTKIntegrationPoints(cam, f, g, U)
 
-#%% Post-processing as a pixel map
+# %% Post-processing as a pixel map
 
-# Initialization 
+# Initialization
 emp = px.ExportPixMap(f, m, cam)
 
 # Get Residual on the pixel map

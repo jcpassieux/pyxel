@@ -44,7 +44,7 @@ def meshgrid(a, b):
     B = b.repeat(len(a)).reshape((-1, len(a)))
     return A, B
 
-def PlotMeshImage(f, m, cam, U=None, plot='mesh'):
+def PlotMeshImage(f, m, cam, U=None, plot='mesh', newfig=True):
     """Plotting the mesh over the image. 
 
     Parameters
@@ -66,7 +66,8 @@ def PlotMeshImage(f, m, cam, U=None, plot='mesh'):
     n = m.n.copy()
     if U is not None:
         n += U[m.conn]
-    plt.figure()
+    if newfig:
+        plt.figure()
     f.Plot()
     u, v = cam.P(n[:, 0], n[:, 1])
     if plot == 'mesh':

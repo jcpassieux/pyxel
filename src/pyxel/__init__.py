@@ -1,6 +1,8 @@
 # in __init__.py
 
-from .mesh import Mesh #, ReadMesh, PVDFile
+from .mesh import Mesh, ReadMesh
+from .bspline_patch import BSplinePatch, SplineFromROI
+from .bspline_routines import *
 from .image import Image, Volume
 from .camera import Camera, CameraNL, CameraVol
 from .utils import *

@@ -77,3 +77,4 @@ mpix = m.Copy()
 mpix.n = n0
 mpix.VTKSol('disp_pix', Upix)
 
+#%%

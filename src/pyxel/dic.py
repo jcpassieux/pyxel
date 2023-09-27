@@ -450,7 +450,7 @@ def MeshFromROI(roi, dx, typel=3):
         return m, cam
 
 def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None, 
-              L=None, eps=None, maxiter=30, disp=True):
+              L=None, eps=None, maxiter=30, disp=True, EB=False):
     """Perform FE-Digital Image Correlation.
 
     Parameters
@@ -475,11 +475,13 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
     Basis : Numpy array (OPTIONAL)
         Reduced basis for use in iDIC for instance
     L : scipy sparse (OPTIONAL)
-        Regularization operator, for instance computed with L = pyxel.Tikhonov()
+        Regularization operator, for instance computed with L = pyxel.Laplacian()
     eps : float (OPTIONAL)
         stopping criterion for dU/U
     disp : Bool (DEFAULT=True)
         Display error and residual magnitude at each iteration.
+    EB: Element-wise brightness and contrast correction. Default: False means
+        homogeneous B&C correction
         
     Returns
     -------
@@ -507,9 +509,12 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         if analysis == 'dvc':
             m.DVCIntegration(cam)
         else:
-            m.DICIntegration(cam)
+            m.DICIntegration(cam, EB=EB)
     if H is None:
-        H = dic.ComputeLHS(f, m, cam)
+        if EB:
+            H = dic.ComputeLHS_EB(f, m, cam)
+        else:
+            H = dic.ComputeLHS(f, m, cam)
     if eps is None:
         eps = 1e-3
     if Basis is not None:
@@ -520,23 +525,24 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         if l0 is not None:
             # Tikhonov regularisation
             if L is None:
-                L = m.Tikhonov()
-            used_nodes = m.conn[:, 0] > -1
-            T = 10 * m.GetApproxElementSize()
-            V = np.zeros(m.ndof)
-            V[m.conn[used_nodes, 0]] = np.cos(m.n[used_nodes, 1] / T * 2 * np.pi)
+                L = m.Laplacian()
+            T = 10 * m.GetApproxElementSize(cam)
+            V = m.PlaneWave(T)
             H0 = V.dot(H.dot(V))
             L0 = V.dot(L.dot(V))
             l = (l0/T)**2 * H0 / L0
-            H_LU = splalg.splu(H + l * L)
             print('Regularization param = %2.3f' % l)
+            H_LU = splalg.splu(H + l * L)
         else:
             if disp:
                 print("no reg")
             H_LU = splalg.splu(H)
     stdr_old = 100
     for ik in range(0, maxiter):
-        [b, res] = dic.ComputeRHS(g, m, cam, U)
+        if EB:
+            [b, res] = dic.ComputeRHS_EB(g, m, cam, U)
+        else:
+            [b, res] = dic.ComputeRHS(g, m, cam, U)
         if Basis is not None:
             da = H_LU.solve(Basis.T @ b)
             dU = Basis @ da
@@ -582,7 +588,7 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
     Basis : Numpy array (OPTIONAL)
         Reduced basis for use in iDIC for instance
     L : scipy sparse (OPTIONAL)
-        Regularization operator, for instance computed with L = pyxel.Tikhonov()
+        Regularization operator, for instance computed with L = pyxel.Laplacian()
     eps : float (OPTIONAL)
         stopping criterion for dU/U
     disp : Bool (DEFAULT=True)
@@ -616,7 +622,7 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         U = np.zeros(m.ndof)
     else:
         U = U0.copy()
-    L = m.Tikhonov()
+    L = m.Laplacian()
     for js in range(len(scales)):
         iscale = scales[js]
         if disp:
@@ -636,6 +642,7 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
             aes2 = max(aes // (2**iscale), 2)
             m2.DICIntegrationFast(aes2)
         # m2.DICIntegration(cam2)
+        # import matplotlib.pyplot as plt
         # plt.figure()
         # g.Plot()
         # u, v = cam2.P(m2.n[:, 0], m2.n[:, 1])
@@ -644,7 +651,9 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         # m2.Plot()
         # plt.plot(m2.pgx,m2.pgy,'k.')
         # plt.axis('equal')
-
+        # from .utils import PlotMeshImage3d
+        # PlotMeshImage3d(f, m2, cam2)
+        
         U, r = Correlate(f, g, m2, cam2, l0=l0 * 2 ** iscale, 
                          Basis=Basis, L=L, U0=U, eps=eps, disp=disp)
     return U
