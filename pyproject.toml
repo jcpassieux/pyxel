@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyxel-dic"
-version = "3.0.6"
+version = "3.0.7"
 authors = [
   { name="JC Passieux", email="jc.passieux@gmail.com" },
 ]
@@ -26,6 +26,7 @@ dependencies = [
     "opencv-python",
     "gmsh",
     "scikit-image",
+    "interpylate",
 ]
 
 [project.urls]

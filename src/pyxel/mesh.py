@@ -23,6 +23,7 @@ from .utils import meshgrid, isInBox
 from .vtktools import PVDFile
 import meshio
 
+from numpy.polynomial.legendre import leggauss 
 
 # %%
 def ElTypes():
@@ -317,20 +318,80 @@ def SubTriIso2(nx, ny=None):
     # plt.plot(wx,wy,'ro')
     return xg, yg, wg
 
-
 def SubTetIso(n):
     """Subdivide a Tetraedron to build the quadrature rule
     (homogeneous subdivision)"""
-    dx = 1 / n
-    x = dx/2 + np.arange(n)*dx
-    y = dx/2 + np.arange(n)*dx
-    z = dx/2 + np.arange(n)*dx
-    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
-    iTetra = (Z <= 1 - X - Y)
-    xg = X[iTetra]
-    yg = Y[iTetra]
-    zg = Z[iTetra]
-    wg = np.ones(xg.size)/(6*xg.size)
+    # Method 1:
+    # n = max(n, 2)
+    # dx = 1 / n
+    # x = dx/2 + np.arange(n)*dx
+    # y = dx/2 + np.arange(n)*dx
+    # z = dx/2 + np.arange(n)*dx
+    # X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+    # iTetra = (Z <= 1 - X - Y)
+    # xg = X[iTetra]
+    # yg = Y[iTetra]
+    # zg = Z[iTetra]
+    # wg = np.ones(xg.size)/(6*xg.size)
+
+    # Method 2: Using a FE mesh
+    if n == 1:
+        xg = np.array([1/4])
+        yg = np.array([1/4])
+        zg = np.array([1/4])
+        wg = np.array([1/6])
+    else:
+        import gmsh as gmsh
+        gmsh.initialize()
+        gmsh.model.add("")
+        gmsh.model.geo.addPoint(0, 0, 0, 1/(n-1), 1)
+        gmsh.model.geo.addPoint(1, 0, 0, 1/(n-1), 2)
+        gmsh.model.geo.addPoint(0, 1, 0, 1/(n-1), 3)
+        gmsh.model.geo.addPoint(0, 0, 1, 1/(n-1), 4)
+        gmsh.model.geo.addLine(1, 2, tag=5)
+        gmsh.model.geo.addLine(2, 3, tag=6)
+        gmsh.model.geo.addLine(3, 1, tag=7)
+        gmsh.model.geo.addLine(1, 4, tag=8)
+        gmsh.model.geo.addLine(2, 4, tag=9)
+        gmsh.model.geo.addLine(3, 4, tag=10)
+        gmsh.model.geo.addCurveLoop([5, 6, 7], 1)
+        gmsh.model.geo.addCurveLoop([5, 9, -8], 2)
+        gmsh.model.geo.addCurveLoop([6, 10, -9], 3)
+        gmsh.model.geo.addCurveLoop([7, 8, -10], 4)
+        gmsh.model.geo.addPlaneSurface([1], 1)
+        gmsh.model.geo.addPlaneSurface([2], 2)
+        gmsh.model.geo.addPlaneSurface([3], 3)
+        gmsh.model.geo.addPlaneSurface([4], 4)
+        gmsh.model.geo.addSurfaceLoop([1, 2, 3, 4], 12)
+        gmsh.model.geo.addVolume([12, ], 13)
+        gmsh.model.geo.synchronize()
+        # gmsh.option.setNumber('Mesh.RecombineAll', 1)
+        # gmsh.option.setNumber('Mesh.RecombinationAlgorithm', 1)
+        # gmsh.option.setNumber('Mesh.Recombine3DLevel', 2)
+        gmsh.option.setNumber('General.Verbosity', 1)
+        gmsh.model.mesh.generate(3)
+        # gmsh.fltk.run()
+        # nums, nodes, e = gmsh.model.mesh.getNodes()
+        # nodes = nodes.reshape((len(nums), 3))
+        # gmsh.model.mesh.getElementTypes()
+        # nums, els = gmsh.model.mesh.getElementsByType(4)
+        # els = np.reshape(els.astype(int) - 1, (len(nums), 4))
+        # mtet = px.Mesh({4: els}, nodes, 3)
+        # mtet.Plot()
+        # x = nodes[els, 0]
+        # y = nodes[els, 0]
+        # z = nodes[els, 0]
+        # x = np.mean(nodes[els, 0], axis=1)
+        # y = np.mean(nodes[els, 0], axis=1)
+        # z = np.mean(nodes[els, 0], axis=1)
+        X = gmsh.model.mesh.getBarycenters(4, 13, False, True)
+        X = X.reshape(len(X)//3, 3)
+        xg = X[:, 0]
+        yg = X[:, 1]
+        zg = X[:, 2]
+        wg = np.ones(len(xg)) / (6*len(xg))
+        # gmsh.finalize()
+    print('Number of integration points in elems %3d' % len(xg))
     return xg, yg, zg, wg
 
 
@@ -407,7 +468,6 @@ def AddChildElem(child_list, new_child, sorted_child_list):
         sorted_child_list[sorted_new_child] = new_child
     return child_list, sorted_child_list
 
-
 # %%
 def ShapeFunctions(eltype):
     """For any type of 2D elements, gives the quadrature rule and
@@ -428,15 +488,7 @@ def ShapeFunctions(eltype):
 
         # def dN_eta(x):
         #     return False
-        # 3GP
-        # xg = np.sqrt(3/5) * np.array([-1, 0, 1])
-        # wg = np.array([5., 8., 5.])/9
-        # 2GP
-        # xg = np.sqrt(3)/3 * np.array([-1, 1])
-        # wg = np.array([1., 1.])
-        # 1GP
-        xg = np.array([0.])
-        wg = np.array([2.])
+        xg, wg = leggauss(1)
         return xg, wg, N, dN_xi
     elif eltype == 8:
         """
@@ -453,8 +505,7 @@ def ShapeFunctions(eltype):
             return np.concatenate(
                 (x - 0.5, -2 * x, x + 1)).reshape((3, len(x))).T
 
-        xg = np.sqrt(3) / 3 * np.array([-1, 1])
-        wg = np.array([1., 1.])
+        xg, wg = leggauss(2)
         return xg, wg, N, dN_xi
     elif eltype == 2:
         """
@@ -502,14 +553,14 @@ def ShapeFunctions(eltype):
             return 0.25 * np.concatenate(
                 (x - 1, -1 - x, 1 + x, 1 - x)).reshape((4, len(x))).T
 
-        # reduced integration
-        xg = np.array([0])
-        yg = np.array([0])
-        wg = np.array([4])
-        # full integration
-        xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1])
-        yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1])
-        wg = np.ones(4)
+        
+        # deg = 1  # reduced integration 1 gp
+        deg = 2  # full integration 4 gp
+        xg, wg = leggauss(deg)
+        xg, yg = np.meshgrid(xg, xg)
+        xg = xg.ravel()
+        yg = yg.ravel()
+        wg = np.kron(wg, wg)
         return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 9:
         """
@@ -597,10 +648,12 @@ def ShapeFunctions(eltype):
                 (1 - x ** 2) * (-2 * y))
             ).reshape((9, len(x))).T
 
-        a = 0.774596669241483
-        xg = a * np.array([-1, 1, -1, 1, 0, 1, 0, -1, 0])
-        yg = a * np.array([-1, -1, 1, 1, -1, 0, 1, 0, 0])
-        wg = np.array([25, 25, 25, 25, 40, 40, 40, 40, 64]) / 81
+        deg = 3  # 9 gp
+        xg, wg = leggauss(deg)
+        xg, yg = np.meshgrid(xg, xg)
+        xg = xg.ravel()
+        yg = yg.ravel()
+        wg = np.kron(wg, wg)
         return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 16:
         """
@@ -645,15 +698,13 @@ def ShapeFunctions(eltype):
                 y * (-1 + x))
             ).reshape((8, len(x))).T
 
-        # quadrature using 4 gp
-        # xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1])
-        # yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1])
-        # wg = np.ones(4)
-        # quadrature using 9 gp
-        a = 0.774596669241483
-        xg = a * np.array([-1, 1, -1, 1, 0, 1, 0, -1, 0])
-        yg = a * np.array([-1, -1, 1, 1, -1, 0, 1, 0, 0])
-        wg = np.array([25, 25, 25, 25, 40, 40, 40, 40, 64]) / 81
+        # deg = 2  # 4 p
+        deg = 3  # 9 p
+        xg, wg = leggauss(deg)
+        xg, yg = np.meshgrid(xg, xg)
+        xg = xg.ravel()
+        yg = yg.ravel()
+        wg = np.kron(wg, wg)
         return xg, yg, wg, N, dN_xi, dN_eta
     elif eltype == 5:
         """
@@ -692,10 +743,13 @@ def ShapeFunctions(eltype):
                                            (1-x)*(1-y),  (1+x)*(1-y),
                                            (1+x)*(1+y),  (1-x)*(1+y))
                                           ).reshape((8, len(x))).T
-        xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1, -1, 1, -1, 1])
-        yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1, -1, -1, 1, 1])
-        zg = np.sqrt(3) / 3 * np.array([-1, -1, -1, -1, 1, 1, 1, 1])
-        wg = np.ones(8)
+        deg = 2
+        xg, wg = leggauss(deg)
+        xg, yg, zg = np.meshgrid(xg, xg, xg)
+        xg = xg.ravel()
+        yg = yg.ravel()
+        zg = zg.ravel()
+        wg = np.kron(np.kron(wg, wg), wg)  # WORKS WITH DEG 2, TO BE CHECKED!
         return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
     elif eltype == 4:
         """
@@ -952,8 +1006,7 @@ def ShapeFunctions(eltype):
         #                0.5555555555555556])
         # wx, wy, wz = np.meshgrid(wi, wi, wi)
         # wg = wy*wx*wz
-        return xg.ravel(), yg.ravel(), zg.ravel(), wg.ravel(),
-        N, dN_xi, dN_eta, dN_zeta
+        return xg.ravel(), yg.ravel(), zg.ravel(), wg.ravel(), N, dN_xi, dN_eta, dN_zeta
 
 
 # %%
@@ -2105,6 +2158,7 @@ class Mesh:
         cells = dict()
         for et in self.e.keys():
             cells[eltype_n2s[et]] = self.e[et].astype('int32')
+            
         points = self.n
         if self.dim == 2:
             points = np.hstack((points, np.zeros((len(self.n), 1))))

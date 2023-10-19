@@ -637,7 +637,8 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
             cam2 = None
         m2 = m.Copy()
         if len(f.pix.shape) == 3:
-            m2.DVCIntegration(aes // (2**iscale))
+            aesi = min(5, aes // (2**iscale))  #• max 5 integration points > Fast
+            m2.DVCIntegration(aesi)
         else:
             aes2 = max(aes // (2**iscale), 2)
             m2.DICIntegrationFast(aes2)

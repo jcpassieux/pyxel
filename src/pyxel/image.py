@@ -25,7 +25,7 @@ class Image:
         self.fname = fname
         self.x0 = 0
         self.y0 = 0
-        
+
     def LoadPIL(self):
         import PIL.Image as image
         """Load image data using Pillow"""
@@ -43,7 +43,8 @@ class Image:
             if len(self.pix.shape) == 3:
                 self.ToGray()
         else:
-            raise Exception("File "+self.fname+" not in directory "+os.getcwd())
+            raise Exception("File "+self.fname +
+                            " not in directory "+os.getcwd())
         return self
 
     def Load(self, bw=True):
@@ -62,7 +63,8 @@ class Image:
             if len(self.pix.shape) == 3 and bw:
                 self.ToGray()
         else:
-            raise Exception("File "+self.fname+" not in directory "+os.getcwd())
+            raise Exception("File "+self.fname +
+                            " not in directory "+os.getcwd())
         return self
 
     def SetOrigin(self, x0, y0):
@@ -79,7 +81,7 @@ class Image:
     def Save(self, fname):
         """Image Save"""
         f = np.round(self.pix).astype("uint8")
-        cv2.imwrite(fname,f)
+        cv2.imwrite(fname, f)
 
     def BuildInterp(self):
         """build bivariate Spline interp"""
@@ -89,7 +91,7 @@ class Image:
 
     def Interp(self, x, y):
         """evaluate interpolator at non-integer pixel position x, y"""
-        if not hasattr(self,'tck'):
+        if not hasattr(self, 'tck'):
             self.BuildInterp()
         return self.tck.ev(x-self.x0, y-self.y0)
 
@@ -113,7 +115,7 @@ class Image:
         return max(g) - min(g)
 
     def GaussianFilter(self, sigma=0.7):
-        """Performs a Gaussian filter on image data. 
+        """Performs a Gaussian filter on image data.
 
         Parameters
         ----------
@@ -131,10 +133,12 @@ class Image:
     def SubSample(self, n):
         """Image copy with subsampling for multiscale initialization"""
         scale = 2 ** n
-        sizeim1 = np.array([self.pix.shape[0] // scale, self.pix.shape[1] // scale])
+        sizeim1 = np.array([self.pix.shape[0] // scale,
+                           self.pix.shape[1] // scale])
         nn = scale * sizeim1
         im0 = np.mean(
-            self.pix[0 : nn[0], 0 : nn[1]].T.reshape(np.prod(nn) // scale, scale),
+            self.pix[0: nn[0], 0: nn[1]].T.reshape(
+                np.prod(nn) // scale, scale),
             axis=1,
         )
         nn[0] = nn[0] // scale
@@ -164,15 +168,17 @@ class Image:
             )
         elif type == "lig":
             self.pix = 0.5 * np.maximum(
-                np.maximum(self.pix[:, :, 0], self.pix[:, :, 1]), self.pix[:, :, 2]
+                np.maximum(self.pix[:, :, 0],
+                           self.pix[:, :, 1]), self.pix[:, :, 2]
             ) + 0.5 * np.minimum(
-                np.minimum(self.pix[:, :, 0], self.pix[:, :, 1]), self.pix[:, :, 2]
+                np.minimum(self.pix[:, :, 0],
+                           self.pix[:, :, 1]), self.pix[:, :, 2]
             )
         else:
             self.pix = np.mean(self.pix, axis=2)
 
     def SelectPoints(self, n=-1, title=None):
-        """Select a point in the image. 
+        """Select a point in the image.
         
         Parameters
         ----------
@@ -193,12 +199,13 @@ class Image:
                 plt.title("Select " + str(n) + " points... and press enter")
         else:
             plt.title(title)
-        pts1 = np.array(plt.ginput(n, timeout=0)) - np.array([[self.x0, self.y0]])
+        pts1 = np.array(plt.ginput(n, timeout=0)) - \
+            np.array([[self.x0, self.y0]])
         plt.close()
-        return pts1 
+        return pts1
 
     def SelectROI(self, m=None, cam=None):
-        """Select a Region of Interest within the image. 
+        """Select a Region of Interest within the image.
         
         Parameters
         ----------
@@ -260,7 +267,7 @@ class Volume:
                 for k in matf.keys():
                     if type(matf[k]) == np.ndarray:
                         print('Opened %s in *.mat file' % (k,))
-                        self.pix  = matf[k].astype('double')
+                        self.pix = matf[k].astype('double')
                         break
             elif self.fname.split(".")[-1] == "npy":
                 self.pix = np.load(self.fname, allow_pickle=False)
@@ -273,7 +280,8 @@ class Volume:
             else:
                 self.pix = io.imread(self.fname).astype('double')
         else:
-            raise Exception("File "+self.fname+" not in directory "+os.getcwd())
+            raise Exception("File "+self.fname +
+                            " not in directory "+os.getcwd())
         return self
 
     def SetOrigin(self, x0, y0, z0):
@@ -296,7 +304,8 @@ class Volume:
     def VTKImage(self, fname='SavedVolume', sx=0, sy=0, sz=0):
         """Image Save"""
         fpix = np.round(self.pix).astype("uint8")
-        vtk = VTIWriter(self.pix.shape[0], self.pix.shape[1], self.pix.shape[2], sx, sy, sz)
+        vtk = VTIWriter(
+            self.pix.shape[0], self.pix.shape[1], self.pix.shape[2], sx, sy, sz)
         vtk.addCellData('f', 1, fpix.T.ravel())
         dir0, filename = os.path.split(fname)
         if not os.path.isdir(os.path.join("vtk", dir0)):
@@ -313,46 +322,57 @@ class Volume:
         fs.VTKImage(fname+'_1_0', 0, ny//2, 0)
         fs.pix = self.pix[:, :, [nz//2]]
         fs.VTKImage(fname+'_2_0', 0, 0, nz//2)
-        PVDFile(os.path.join('vtk', fname),'vti',3,1)
-        
+        PVDFile(os.path.join('vtk', fname), 'vti', 3, 1)
+
     def BuildInterp(self):
         """build trilinear interp"""
-        x = np.arange(self.pix.shape[0])
-        y = np.arange(self.pix.shape[1])
-        z = np.arange(self.pix.shape[2])
-        self.interp = spi.RegularGridInterpolator((x,y,z), self.pix, method='linear', bounds_error=True, fill_value=None)
+        # x = np.arange(self.pix.shape[0])
+        # y = np.arange(self.pix.shape[1])
+        # z = np.arange(self.pix.shape[2])
+        # self.interp = spi.RegularGridInterpolator(
+        #     (x, y, z), self.pix, method='linear', bounds_error=True, fill_value=None)
+        import interpylate as interp
+        self.interp = interp.TriLinearRegularGridInterpolator()
 
     def Interp(self, x, y, z):
         """Evaluate the continuous representation of the voxels """
-        if not hasattr(self,'interp'):
+        if not hasattr(self, 'interp'):
             self.BuildInterp()
-        return self.interp(np.vstack((x-self.x0, y-self.y0, z-self.z0)).T)
-
-    def InterpGrad(self, x, y, z, eps = 1.e-7):
+        # return self.interp(np.vstack((x-self.x0, y-self.y0, z-self.z0)).T)
+        P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0))
+        return self.interp.evaluate(self.pix, P_coords)
+        
+    def InterpGrad(self, x, y, z, eps=1.e-7):
         """Evaluate the gradient of the continuous representation of the voxels """
-        P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0)).T
-        df_dP = []
-        for xi in range(3):
-            P_coords_xi_p_dxi = P_coords.copy()
-            P_coords_xi_p_dxi[:, xi] = P_coords_xi_p_dxi[:, xi] + eps/2
-            P_coords_xi_m_dxi = P_coords.copy()
-            P_coords_xi_m_dxi[:, xi] = P_coords_xi_m_dxi[:, xi] - eps/2
-            df_dP.append( (self.interp(P_coords_xi_p_dxi) - self.interp(P_coords_xi_m_dxi))/(eps))
+        # P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0)).T
+        # df_dP = []
+        # for xi in range(3):
+        #     P_coords_xi_p_dxi = P_coords.copy()
+        #     P_coords_xi_p_dxi[:, xi] = P_coords_xi_p_dxi[:, xi] + eps/2
+        #     P_coords_xi_m_dxi = P_coords.copy()
+        #     P_coords_xi_m_dxi[:, xi] = P_coords_xi_m_dxi[:, xi] - eps/2
+        #     df_dP.append((self.interp(P_coords_xi_p_dxi) -
+        #                   self.interp(P_coords_xi_m_dxi))/(eps))
+        P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0))
+        df_dP = self.interp.grad(self.pix, P_coords)
         return df_dP[0], df_dP[1], df_dP[2]
 
     def Plot(self):
         """Plot Image"""
         nx, ny, nz = self.pix.shape
         plt.subplot(221)
-        plt.imshow(self.pix[nx//2,:,:], cmap="gray", interpolation="none", origin="upper")
+        plt.imshow(self.pix[nx//2, :, :], cmap="gray",
+                   interpolation="none", origin="upper")
         plt.xlabel('3')
         plt.ylabel('2')
         plt.subplot(223)
-        plt.imshow(self.pix[:,ny//2,:], cmap="gray", interpolation="none", origin="upper")
+        plt.imshow(self.pix[:, ny//2, :], cmap="gray",
+                   interpolation="none", origin="upper")
         plt.xlabel('3')
         plt.ylabel('1')
         plt.subplot(224)
-        plt.imshow(self.pix[:,:,nz//2], cmap="gray", interpolation="none", origin="upper")
+        plt.imshow(self.pix[:, :, nz//2], cmap="gray",
+                   interpolation="none", origin="upper")
         plt.xlabel('2')
         plt.ylabel('1')
         # plt.axis('off')
@@ -384,3 +404,33 @@ class Volume:
         scale = 2**n
         self.pix = downscale_local_mean(self.pix, (scale, scale, scale))
         self.SetOrigin(self.x0/scale, self.y0/scale, self.z0/scale)
+
+    def marching_cubes_stl(self, fname, thrsh=None, eps=0):
+        # CF Ali Rouwane's GitHub :
+        # https://github.com/arouwane/Image-based-Meshing-Tools
+        if thrsh is None:
+            a, b = self.pix.min().astype('float'), self.pix.max().astype('float')
+            thrsh = a + 0.5*(a + b)
+        # We extend the external boundary of the voxel domain
+        # in order to get a closed watertight surface
+        saved_x = self.pix[::(self.pix.shape[0] - 1), :, :]
+        saved_y = self.pix[:, ::(self.pix.shape[0] - 1), :]
+        saved_z = self.pix[:, :, ::(self.pix.shape[0] - 1)]
+        self.pix[::(self.pix.shape[0] - 1), :, :] = eps
+        self.pix[:, ::(self.pix.shape[1] - 1), :] = eps
+        self.pix[:, :, ::(self.pix.shape[2] - 1)] = eps
+        # Extracting the surface using the Marching cubes algorithm
+        from skimage.measure import marching_cubes
+        verts, faces, _, _ = marching_cubes(
+            self.pix, level=thrsh, spacing=(1, 1, 1), allow_degenerate=False)
+        # Undo the modification of the boundary
+        self.pix[::(self.pix.shape[0] - 1), :, :] = saved_x
+        self.pix[:, ::(self.pix.shape[1] - 1), :] = saved_y
+        self.pix[:, :, ::(self.pix.shape[2] - 1)] = saved_z
+        # Export as .stl
+        from stl import mesh
+        data = np.empty(faces.shape[0], dtype=mesh.Mesh.dtype)
+        data['vectors'] = verts[faces]
+        m = mesh.Mesh(data, remove_empty_areas=True)
+        m.save(fname)
+        return m

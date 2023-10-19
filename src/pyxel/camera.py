@@ -30,10 +30,10 @@ class Camera:
             rz: z-rotation
 
         """
-        self.f = p[0]
-        self.tx = p[1]
-        self.ty = p[2]
-        self.rz = p[3]
+        self.f = float(p[0])
+        self.tx = float(p[1])
+        self.ty = float(p[2])
+        self.rz = float(p[3])
 
     def get_p(self):
         """
@@ -601,13 +601,13 @@ class CameraVol:
             rz: z-rotation
 
         """
-        self.f = p[0]
-        self.tx = p[1]
-        self.ty = p[2]
-        self.tz = p[3]
-        self.rx = p[4]
-        self.ry = p[5]
-        self.rz = p[6]
+        self.f = float(p[0])
+        self.tx = float(p[1])
+        self.ty = float(p[2])
+        self.tz = float(p[3])
+        self.rx = float(p[4])
+        self.ry = float(p[5])
+        self.rz = float(p[6])
 
     def get_p(self):
         """

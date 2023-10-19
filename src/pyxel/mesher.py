@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 Created on Sat Jan 29 08:16:13 2022
@@ -15,6 +16,7 @@ from skimage import measure
 
 #%%
 
+
 def StructuredMeshQ4(box, dx):
     """Build a structured linear Q4 mesh from two points coordinates (box)
     box = np.array([[xmin, ymin],
@@ -22,22 +24,22 @@ def StructuredMeshQ4(box, dx):
     dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
+    NE = np.max(np.c_[NE, np.ones(2, dtype=int)], axis=1)
     X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], NE[0] + 1),
-                    np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
+                       np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
-    nel = np.prod(NE)
-    e = np.zeros((nel, 4), dtype=int)
-    for ix in range(NE[0]):
-        for iy in range(NE[1]):
-            p1 = ix * (NE[1] + 1) + iy
-            p4 = ix * (NE[1] + 1) + iy + 1
-            p2 = ix * (NE[1] + 1) + iy + NE[1] + 1
-            p3 = ix * (NE[1] + 1) + iy + NE[1] + 2
-            e[ix * NE[1] + iy, :] = np.array([p1, p2, p3, p4])
-    el = {3: e}
-    m = Mesh(el, n)
+    n1 = np.kron(np.ones(NE[0]), np.arange(NE[1])) + \
+        np.kron(np.arange(NE[0]), np.ones(NE[1])*(NE[1]+1))
+    n2 = np.kron(np.ones(NE[0]), np.arange(NE[1])) + \
+        np.kron(np.arange(1, NE[0]+1), np.ones(NE[1])*(NE[1]+1))
+    n3 = np.kron(np.ones(NE[0]), np.arange(1, NE[1]+1)) + \
+        np.kron(np.arange(1, NE[0]+1), np.ones(NE[1])*(NE[1]+1))
+    n4 = np.kron(np.ones(NE[0]), np.arange(1, NE[1]+1)) + \
+        np.kron(np.arange(NE[0]), np.ones(NE[1])*(NE[1]+1))
+    e = np.c_[n1, n2, n3, n4].astype(int)
+    m = Mesh({3: e}, n)
     return m
+
 
 def StructuredMeshQ9(box, dx):
     """Build a structured quadratic Q9 mesh from two points coordinates (box)
@@ -46,7 +48,7 @@ def StructuredMeshQ9(box, dx):
     dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
+    NE = np.max(np.c_[NE, np.ones(2, dtype=int)], axis=1)
     X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], 2 * NE[0] + 1),
                        np.linspace(box[0, 1], box[1, 1], 2 * NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
@@ -63,10 +65,12 @@ def StructuredMeshQ9(box, dx):
             p2 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * (2 * NE[1] + 1)
             p6 = p2 + 1
             p3 = p2 + 2
-            e[ix * NE[1] + iy, :] = np.array([p1, p2, p3, p4, p5, p6, p7, p8, p9])
+            e[ix * NE[1] + iy,
+                :] = np.array([p1, p2, p3, p4, p5, p6, p7, p8, p9])
     el = {10: e}
     m = Mesh(el, n)
     return m
+
 
 def StructuredMeshQ8(box, dx):
     """Build a structured quadratic Q8 mesh from two points coordinates (box)
@@ -75,7 +79,7 @@ def StructuredMeshQ8(box, dx):
     dx = [dx, dy]: average element size (can be scalar)  in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
+    NE = np.max(np.c_[NE, np.ones(2, dtype=int)], axis=1)
     X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], 2 * NE[0] + 1),
                        np.linspace(box[0, 1], box[1, 1], 2 * NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
@@ -91,11 +95,12 @@ def StructuredMeshQ8(box, dx):
             p2 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * (2 * NE[1] + 1)
             p6 = p2 + 1
             p3 = p2 + 2
-            n[p5 + 1,:] = n[0,:] * np.nan
+            n[p5 + 1, :] = n[0, :] * np.nan
             e[ix * NE[1] + iy] = np.array([p1, p2, p3, p4, p5, p6, p7, p8])
     el = {16: e}
     m = Mesh(el, n)
     return m
+
 
 def StructuredMeshT3(box, dx):
     """Build a structured linear T3 mesh from two points coordinates (box)
@@ -104,23 +109,22 @@ def StructuredMeshT3(box, dx):
     dx = [dx, dy]: average element size (can be scalar) in mesh unit"""
     dbox = box[1] - box[0]
     NE = (dbox / dx).astype(np.int64)
-    NE = np.max(np.c_[NE,np.ones(2,dtype=int)],axis=1)
+    NE = np.max(np.c_[NE, np.ones(2, dtype=int)], axis=1)
     X, Y = np.meshgrid(np.linspace(box[0, 0], box[1, 0], NE[0] + 1),
-                    np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
+                       np.linspace(box[0, 1], box[1, 1], NE[1] + 1))
     n = np.vstack((X.T.ravel(), Y.T.ravel())).T
-    nel = np.prod(NE) * 2
-    e = np.zeros((nel, 3), dtype=int)
-    for ix in range(NE[0]):
-        for iy in range(NE[1]):
-            p1 = ix * (NE[1] + 1) + iy
-            p4 = ix * (NE[1] + 1) + iy + 1
-            p2 = ix * (NE[1] + 1) + iy + NE[1] + 1
-            p3 = ix * (NE[1] + 1) + iy + NE[1] + 2
-            e[2 * (ix * NE[1] + iy), :] = np.array([p1, p2, p4])
-            e[2 * (ix * NE[1] + iy) + 1, :] = np.array([p2, p3, p4])
-    el = {2: e}
-    m = Mesh(el, n)
+    n1 = np.kron(np.ones(NE[0]), np.arange(NE[1])) + \
+        np.kron(np.arange(NE[0]), np.ones(NE[1])*(NE[1]+1))
+    n2 = np.kron(np.ones(NE[0]), np.arange(NE[1])) + \
+        np.kron(np.arange(1, NE[0]+1), np.ones(NE[1])*(NE[1]+1))
+    n3 = np.kron(np.ones(NE[0]), np.arange(1, NE[1]+1)) + \
+        np.kron(np.arange(1, NE[0]+1), np.ones(NE[1])*(NE[1]+1))
+    n4 = np.kron(np.ones(NE[0]), np.arange(1, NE[1]+1)) + \
+        np.kron(np.arange(NE[0]), np.ones(NE[1])*(NE[1]+1))
+    e = np.vstack((np.c_[n1, n2, n4], np.c_[n2, n3, n4])).astype(int)
+    m = Mesh({2: e}, n)
     return m
+
 
 def StructuredMeshT6(box, dx):
     """Build a structured quadratic T6 mesh from two points coordinates (box)
@@ -154,7 +158,7 @@ def StructuredMeshT6(box, dx):
 
 def StructuredMeshHex8(box, lc):
     """
-    Meshes a box with hexahedral elements 
+    Meshes a box with hexahedral elements
 
     Parameters
     ----------
@@ -167,54 +171,123 @@ def StructuredMeshHex8(box, lc):
     m : Structured C8 mesh.
 
     """
-    
-    # Create a structured hexahedral mesh 
+    if type(lc) is int:
+        lc = [lc, lc, lc]
+    # Create a structured hexahedral mesh
     lx = box[1, 0] - box[0, 0]
     ly = box[1, 1] - box[0, 1]
     lz = box[1, 2] - box[0, 2]
 
-    Nx = int( np.round( lx / lc ) ) 
-    Ny = int( np.round( ly / lc ) ) 
-    Nz = int( np.round( lz / lc ) )  
-     
-    x = np.linspace( 0, lx, Nx+1 )
-    y = np.linspace( 0, ly, Ny+1 )
-    z = np.linspace( 0, lz, Nz+1 )
-    
-    nbf_xi = len(x); nbf_eta = len(y); nbf_zeta = len(z) 
- 
-    Xtot = np.kron(np.ones(nbf_eta*nbf_zeta), x)
-    Ytot = np.kron(np.ones(nbf_zeta), np.kron(y,np.ones(nbf_xi)))
-    Ztot = np.kron(z,np.ones(nbf_eta*nbf_xi)) 
-    
-    nodes  = np.c_[Xtot,Ytot,Ztot]
-    
-    # Creates element connectivity 
-    p = 1 ; q = 1 ; r = 1 
-    nxi, neta, nzeta = Nx, Ny, Nz 
-    bf_xi_index   = (np.kron( np.ones(nxi), np.arange(p+1) ) + np.kron(np.arange(nxi), np.ones(p+1) )).reshape((nxi,p+1))
-    bf_eta_index  = (np.kron( np.ones(neta), np.arange(q+1) ) + np.kron(np.arange(neta), np.ones(q+1) )).reshape((neta,q+1))
-    bf_zeta_index = (np.kron( np.ones(nzeta), np.arange(r+1) ) + np.kron(np.arange(nzeta), np.ones(r+1) )).reshape((nzeta,r+1))
-    
-    noelem = np.kron(  np.ones_like(bf_zeta_index) ,  np.kron(np.ones_like(bf_eta_index)  ,bf_xi_index) )  + \
-          (nxi+p)*np.kron(  np.ones_like(bf_zeta_index), np.kron( bf_eta_index, np.ones_like(bf_xi_index) ) )  + \
-          (nxi+p)*(neta+q)*np.kron(  bf_zeta_index, np.kron( np.ones_like(bf_eta_index),np.ones_like(bf_xi_index) ) )  
-    
-    els = noelem.astype('int32') 
-    els = els[:,[2,0,1,3,6,4,5,7]] # In order to get the correct ordering of Meshio
-    # els = els[:,[]] # In order to get tge correct ordering of Gmsh 
-    e = {5: els}
-    m = Mesh(e , nodes, 3)
-    
-    m.n[:,0] += box[0, 0]
-    m.n[:,1] += box[0, 1]
-    m.n[:,2] += box[0, 2]
+    Nx = int(np.round(lx / lc[0]))
+    Ny = int(np.round(ly / lc[1]))
+    Nz = int(np.round(lz / lc[2]))
 
-    return m 
+    x = np.linspace(0, lx, Nx+1)
+    y = np.linspace(0, ly, Ny+1)
+    z = np.linspace(0, lz, Nz+1)
+
+    nbf_xi = len(x)
+    nbf_eta = len(y)
+    nbf_zeta = len(z)
+
+    Xtot = np.kron(np.ones(nbf_eta*nbf_zeta), x)
+    Ytot = np.kron(np.ones(nbf_zeta), np.kron(y, np.ones(nbf_xi)))
+    Ztot = np.kron(z, np.ones(nbf_eta*nbf_xi))
+
+    nodes = np.c_[Xtot, Ytot, Ztot]
+
+    # Creates element connectivity
+    p = 1
+    q = 1
+    r = 1
+    nxi, neta, nzeta = Nx, Ny, Nz
+    bf_xi_index = (np.kron(np.ones(nxi), np.arange(p+1)) +
+                   np.kron(np.arange(nxi), np.ones(p+1))).reshape((nxi, p+1))
+    bf_eta_index = (np.kron(np.ones(neta), np.arange(q+1)) +
+                    np.kron(np.arange(neta), np.ones(q+1))).reshape((neta, q+1))
+    bf_zeta_index = (np.kron(np.ones(nzeta), np.arange(r+1)) +
+                     np.kron(np.arange(nzeta), np.ones(r+1))).reshape((nzeta, r+1))
+
+    noelem = np.kron(np.ones_like(bf_zeta_index),  np.kron(np.ones_like(bf_eta_index), bf_xi_index)) + \
+        (nxi+p)*np.kron(np.ones_like(bf_zeta_index), np.kron(bf_eta_index, np.ones_like(bf_xi_index))) + \
+        (nxi+p)*(neta+q)*np.kron(bf_zeta_index,
+                                 np.kron(np.ones_like(bf_eta_index), np.ones_like(bf_xi_index)))
+
+    els = noelem.astype('int32')
+    # In order to get the correct ordering of Meshio
+    els = els[:, [2, 0, 1, 3, 6, 4, 5, 7]]
+    # els = els[:,[]] # In order to get tge correct ordering of Gmsh
+    e = {5: els}
+    m = Mesh(e, nodes, 3)
+
+    m.n[:, 0] += box[0, 0]
+    m.n[:, 1] += box[0, 1]
+    m.n[:, 2] += box[0, 2]
+
+    return m
+
+
+def StructuredMeshHex20(box, lc):
+    """
+    Meshes a box with hexahedral elements
+
+    Parameters
+    ----------
+    box = np.array([[xmin, ymin, zmin],
+                    [xmax, ymax, zmax]])    in mesh unit
+    lc : mesh length.
+
+    Returns
+    -------
+    m : Structured C20 mesh.
+
+    """
+    if type(lc) is int:
+        lc = [lc, lc, lc]
+    # Create a structured hexahedral mesh
+    lx = box[1, 0] - box[0, 0]
+    ly = box[1, 1] - box[0, 1]
+    lz = box[1, 2] - box[0, 2]
+    nx = int(lx//lc[0])
+    ny = int(ly//lc[1])
+    nz = int(lz//lc[2])
+    gmsh.initialize()
+    gmsh.model.add("lug")
+    gmsh.model.geo.addPoint(0, 0, 0, lc[0], 1)
+    gmsh.model.geo.addPoint(lx, 0, 0, lc[1], 2)
+    gmsh.model.geo.addPoint(lx, ly, 0, lc[0], 3)
+    gmsh.model.geo.addPoint(0, ly, 0, lc[1], 4)
+    gmsh.model.geo.addLine(1, 2, tag=5)
+    gmsh.model.geo.mesh.setTransfiniteCurve(5, nx)
+    gmsh.model.geo.addLine(2, 3, tag=6)
+    gmsh.model.geo.mesh.setTransfiniteCurve(6, ny)
+    gmsh.model.geo.addLine(3, 4, tag=7)
+    gmsh.model.geo.mesh.setTransfiniteCurve(7, nx)
+    gmsh.model.geo.addLine(4, 1, tag=8)
+    gmsh.model.geo.mesh.setTransfiniteCurve(8, ny)
+    gmsh.model.geo.addCurveLoop([5, 6, 7, 8], 1)
+    gmsh.model.geo.addPlaneSurface([1], 1)
+    gmsh.model.geo.mesh.setTransfiniteSurface(1, "Left", [1, 2, 3, 4])
+    gmsh.option.setNumber('Mesh.RecombineAll', 1)
+    gmsh.option.setNumber('Mesh.RecombinationAlgorithm', 1)
+    gmsh.option.setNumber('Mesh.Recombine3DLevel', 2)
+    gmsh.option.setNumber('Mesh.SecondOrderIncomplete', 1)
+    gmsh.model.geo.extrude([(2, 1)], 0, 0, lz, [nz, ], recombine=True)
+    gmsh.option.setNumber('Mesh.ElementOrder', 2)
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(3)
+    gmsh.write("lug.msh")
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
+    gmsh.finalize()
+    m = ReadMesh("lug.msh", 3)
+    m.KeepVolElems()
+    # m.Plot()
+    return m
+
 
 def StructuredMesh(box, dx, typel=3):
     """Build a structured mesh from two points coordinates (box)
-    
     parameters
     ----------
     box: numpy.array
@@ -230,7 +303,7 @@ def StructuredMesh(box, dx, typel=3):
         10: 9-node second order quadrangles (Q9)
         16: 8-node second order quadrangles (Q8)
         4: 4-node first order tetrahedron (Tet4)
-        5: 8-node first order hexahedron (Hex8)        
+        5: 8-node first order hexahedron (Hex8)
     """
     if typel == 2:
         return StructuredMeshT3(box, dx)
@@ -246,12 +319,15 @@ def StructuredMesh(box, dx, typel=3):
     #     return StructuredMeshTet4(box, dx)
     elif typel == 5:
         return StructuredMeshHex8(box, dx)
+    elif typel == 17:
+        return StructuredMeshHex20(box, dx)
 
-#%%
+# %%
+
 
 def TetraMeshCylinder(x0, y0, z0, R, h, lc):
     """
-    Meshes a cylinder geometry with tetrahedral elements 
+    Meshes a cylinder geometry with tetrahedral elements
 
     Parameters
     ----------
@@ -269,35 +345,36 @@ def TetraMeshCylinder(x0, y0, z0, R, h, lc):
     gmsh.initialize()
     gmsh.clear()
     gmsh.model.add("cylinder")
-    gmsh.model.geo.addPoint( x0, y0, z0, lc, 1)  
-    gmsh.model.geo.addPoint( x0-R, y0, z0, lc, 2) 
-    gmsh.model.geo.addPoint(x0+R, y0, z0, lc, 3) 
-    gmsh.model.geo.addPoint( x0, y0+R, z0, lc, 4) 
-    gmsh.model.geo.addPoint( x0, y0-R, z0, lc, 5)
-    gmsh.model.geo.addCircleArc(2, 1, 4, 1)   
-    gmsh.model.geo.addCircleArc(4, 1, 3, 2) 
-    gmsh.model.geo.addCircleArc(3, 1, 5, 3)  
-    gmsh.model.geo.addCircleArc(5, 1, 2, 4)   
-    gmsh.model.geo.addCurveLoop([1,2,3,4],1)  
-    gmsh.model.geo.addPlaneSurface([1],1)    
-    gmsh.model.geo.extrude([(2,1)], 0, 0, h)       
+    gmsh.model.geo.addPoint(x0, y0, z0, lc, 1)
+    gmsh.model.geo.addPoint(x0-R, y0, z0, lc, 2)
+    gmsh.model.geo.addPoint(x0+R, y0, z0, lc, 3)
+    gmsh.model.geo.addPoint(x0, y0+R, z0, lc, 4)
+    gmsh.model.geo.addPoint(x0, y0-R, z0, lc, 5)
+    gmsh.model.geo.addCircleArc(2, 1, 4, 1)
+    gmsh.model.geo.addCircleArc(4, 1, 3, 2)
+    gmsh.model.geo.addCircleArc(3, 1, 5, 3)
+    gmsh.model.geo.addCircleArc(5, 1, 2, 4)
+    gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
+    gmsh.model.geo.addPlaneSurface([1], 1)
+    gmsh.model.geo.extrude([(2, 1)], 0, 0, h)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
-    
+
     nums, nodes, e = gmsh.model.mesh.getNodes()
     nodes = nodes.reshape((len(nums), 3))
-    
+
     nums, els = gmsh.model.mesh.getElementsByType(4)
     nnd = len(els)//len(nums)
-    els = els.reshape((len(nums),nnd)) - 1
+    els = els.reshape((len(nums), nnd)) - 1
     e = {4: els.astype(int)}
-    m= Mesh(e, nodes, 3)
+    m = Mesh(e, nodes, 3)
     # m.CleanMesh()
-    return m 
- 
+    return m
+
+
 def TetraMeshBox(box, dx):
     """
-    Meshes a box with tetrahedral elements 
+    Meshes a box with tetrahedral elements
 
     Parameters
     ----------
@@ -307,7 +384,7 @@ def TetraMeshBox(box, dx):
 
     Returns
     -------
-    m : mesh object 
+    m : mesh object
 
     """
     gmsh.initialize()
@@ -315,16 +392,16 @@ def TetraMeshBox(box, dx):
     gmsh.model.add("box")
     xmin, ymin, zmin = box[0, :]
     xmax, ymax, zmax = box[1, :]
-    gmsh.model.geo.addPoint( xmin, ymin , zmin, dx, 1)
-    gmsh.model.geo.addPoint( xmax, ymin , zmin, dx, 2)
-    gmsh.model.geo.addPoint( xmax, ymax , zmin, dx, 3)
-    gmsh.model.geo.addPoint( xmin, ymax , zmin, dx, 4)    
-    gmsh.model.geo.addLine(1,2,1)
-    gmsh.model.geo.addLine(2,3,2)
-    gmsh.model.geo.addLine(3,4,3)
-    gmsh.model.geo.addLine(4,1,4)    
-    gmsh.model.geo.addCurveLoop([1,2,3,4], 1)
-    gmsh.model.geo.addPlaneSurface([1],1)    
+    gmsh.model.geo.addPoint(xmin, ymin, zmin, dx, 1)
+    gmsh.model.geo.addPoint(xmax, ymin, zmin, dx, 2)
+    gmsh.model.geo.addPoint(xmax, ymax, zmin, dx, 3)
+    gmsh.model.geo.addPoint(xmin, ymax, zmin, dx, 4)
+    gmsh.model.geo.addLine(1, 2, 1)
+    gmsh.model.geo.addLine(2, 3, 2)
+    gmsh.model.geo.addLine(3, 4, 3)
+    gmsh.model.geo.addLine(4, 1, 4)
+    gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
+    gmsh.model.geo.addPlaneSurface([1], 1)
     gmsh.model.geo.extrude([(2, 1)], 0, 0, zmax-zmin)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
@@ -334,10 +411,10 @@ def TetraMeshBox(box, dx):
     nnd = len(els) // len(nums)
     els = els.reshape((len(nums), nnd)) - 1
     e = {4: els.astype(int)}
-    m  = Mesh(e , nodes, 3)
-    return m 
+    m = Mesh(e, nodes, 3)
+    return m
 
-#%% 
+#%%
 
 # def Gmsh2Mesh(gmsh, dim=2):
 #     """
@@ -367,7 +444,7 @@ def TetraMeshBox(box, dx):
 #         gmsh.model.mesh.generate(2)
 #         m = px.Gmsh2Mesh(gmsh)
 #         m.Plot()
-        
+
 #     """
 #     # Get direct full node list
 #     nums, nodes, e = gmsh.model.mesh.getNodes()
@@ -391,8 +468,9 @@ def TetraMeshBox(box, dx):
 #%% Plot a polygon
 def PlotLS(ls, coul):
     for i in range(len(ls)):
-        plt.plot(ls[i][:,1], ls[i][:,0], coul)
+        plt.plot(ls[i][:, 1], ls[i][:, 0], coul)
     plt.axis('equal')
+
 
 def RemoveSegments(ls):
     PlotLS(ls, 'k-')
@@ -404,18 +482,21 @@ def RemoveSegments(ls):
     return np.delete(ls, rep)
 
 #%% finds the polygons included in other polygons
+
+
 def lsio(lsi):
     # determine if the line loop truns clockwise or counterclockwise
     c = np.mean(lsi, axis=0)
     sc = 0
     for i in range(len(lsi)-1):
-        xn = lsi[[i,i+1], :]
+        xn = lsi[[i, i+1], :]
         v = np.diff(xn, axis=0)[0]
         v /= np.linalg.norm(v)
-        w = lsi[i,:] - c
+        w = lsi[i, :] - c
         w /= np.linalg.norm(w)
         sc = np.diff(w[::-1]*v)[0]
-    return int(sc>0)
+    return int(sc > 0)
+
 
 def RayCasting(lsi, p):
     # Ray Casting Algorithm (finds if a point p is in a polygon lsi)
@@ -423,18 +504,19 @@ def RayCasting(lsi, p):
     #      number of intersected segments.
     nc = 0
     # compute eps with first edge length
-    eps = 1e-5 * np.linalg.norm(np.diff(lsi[[0,1],:], axis=0))
+    eps = 1e-5 * np.linalg.norm(np.diff(lsi[[0, 1], :], axis=0))
     for i in range(len(lsi)-1):
-        xn = lsi[[i,i+1], :]
+        xn = lsi[[i, i+1], :]
         w = np.mean(xn, axis=0) - p
         # comparing the x coordinates of the 3 points.
-        if w[1] > 0 and abs(xn[0,0] - p[0]) + abs(xn[1,0] - p[0]) - abs(xn[1,0] - xn[0,0]) < eps:
+        if w[1] > 0 and abs(xn[0, 0] - p[0]) + abs(xn[1, 0] - p[0]) - abs(xn[1, 0] - xn[0, 0]) < eps:
             # if xp coorespond to the x the first node, dont consider this edge
-            if abs(xn[0,0] - p[0]) > eps:
+            if abs(xn[0, 0] - p[0]) > eps:
                 nc += 1
     return nc % 2
 
 #%% bulk meshing from polygon
+
 
 def MeshFromLS(ls, lc, typel='tri'):
     # ls list of segments
@@ -443,36 +525,37 @@ def MeshFromLS(ls, lc, typel='tri'):
     for i in range(len(ls)):
         lsc[i] = lsio(ls[i])
     if np.max(lsc) == 0:
-        raise Exception('in pyxel::MeshFromLS, Only counterclockwise list of segments, use flipud')
-    white, = np.where(lsc==0)
+        raise Exception(
+            'in pyxel::MeshFromLS, Only counterclockwise list of segments, use flipud')
+    white, = np.where(lsc == 0)
     black, = np.where(lsc)
     connect = -np.ones(len(ls))
     for i in range(len(white)):
         for j in range(len(black)):
-            if RayCasting(ls[black[j]], ls[white[i]][0,:]):
+            if RayCasting(ls[black[j]], ls[white[i]][0, :]):
                 connect[white[i]] = black[j]
                 break
     gmsh.initialize()
-    gmsh.model.add("P")    
+    gmsh.model.add("P")
     nn = 1
     nl = 1
     curvedloop = dict()
     for j in range(len(ls)):
         for i in range(len(ls[j])-1):
-            gmsh.model.geo.addPoint(ls[j][i,0], ls[j][i,1], 0, lc, nn+i)
+            gmsh.model.geo.addPoint(ls[j][i, 0], ls[j][i, 1], 0, lc, nn+i)
         for i in range(len(ls[j])-2):
             gmsh.model.geo.addLine(nn+i, nn+i+1, nl+i)
         gmsh.model.geo.addLine(nn+i+1, nn, nl+i+1)
         curvedloop[j] = nl + np.arange(len(ls[j]) - 1)
         nn += len(ls[j]) - 1
-        nl += len(ls[j]) - 1    
-    ncl=1
+        nl += len(ls[j]) - 1
+    ncl = 1
     for i in range(len(ls)):
         if lsc[i]:
-            rep, = np.where(connect==i)
+            rep, = np.where(connect == i)
             cvl = curvedloop[i]
             for j in rep:
-                cvl = np.append(cvl ,-curvedloop[j])
+                cvl = np.append(cvl, -curvedloop[j])
             gmsh.model.geo.addCurveLoop(cvl, ncl)
             gmsh.model.geo.addPlaneSurface([ncl], ncl)
             ncl += 1
@@ -493,6 +576,7 @@ def MeshFromLS(ls, lc, typel='tri'):
         del m.e[8]  # remove quadratic segments
     return m
 
+
 def MeshFromImage(fpix, h, appls=None, typel='tri'):
     """
     Builds a mesh from a graylevel image.
@@ -504,7 +588,7 @@ def MeshFromImage(fpix, h, appls=None, typel='tri'):
     h : FLOAT
         approximate finite elements size in pixels
     appls : BOOL
-        If 0, does not approximate the list of segments 
+        If 0, does not approximate the list of segments
         Set appls=4 to allow to move each point of the polygon up to
         4 pixels to regularize its shape. Default None (=no approx.)
 
@@ -516,10 +600,10 @@ def MeshFromImage(fpix, h, appls=None, typel='tri'):
     """
     fpix[:, 0] = 0
     fpix[0, :] = 0
-    fpix[:,-1] = 0
-    fpix[-1,:] = 0
+    fpix[:, -1] = 0
+    fpix[-1, :] = 0
     pix = ((1-fpix)*255).astype('uint8')
-    ls = measure.find_contours(pix, 127 ,fully_connected='low') 
+    ls = measure.find_contours(pix, 127, fully_connected='low')
     #PlotLS(ls,'r.-')
     if appls is not None:
         ls = [measure.approximate_polygon(i, appls) for i in ls]
@@ -528,7 +612,7 @@ def MeshFromImage(fpix, h, appls=None, typel='tri'):
     # p = np.array([1, 0., 0., np.pi/2])
     # a = Image('')
     # a.pix = f
-    m.n = np.c_[m.n[:,1], -m.n[:,0]]
+    m.n = np.c_[m.n[:, 1], -m.n[:, 0]]
     p = np.array([1, 0., 0., 0])
     cam = Camera(p)
     return m, cam
