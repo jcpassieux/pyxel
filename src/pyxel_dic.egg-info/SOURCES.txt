@@ -2,6 +2,8 @@ README.md
 pyproject.toml
 setup.cfg
 src/pyxel/__init__.py
+src/pyxel/bspline_patch.py
+src/pyxel/bspline_routines.py
 src/pyxel/camera.py
 src/pyxel/dic.py
 src/pyxel/exportpixmap.py

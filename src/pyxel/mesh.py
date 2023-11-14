@@ -21,6 +21,7 @@ import matplotlib.animation as animation
 # from numba import njit # uncomment for just in time compilation
 from .utils import meshgrid, isInBox
 from .vtktools import PVDFile
+from .material import *
 import meshio
 
 from numpy.polynomial.legendre import leggauss 
@@ -2232,6 +2233,23 @@ class Mesh:
             epsxy = 0.5 * self.dphixdy @ U + 0.5 * self.dphiydx @ U
         return epsx, epsy, epsxy
 
+    def GP2DOFs(self, gp_field):
+        # Chaml2Chpoint
+        if not hasattr(self, "dphixdx"):
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
+        phi = m.phix[:, m.conn[:,0]]
+        wx = np.sum(phi, axis=0).A[0] + 1e-12
+        if type(gp_field) is list:
+            nd_field = []
+            for i in range(len(gp_field)):
+                nd_field += [sp.sparse.diags(1/wx) @ phi.T @ gp_field[i]]
+        else:
+            nd_field = sp.sparse.diags(1/wx) @ phi.T @ gp_field
+        return nd_field
+
     def StrainAtNodes(self, U):
         if not hasattr(self, "dphixdx"):
             m = self.Copy()
@@ -2344,7 +2362,7 @@ class Mesh:
         if n is None:
             n = self.n.copy()
         if U is not None:
-            n += coef * U[self.conn]
+            n += coef * U[self.conn[:, :self.dim]]
         qua = np.zeros((0, 4), dtype="int64")
         tri = np.zeros((0, 3), dtype="int64")
         bar = np.zeros((0, 2), dtype="int64")
@@ -2407,12 +2425,14 @@ class Mesh:
             mb.Plot(U, coef, n, plotnodes, alpha=alpha, edgecolor=edgecolor,
                     facecolor=facecolor, **kwargs)
         else:   # otherwise
+            fig = plt.figure()
             if self.dim == 2:
                 facecolor = kwargs.pop("facecolor", "None")
                 ax = plt.gca()
             else:
-                facecolor = kwargs.pop("facecolor", "w")
-                ax = Axes3D(plt.figure())
+                facecolor = kwargs.pop("facecolor", "w")  # "w"
+                ax = fig.add_subplot(111, projection="3d")
+                # ax = Axes3D(plt.figure())
                 # ax = plt.figure().add_subplot(projection='3d')
             pc, nn, n = self.PreparePlot(U, coef, n, alpha=alpha,
                                          edgecolor=edgecolor,
@@ -2450,6 +2470,16 @@ class Mesh:
                 ax.set_zlim(mid_z - max_range, mid_z + max_range)
                 ax.set_xlim(mid_x - max_range, mid_x + max_range)
                 ax.set_ylim(mid_y - max_range, mid_y + max_range)
+                # if plotnodes:
+                #     ax.plot(
+                #         n[:, 0],
+                #         n[:, 1],
+                #         mnew.n[:, 2],
+                #         linestyle="None",
+                #         marker="o",
+                #         color=edgecolor,
+                #         alpha=alpha,
+                #     )
             plt.show()
 
     def AnimatedPlot(self, U, coef=1, n=None, timeAnim=5,
@@ -2466,15 +2496,37 @@ class Mesh:
             U = [U]
         ntimes = U[0].shape[1]
         fig = plt.figure()
-        ax = plt.gca()
+        if self.dim == 2:
+            ax = plt.gca()
+        else:
+            ax = fig.add_subplot(111, projection="3d")
         pc = dict()
         nn = dict()
         for jj, u in enumerate(U):
             pc[jj], nn[jj], _ = self.PreparePlot(u[:, 0], coef,
                                                  n, edgecolor=color[jj])
-            ax.add_collection(pc[jj])
-            ax.autoscale()
-            plt.axis('equal')
+            if self.dim == 2:
+                ax.add_collection(pc[jj])
+                ax.autoscale()
+                plt.axis('equal')
+            else:
+                ax.add_collection3d(pc[jj])
+                ax.autoscale()
+                nn = np.vstack(nn[jj])
+                X = nn[:, 0]
+                Y = nn[:, 1]
+                Z = nn[:, 2]
+                max_range = np.array([X.max()-X.min(),
+                                      Y.max()-Y.min(),
+                                      Z.max()-Z.min()]).max() / 2.0
+                mid_x = (X.max()+X.min()) * 0.5
+                mid_y = (Y.max()+Y.min()) * 0.5
+                mid_z = (Z.max()+Z.min()) * 0.5
+                ax.set_xlim(mid_x - max_range, mid_x + max_range)
+                ax.set_ylim(mid_y - max_range, mid_y + max_range)
+                ax.set_zlim(mid_z - max_range, mid_z + max_range)
+                ax.set_xlim(mid_x - max_range, mid_x + max_range)
+                ax.set_ylim(mid_y - max_range, mid_y + max_range)
 
         def updateMesh(ii):
             """
@@ -2482,11 +2534,12 @@ class Mesh:
             """
             for jj, u in enumerate(U):
                 titi, nn, _ = self.PreparePlot(u[:, ii], coef, n)
-                pc[jj].set_paths(nn)
+                # pc[jj].set_paths(nn)
+                pc[jj].set_verts(nn)
             return pc.values()
 
         line_ani = animation.FuncAnimation(fig, updateMesh, range(ntimes),
-                                           blit=True,
+                                           blit=False,
                                            interval=timeAnim/ntimes*1000)
         return line_ani
 
@@ -2642,8 +2695,128 @@ class Mesh:
                 plt.axis("off")
                 plt.show()
 
+    def PlotContourTensorField(self, U, Fn, Fs, n=None, s=1.0, stype='comp',
+                          newfig=True, cmap='rainbow', field_name='Field', **kwargs):
+        """
+        Plots the STRESS/STRAIN field using Matplotlib Library.
+
+        Parameters
+        ----------
+        U : 1D NUMPY.ARRAY
+            displacement dof vector
+        Fn : The normal fields ex: [Ex, Ey] should be nodal values
+        Fs : The tangential fields ex: [Exy, 0] should be nodal values
+        n : NUMPY.ARRAY, optional
+            Coordinate of the nodes. The default is None, which corresponds
+            to using self.n instead.
+        s : FLOAT, optional
+            Deformation scale factor. The default is 1.0.
+        stype : STRING, optional
+            'comp' > plots the 3 components of the field
+            'mag' > plots the 'VonMises' equivalent field
+            'pcp'> plots the 2 principal fields
+            'maxpcp'> plots the maximal principal fields
+            The default is 'comp'.
+        newfigure : BOOL
+            if TRUE plot in a new figure (default)
+        **kwargs : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        if n is None:
+            n = self.n.copy()
+            n += U[self.conn] * s  # s: amplification scale factor
+        triangles = np.zeros((0, 3), dtype=int)
+        for ie in self.e.keys():
+            if ie == 3 or ie == 16 or ie == 10:  # quadrangles
+                triangles = np.vstack(
+                    (triangles, self.e[ie][:, [0, 1, 3]],
+                     self.e[ie][:, [1, 2, 3]])
+                )
+            elif ie == 2 or ie == 9:  # triangles
+                triangles = np.vstack((triangles, self.e[ie]))
+        EX = Fn[:, 0]
+        EY = Fn[:, 1]
+        EXY = Fs[:, 0]
+        alpha = kwargs.pop("alpha", 1)
+        if stype == 'pcp':
+            E1 = 0.5*EX + 0.5*EY\
+            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            E2 = 0.5*EX + 0.5*EY\
+            + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]],
+                            20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title(field_name+"_1")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]],
+                            20, alpha=alpha)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title(field_name+"_2")
+            plt.colorbar()
+            plt.show()
+        elif stype == 'maxpcp':
+            E1 = 0.5*EX + 0.5*EY\
+            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            E2 = 0.5*EX + 0.5*EY\
+            + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            rep, = np.where(abs(E1) < abs(E2))
+            E1[rep] = E2[rep]
+            if newfig:
+                plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha, cmap=cmap)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title(field_name+"_max")
+            plt.colorbar()
+        elif stype == 'mag':
+            EVM = np.sqrt(EX**2 + EY**2 + EX * EY + 3 * EXY**2)
+            if newfig:
+                plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM, 20, alpha=alpha, cmap=cmap)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title(field_name+"_VM")
+            plt.colorbar()
+        else:
+            """ Plot mesh and field contour """
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EX, 20, alpha=alpha, cmap=cmap)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.title(field_name+"_X")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EY, 20, alpha=alpha, cmap=cmap)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("equal")
+            plt.title(field_name+"_Y")
+            plt.axis("off")
+            plt.colorbar()
+            plt.figure()
+            plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY, 20, alpha=alpha, cmap=cmap)
+            self.Plot(n=n, alpha=0.1)
+            plt.axis("equal")
+            plt.title(field_name+"_XY")
+            plt.axis("off")
+            plt.colorbar()
+            plt.show()
+
     def PlotContourStrain(self, U, n=None, s=1.0, stype='comp',
-                          newfig=True, **kwargs):
+                          newfig=True, cmap='rainbow', **kwargs):
         """
         Plots the strain field using Matplotlib Library.
 
@@ -2672,97 +2845,13 @@ class Mesh:
         None.
 
         """
-        if n is None:
-            n = self.n.copy()
-            n += U[self.conn] * s  # s: amplification scale factor
-        triangles = np.zeros((0, 3), dtype=int)
-        for ie in self.e.keys():
-            if ie == 3 or ie == 16 or ie == 10:  # quadrangles
-                triangles = np.vstack(
-                    (triangles, self.e[ie][:, [0, 1, 3]],
-                     self.e[ie][:, [1, 2, 3]])
-                )
-            elif ie == 2 or ie == 9:  # triangles
-                triangles = np.vstack((triangles, self.e[ie]))
         EN, ES = self.StrainAtNodes(U)
-        EX = EN[:, 0]
-        EY = EN[:, 1]
-        EXY = ES[:, 0]
-        alpha = kwargs.pop("alpha", 1)
-        if stype == 'pcp':
-            E1 = 0.5*EX + 0.5*EY\
-            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
-            E2 = 0.5*EX + 0.5*EY\
-            + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]],
-                            20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("EPS_1")
-            plt.colorbar()
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]],
-                            20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("EPS_2")
-            plt.colorbar()
-            plt.show()
-        elif stype == 'maxpcp':
-            E1 = 0.5*EX + 0.5*EY\
-            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
-            E2 = 0.5*EX + 0.5*EY\
-            + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
-            rep, = np.where(abs(E1) < abs(E2))
-            E1[rep] = E2[rep]
-            if newfig:
-                plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("EPS_max")
-            plt.colorbar()
-        elif stype == 'mag':
-            EVM = np.sqrt(EX**2 + EY**2 + EX * EY + 3 * EXY**2)
-            if newfig:
-                plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("EPS_VM")
-            plt.colorbar()
-        else:
-            """ Plot mesh and field contour """
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EX, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("EPS_X")
-            plt.colorbar()
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EY, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("equal")
-            plt.title("EPS_Y")
-            plt.axis("off")
-            plt.colorbar()
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("equal")
-            plt.title("EPS_XY")
-            plt.axis("off")
-            plt.colorbar()
-            plt.show()
+        self.PlotContourTensorField(U, EN, ES, n=n, s=s, stype=stype,
+                          newfig=newfig, cmap=cmap, field_name='EPS', **kwargs)
+
 
     def PlotContourStress(self, U, hooke, n=None, s=1.0, stype='comp',
-                          newfig=True, **kwargs):
+                          newfig=True, cmap='rainbow', **kwargs):
         """
         Plots the stress field using Matplotlib Library.
 
@@ -2777,10 +2866,10 @@ class Mesh:
         s : FLOAT, optional
             Deformation scale factor. The default is 1.0.
         stype : STRING, optional
-            'comp' > plots the 3 components of the strain field
-            'mag' > plots the 'VonMises' equivalent strain
-            'pcp'> plots the 2 principal strain fields
-            'maxpcp'> plots the maximal principal strain fields
+            'comp' > plots the 3 components of the stress field
+            'mag' > plots the 'VonMises' equivalent stress
+            'pcp'> plots the 2 principal stress fields
+            'maxpcp'> plots the maximal principal stress fields
             The default is 'comp'.
         newfigure : BOOL
             if TRUE plot in a new figure (default)
@@ -2792,95 +2881,11 @@ class Mesh:
         None.
 
         """
-        if n is None:
-            n = self.n.copy()
-            n += U[self.conn] * s  # s: amplification scale factor
-        triangles = np.zeros((0, 3), dtype=int)
-        for ie in self.e.keys():
-            if ie == 3 or ie == 16 or ie == 10:  # quadrangles
-                triangles = np.vstack(
-                    (triangles, self.e[ie][:, [0, 1, 3]],
-                     self.e[ie][:, [1, 2, 3]])
-                )
-            elif ie == 2 or ie == 9:  # triangles
-                triangles = np.vstack((triangles, self.e[ie]))
         EN, ES = self.StrainAtNodes(U)
-        EX = EN[:, 0]
-        EY = EN[:, 1]
-        EXY = ES[:, 0]
-        SX = EX * hooke[0, 0] + EY * hooke[0, 1] + 2 * EXY * hooke[0, 2]
-        SY = EX * hooke[1, 0] + EY * hooke[1, 1] + 2 * EXY * hooke[1, 2]
-        SXY = EX * hooke[2, 0] + EY * hooke[2, 1] + 2 * EXY * hooke[2, 2]
-        alpha = kwargs.pop("alpha", 1)
-        if stype == 'pcp':
-            E1 = 0.5*SX + 0.5*SY\
-            - 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
-            E2 = 0.5*SX + 0.5*SY\
-            + 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("SIG_1")
-            plt.colorbar()
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("SIG_2")
-            plt.colorbar()
-            plt.show()
-        elif stype == 'maxpcp':
-            E1 = 0.5*SX + 0.5*SY\
-            - 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
-            E2 = 0.5*SX + 0.5*SY\
-            + 0.5*np.sqrt(SX**2 - 2*SX*SY + SY**2 + 4*SXY**2)
-            rep, = np.where(abs(E1) < abs(E2))
-            E1[rep] = E2[rep]
-            if newfig:
-                plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("SIG_max")
-            plt.colorbar()
-        elif stype == 'mag':
-            EVM = np.sqrt(SX**2 + SY**2 + SX * SY + 3 * SXY**2)
-            if newfig:
-                plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("SIG_VM")
-            plt.colorbar()
-        else:
-            """ Plot mesh and field contour """
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, SX, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
-            plt.title("SIG_X")
-            plt.colorbar()
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, SY, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("equal")
-            plt.title("SIG_Y")
-            plt.axis("off")
-            plt.colorbar()
-            plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, SXY, 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
-            plt.axis("equal")
-            plt.title("SIG_XY")
-            plt.axis("off")
-            plt.colorbar()
-            plt.show()
+        SN, SS = Strain2Stress(hooke, EN, ES)
+        self.PlotContourTensorField(U, SN, SS, n=n, 
+                        s=s, stype=stype, newfig=newfig, cmap=cmap, 
+                        field_name='SIG', **kwargs)
 
     def PlotNodeLabels(self, d=[0, 0], **kwargs):
         """
@@ -3210,31 +3215,41 @@ class Mesh:
         plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
 
-    def SelectNodesBox(self):
+    def SelectNodesBox(self, box=None):
         """
         Selection of all the nodes of a mesh lying in a box defined by two
         points clics.
         """
-        plt.figure()
-        self.Plot()
-        figManager = plt.get_current_fig_manager()
-        if hasattr(figManager.window, 'showMaximized'):
-            figManager.window.showMaximized()
+        if box is None:
+            plt.figure()
+            self.Plot()
+            figManager = plt.get_current_fig_manager()
+            if hasattr(figManager.window, 'showMaximized'):
+                figManager.window.showMaximized()
+            else:
+                if hasattr(figManager.window, 'maximize'):
+                    figManager.resize(figManager.window.maximize())
+            plt.title("Select 2 points... and press enter")
+            pts1 = np.array(plt.ginput(2, timeout=0))
+            plt.close()
+            inside = (
+                (self.n[:, 0] > pts1[0, 0])
+                * (self.n[:, 0] < pts1[1, 0])
+                * (self.n[:, 1] > pts1[0, 1])
+                * (self.n[:, 1] < pts1[1, 1])
+            )
         else:
-            if hasattr(figManager.window, 'maximize'):
-                figManager.resize(figManager.window.maximize())
-        plt.title("Select 2 points... and press enter")
-        pts1 = np.array(plt.ginput(2, timeout=0))
-        plt.close()
-        inside = (
-            (self.n[:, 0] > pts1[0, 0])
-            * (self.n[:, 0] < pts1[1, 0])
-            * (self.n[:, 1] > pts1[0, 1])
-            * (self.n[:, 1] < pts1[1, 1])
-        )
+            if self.dim == 3:
+                inside = isInBox(box, self.n[:, 0], self.n[:, 1], self.n[:, 2])
+            else:
+                inside = isInBox(box, self.n[:, 0], self.n[:, 1])
         (nset,) = np.where(inside)
         self.Plot()
-        plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
+        if self.dim == 3:
+            ax = plt.gca()
+            ax.plot(self.n[nset, 0], self.n[nset, 1], self.n[nset, 2], "ro")
+        else:
+            plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
 
     def SelectLine(self, eps=1e-8):
@@ -3389,3 +3404,76 @@ class Mesh:
             Um[self.conn[jn, 0]] = np.median(U[self.conn[vjn, 0]])
             Um[self.conn[jn, 1]] = np.median(U[self.conn[vjn, 1]])
         return Um
+
+
+    def Extrude(self, lz, nz, order=1):
+        import gmsh
+        gmsh.initialize()
+        gmsh.model.add("lug")
+        m = self.Copy()
+        m.RemoveUnusedNodes()
+        m.KeepSurfElems()
+        for i in range(len(m.n)):
+            gmsh.model.geo.addPoint(m.n[i, 0], m.n[i, 1], 0, tag=i+1)
+        ied = 1
+        iel = 1
+        recombine = True
+        for ik in m.e.keys():
+            if ik in {2, 9}:  # triangles
+                recombine = False
+                m.e[ik] += 1
+                for i in range(len(m.e[ik])):
+                    gmsh.model.geo.addLine(m.e[ik][i, 0], m.e[ik][i, 1], tag=ied)
+                    gmsh.model.geo.mesh.setTransfiniteCurve(ied, 1)
+                    ied += 1
+                    gmsh.model.geo.addLine(m.e[ik][i, 1], m.e[ik][i, 2], tag=ied)
+                    gmsh.model.geo.mesh.setTransfiniteCurve(ied, 1)
+                    ied += 1
+                    gmsh.model.geo.addLine(m.e[ik][i, 2], m.e[ik][i, 0], tag=ied)
+                    gmsh.model.geo.mesh.setTransfiniteCurve(ied, 1)
+                    ied += 1
+                    gmsh.model.geo.addCurveLoop([ied-3, ied-2, ied-1], iel)
+                    gmsh.model.geo.addPlaneSurface([iel], iel)
+                    gmsh.model.geo.mesh.setTransfiniteSurface(
+                        iel, "Left", m.e[ik][i, :3].tolist())
+                    iel += 1
+            elif ik in {3, 10, 16}:  # quadranles
+                m.e[ik] += 1
+                recombine = True
+                for i in range(len(m.e[ik])):
+                    gmsh.model.geo.addLine(m.e[ik][i, 0], m.e[ik][i, 1], tag=ied)
+                    gmsh.model.geo.mesh.setTransfiniteCurve(ied, 1)
+                    ied += 1
+                    gmsh.model.geo.addLine(m.e[ik][i, 1], m.e[ik][i, 2], tag=ied)
+                    gmsh.model.geo.mesh.setTransfiniteCurve(ied, 1)
+                    ied += 1
+                    gmsh.model.geo.addLine(m.e[ik][i, 2], m.e[ik][i, 3], tag=ied)
+                    gmsh.model.geo.mesh.setTransfiniteCurve(ied, 1)
+                    ied += 1
+                    gmsh.model.geo.addLine(m.e[ik][i, 3], m.e[ik][i, 0], tag=ied)
+                    gmsh.model.geo.mesh.setTransfiniteCurve(ied, 1)
+                    ied += 1
+                    gmsh.model.geo.addCurveLoop([ied-4, ied-3, ied-2, ied-1], iel)
+                    gmsh.model.geo.addPlaneSurface([iel], iel)
+                    gmsh.model.geo.mesh.setTransfiniteSurface(
+                        iel, "Left", m.e[ik][i, :4].tolist())
+                    iel += 1
+        # gmsh.model.geo.addSurfaceLoop([*range(1, iel)], iel)
+        if recombine:
+            gmsh.option.setNumber('Mesh.RecombineAll', 1)
+            gmsh.option.setNumber('Mesh.RecombinationAlgorithm', 1)
+            gmsh.option.setNumber('Mesh.Recombine3DLevel', 2)
+        listpairs = [(2, i) for i in range(1, iel)]
+        gmsh.model.geo.extrude(listpairs, 0, 0, lz, [nz, ], recombine=recombine)
+        gmsh.option.setNumber('Mesh.ElementOrder', order)
+        gmsh.option.setNumber('General.Verbosity', 1)
+        gmsh.model.geo.synchronize()
+        gmsh.model.mesh.generate(3)
+        gmsh.write("lug.msh")
+        # if '-nopopup' not in sys.argv:
+        #     gmsh.fltk.run()
+        gmsh.finalize()
+        m = ReadMesh("lug.msh", 3)
+        m.KeepVolElems()
+        # m.Plot()
+        return m

@@ -33,6 +33,7 @@ mesh.KeepSurfElems() # keep only cells of type quad or triangles.
 
 #### Computing the mass and stiffness matrices
 mesh.Connectivity()                            # Computation of the connectivity
+mesh.GaussIntegration()
 K = mesh.Stiffness(hooke).tocsc()              # Assembling of the stiffness matrix
 M = mesh.Mass(rho).tocsc()                     # Assembling of the mass matrix
 

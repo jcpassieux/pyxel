@@ -245,26 +245,32 @@ def StructuredMeshHex20(box, lc):
     if type(lc) is int:
         lc = [lc, lc, lc]
     # Create a structured hexahedral mesh
-    lx = box[1, 0] - box[0, 0]
-    ly = box[1, 1] - box[0, 1]
-    lz = box[1, 2] - box[0, 2]
-    nx = int(lx//lc[0])
-    ny = int(ly//lc[1])
-    nz = int(lz//lc[2])
+    x0 = box[0, 0]
+    y0 = box[0, 1]
+    z0 = box[0, 2]
+    lx = box[1, 0] - x0
+    ly = box[1, 1] - y0
+    lz = box[1, 2] - z0
+    nx = int(lx/lc[0])
+    ny = int(ly/lc[1])
+    nz = int(lz/lc[2])
+    print(nx)
+    print(ny)
+    print(nz)
     gmsh.initialize()
     gmsh.model.add("lug")
-    gmsh.model.geo.addPoint(0, 0, 0, lc[0], 1)
-    gmsh.model.geo.addPoint(lx, 0, 0, lc[1], 2)
-    gmsh.model.geo.addPoint(lx, ly, 0, lc[0], 3)
-    gmsh.model.geo.addPoint(0, ly, 0, lc[1], 4)
+    gmsh.model.geo.addPoint(x0, y0, z0, tag=1)
+    gmsh.model.geo.addPoint(x0+lx, y0, z0, tag=2)
+    gmsh.model.geo.addPoint(x0+lx, y0+ly, z0, tag=3)
+    gmsh.model.geo.addPoint(x0, y0+ly, z0, tag=4)
     gmsh.model.geo.addLine(1, 2, tag=5)
-    gmsh.model.geo.mesh.setTransfiniteCurve(5, nx)
+    gmsh.model.geo.mesh.setTransfiniteCurve(5, nx+1)
     gmsh.model.geo.addLine(2, 3, tag=6)
-    gmsh.model.geo.mesh.setTransfiniteCurve(6, ny)
+    gmsh.model.geo.mesh.setTransfiniteCurve(6, ny+1)
     gmsh.model.geo.addLine(3, 4, tag=7)
-    gmsh.model.geo.mesh.setTransfiniteCurve(7, nx)
+    gmsh.model.geo.mesh.setTransfiniteCurve(7, nx+1)
     gmsh.model.geo.addLine(4, 1, tag=8)
-    gmsh.model.geo.mesh.setTransfiniteCurve(8, ny)
+    gmsh.model.geo.mesh.setTransfiniteCurve(8, ny+1)
     gmsh.model.geo.addCurveLoop([5, 6, 7, 8], 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
     gmsh.model.geo.mesh.setTransfiniteSurface(1, "Left", [1, 2, 3, 4])
@@ -274,6 +280,7 @@ def StructuredMeshHex20(box, lc):
     gmsh.option.setNumber('Mesh.SecondOrderIncomplete', 1)
     gmsh.model.geo.extrude([(2, 1)], 0, 0, lz, [nz, ], recombine=True)
     gmsh.option.setNumber('Mesh.ElementOrder', 2)
+    gmsh.option.setNumber('General.Verbosity', 1)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
     gmsh.write("lug.msh")
@@ -322,6 +329,39 @@ def StructuredMesh(box, dx, typel=3):
     elif typel == 17:
         return StructuredMeshHex20(box, dx)
 
+
+def MeshFrom1DClosedMesh(m, lc=None, order=1, recombine=False):
+    if lc is None:
+        lc = np.ones(len(m.n)) * m.GetApproxElementSize()
+    elif type(lc) == int or type(lc) == float:
+        lc = np.ones(len(m.n)) * lc
+    gmsh.initialize()
+    gmsh.model.add("lug")
+    for i in range(len(m.n)):
+        gmsh.model.geo.addPoint(m.n[i, 0], m.n[i, 1], 0, lc[i], tag=i)
+    for ie in range(len(m.e[1])):
+        gmsh.model.geo.addLine(m.e[1][ie, 0], m.e[1][ie, 1], tag=i+ie)
+    gmsh.model.geo.addCurveLoop(np.arange(len(m.e[1]))+i, 1)
+    gmsh.model.geo.addPlaneSurface([1], 1)
+    if recombine:
+        # gmsh.model.geo.mesh.setTransfiniteSurface(1, "Left", [])
+        gmsh.option.setNumber('Mesh.RecombineAll', 1)
+        gmsh.option.setNumber('Mesh.RecombinationAlgorithm', 1)
+    if order > 1:
+        gmsh.option.setNumber('Mesh.SecondOrderIncomplete', 1)
+        gmsh.option.setNumber('Mesh.ElementOrder', order)
+    gmsh.option.setNumber('General.Verbosity', 1)
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(2)
+    gmsh.write("lug.msh")
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
+    gmsh.finalize()
+    m2d = ReadMesh("lug.msh", 2)
+    m2d.Plot()
+    return m2d
+
+
 # %%
 
 
@@ -358,6 +398,7 @@ def TetraMeshCylinder(x0, y0, z0, R, h, lc):
     gmsh.model.geo.addPlaneSurface([1], 1)
     gmsh.model.geo.extrude([(2, 1)], 0, 0, h)
     gmsh.model.geo.synchronize()
+    gmsh.option.setNumber('General.Verbosity', 1)
     gmsh.model.mesh.generate(3)
 
     nums, nodes, e = gmsh.model.mesh.getNodes()
@@ -404,6 +445,7 @@ def TetraMeshBox(box, dx):
     gmsh.model.geo.addPlaneSurface([1], 1)
     gmsh.model.geo.extrude([(2, 1)], 0, 0, zmax-zmin)
     gmsh.model.geo.synchronize()
+    gmsh.option.setNumber('General.Verbosity', 1)
     gmsh.model.mesh.generate(3)
     nums, nodes, e = gmsh.model.mesh.getNodes()
     nodes = nodes.reshape((len(nums), 3))
@@ -517,7 +559,6 @@ def RayCasting(lsi, p):
 
 #%% bulk meshing from polygon
 
-
 def MeshFromLS(ls, lc, typel='tri'):
     # ls list of segments
     # lc approximate element size
@@ -563,6 +604,7 @@ def MeshFromLS(ls, lc, typel='tri'):
     if typel == 'quad':
         gmsh.option.setNumber("Mesh.RecombineAll", 1)
     # gmsh.fltk.run()
+    gmsh.option.setNumber('General.Verbosity', 1)
     gmsh.model.mesh.generate(2)
     gmsh.write('tmp.msh')
     gmsh.finalize()

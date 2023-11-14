@@ -1,6 +1,7 @@
 
 import numpy as np
 
+
 def Hooke(p, typc='isotropic_2D_ps'):
     """Compute 2D Hooke tensor from elastic constants
 
@@ -57,7 +58,7 @@ def Hooke(p, typc='isotropic_2D_ps'):
         # mat.Glt=4.75e9;
         # mat.layup=[0 45 -45 -45 45 0
         #               ones(1,6)*0.1446*1e-3];
-        
+
         # ep=mat.layup(2,:);
         # alpha=mat.layup(1,:);
         # El=mat.El;
@@ -65,13 +66,13 @@ def Hooke(p, typc='isotropic_2D_ps'):
         # vlt=mat.vlt;
         # vtl=mat.vtl;
         # Glt=mat.Glt;
-        
+
         # % Orthotropic stiffness term in the ply coordinate syst
         # alp=1/(1-vlt*vtl);
         # H=[alp*El     alp*vtl*El 0
         #    alp*vlt*Et alp*Et     0
         #    0          0         2*Glt];
-        
+
         # % rotation and addition of the ply properties
         # A=0*H;
         # for iply=1:numel(alpha)
@@ -90,11 +91,51 @@ def Hooke(p, typc='isotropic_2D_ps'):
     if typc == 'isotropic_3D':
         E = p[0]
         v = p[1]
-        return E / ((1+v)*(1-2*v)) * np.array([[1-v, v, v, 0, 0, 0], 
-                                               [v, 1-v, v, 0, 0, 0], 
-                                               [v, v, 1-v, 0, 0, 0], 
+        return E / ((1+v)*(1-2*v)) * np.array([[1-v, v, v, 0, 0, 0],
+                                               [v, 1-v, v, 0, 0, 0],
+                                               [v, v, 1-v, 0, 0, 0],
                                                [0, 0, 0, (1 - v) / 2, 0, 0],
                                                [0, 0, 0, 0, (1 - v) / 2, 0],
                                                [0, 0, 0, 0, 0, (1 - v) / 2]])
     else:
         raise Exception('Unknown elastic constitutive regime (3D)')
+
+
+def Strain2Stress(hooke, En, Es):
+    if len(hooke) == 3:  # dim 2
+        SXX = En[:, 0] * hooke[0, 0] + En[:, 1] * \
+            hooke[0, 1] + 2 * Es[:, 0] * hooke[0, 2]
+        SYY = En[:, 0] * hooke[1, 0] + En[:, 1] * \
+            hooke[1, 1] + 2 * Es[:, 0] * hooke[1, 2]
+        SXY = En[:, 0] * hooke[2, 0] + En[:, 0] * \
+            hooke[2, 1] + 2 * Es[:, 0] * hooke[2, 2]
+        Sn = np.c_[SXX, SYY]
+        Ss = np.c_[SXY, 0*SXY]
+    else:  # dim 3
+        i = 0
+        SXX = En[:, 0] * hooke[i, 0] + En[:, 1] * hooke[i, 1] + \
+            En[:, 2] * hooke[i, 2] + 2 * Es[:, 0] * hooke[i, 3] + \
+            2 * Es[:, 1] * hooke[i, 4] + 2 * Es[:, 2] * hooke[i, 5]
+        i = 1
+        SYY = En[:, 0] * hooke[i, 0] + En[:, 1] * hooke[i, 1] +\
+            En[:, 2] * hooke[i, 2] + 2 * Es[:, 0] * hooke[i, 3] +\
+            2 * Es[:, 1] * hooke[i, 4] + 2 * Es[:, 2] * hooke[i, 5]
+        i = 2
+        SZZ = En[:, 0] * hooke[i, 0] + En[:, 1] * hooke[i, 1] +\
+            En[:, 2] * hooke[i, 2] + 2 * Es[:, 0] * hooke[i, 3] +\
+            2 * Es[:, 1] * hooke[i, 4] + 2 * Es[:, 2] * hooke[i, 5]
+        i = 3
+        SXY = En[:, 0] * hooke[i, 0] + En[:, 1] * hooke[i, 1] +\
+            En[:, 2] * hooke[i, 2] + 2 * Es[:, 0] * hooke[i, 3] +\
+            2 * Es[:, 1] * hooke[i, 4] + 2 * Es[:, 2] * hooke[i, 5]
+        i = 4
+        SXZ = En[:, 0] * hooke[i, 0] + En[:, 1] * hooke[i, 1] +\
+            En[:, 2] * hooke[i, 2] + 2 * Es[:, 0] * hooke[i, 3] +\
+            2 * Es[:, 1] * hooke[i, 4] + 2 * Es[:, 2] * hooke[i, 5]
+        i = 5
+        SYZ = En[:, 0] * hooke[i, 0] + En[:, 1] * hooke[i, 1] +\
+            En[:, 2] * hooke[i, 2] + 2 * Es[:, 0] * hooke[i, 3] +\
+            2 * Es[:, 1] * hooke[i, 4] + 2 * Es[:, 2] * hooke[i, 5]
+        Sn = np.c_[SXX, SYY, SZZ]
+        Ss = np.c_[SXY, SXZ, SYZ]
+    return Sn, Ss
