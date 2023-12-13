@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyxel-dic"
-version = "3.0.7"
+version = "3.0.8"
 authors = [
   { name="JC Passieux", email="jc.passieux@gmail.com" },
 ]
@@ -28,6 +28,8 @@ dependencies = [
     "scikit-image",
     "interpylate",
 ]
+license = {file = "LICENSE"}
+
 
 [project.urls]
 "Homepage" = "https://github.com/jcpassieux/pyxel"

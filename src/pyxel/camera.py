@@ -851,8 +851,8 @@ class CameraVol:
             Y*np.cos(rx)*np.cos(rz) + Z*(-np.sin(rx)*np.cos(ry)*np.cos(rz) - \
                                              np.sin(ry)*np.sin(rz)) + ty
         # 
-        dvdtx = 0 * X + f
-        dvdty = 0 * X
+        dvdtx = 0 * X
+        dvdty = 0 * X + f
         dvdtz = 0 * X
         dvdrx = -X*f*np.sin(ry)*np.cos(rx)*np.cos(rz) - Y*f*np.sin(rx)*np.cos(rz) - \
             Z*f*np.cos(rx)*np.cos(ry)*np.cos(rz)

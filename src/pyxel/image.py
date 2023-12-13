@@ -326,36 +326,37 @@ class Volume:
 
     def BuildInterp(self):
         """build trilinear interp"""
-        # x = np.arange(self.pix.shape[0])
-        # y = np.arange(self.pix.shape[1])
-        # z = np.arange(self.pix.shape[2])
-        # self.interp = spi.RegularGridInterpolator(
-        #     (x, y, z), self.pix, method='linear', bounds_error=True, fill_value=None)
-        import interpylate as interp
-        self.interp = interp.TriLinearRegularGridInterpolator()
+        x = np.arange(self.pix.shape[0])
+        y = np.arange(self.pix.shape[1])
+        z = np.arange(self.pix.shape[2])
+        self.interp = spi.RegularGridInterpolator(
+            (x, y, z), self.pix, method='linear', bounds_error=False, fill_value=None)
+        # import interpylate as interp
+        # self.interp = interp.TriLinearRegularGridInterpolator()
 
     def Interp(self, x, y, z):
         """Evaluate the continuous representation of the voxels """
         if not hasattr(self, 'interp'):
             self.BuildInterp()
-        # return self.interp(np.vstack((x-self.x0, y-self.y0, z-self.z0)).T)
-        P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0))
-        return self.interp.evaluate(self.pix, P_coords)
+        return self.interp(np.vstack((x-self.x0, y-self.y0, z-self.z0)).T)
+        # P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0))
+        # return self.interp.evaluate(self.pix, P_coords)
         
     def InterpGrad(self, x, y, z, eps=1.e-7):
         """Evaluate the gradient of the continuous representation of the voxels """
-        # P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0)).T
-        # df_dP = []
-        # for xi in range(3):
-        #     P_coords_xi_p_dxi = P_coords.copy()
-        #     P_coords_xi_p_dxi[:, xi] = P_coords_xi_p_dxi[:, xi] + eps/2
-        #     P_coords_xi_m_dxi = P_coords.copy()
-        #     P_coords_xi_m_dxi[:, xi] = P_coords_xi_m_dxi[:, xi] - eps/2
-        #     df_dP.append((self.interp(P_coords_xi_p_dxi) -
-        #                   self.interp(P_coords_xi_m_dxi))/(eps))
-        P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0))
-        df_dP = self.interp.grad(self.pix, P_coords)
+        P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0)).T
+        df_dP = []
+        for xi in range(3):
+            P_coords_xi_p_dxi = P_coords.copy()
+            P_coords_xi_p_dxi[:, xi] = P_coords_xi_p_dxi[:, xi] + eps/2
+            P_coords_xi_m_dxi = P_coords.copy()
+            P_coords_xi_m_dxi[:, xi] = P_coords_xi_m_dxi[:, xi] - eps/2
+            df_dP.append((self.interp(P_coords_xi_p_dxi) -
+                          self.interp(P_coords_xi_m_dxi))/(eps))
         return df_dP[0], df_dP[1], df_dP[2]
+        # P_coords = np.vstack((x-self.x0, y-self.y0, z-self.z0))
+        # df_dP = self.interp.grad(self.pix, P_coords)
+        # return df_dP[0], df_dP[1], df_dP[2]
 
     def Plot(self):
         """Plot Image"""

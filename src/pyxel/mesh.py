@@ -750,7 +750,7 @@ def ShapeFunctions(eltype):
         xg = xg.ravel()
         yg = yg.ravel()
         zg = zg.ravel()
-        wg = np.kron(np.kron(wg, wg), wg)  # WORKS WITH DEG 2, TO BE CHECKED!
+        wg = np.kron(np.kron(wg, wg), wg)
         return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
     elif eltype == 4:
         """
@@ -993,21 +993,15 @@ def ShapeFunctions(eltype):
                 -2*z*(2*x + 2)*(y + 1),
                 -2*z*(2 - 2*x)*(y + 1),
                 )).reshape((20, len(x))).T
-        # 8 gauss points
-        xg = np.sqrt(3) / 3 * np.array([-1, 1, -1, 1, -1, 1, -1, 1])
-        yg = np.sqrt(3) / 3 * np.array([-1, -1, 1, 1, -1, -1, 1, 1])
-        zg = np.sqrt(3) / 3 * np.array([-1, -1, -1, -1, 1, 1, 1, 1])
-        wg = np.ones(8)
-
-        # 27 gauss points
-        # xi = np.array([-np.sqrt(3/5), 0, np.sqrt(3/5)])
-        # xg, yg, zg = np.meshgrid(xi, xi, xi)
-        # wi = np.array([0.5555555555555556,
-        #                0.8888888888888888,
-        #                0.5555555555555556])
-        # wx, wy, wz = np.meshgrid(wi, wi, wi)
-        # wg = wy*wx*wz
-        return xg.ravel(), yg.ravel(), zg.ravel(), wg.ravel(), N, dN_xi, dN_eta, dN_zeta
+        # deg = 2  # 8 gauss points
+        deg = 3  # 27 gauss points
+        xg, wg = leggauss(deg)
+        xg, yg, zg = np.meshgrid(xg, xg, xg)
+        xg = xg.ravel()
+        yg = yg.ravel()
+        zg = zg.ravel()
+        wg = np.kron(np.kron(wg, wg), wg)
+        return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
 
 
 # %%
@@ -1542,10 +1536,12 @@ class Mesh:
                 u, v = cam.P(self.n[:, 0], self.n[:, 1])
             aes = []
             for et in self.e.keys():
-                um = u[self.e[et]]\
-                    - np.mean(u[self.e[et]], axis=1)[:, np.newaxis]
-                vm = v[self.e[et]]\
-                    - np.mean(v[self.e[et]], axis=1)[:, np.newaxis]
+                if et in [2, 9]:
+                    rep = np.arange(3)
+                elif et in [3, 10, 16]:
+                    rep = np.arange(4)
+                um = u[self.e[et][:, rep]] - np.mean(u[self.e[et][:, rep]], axis=1)[:, np.newaxis]
+                vm = v[self.e[et][:, rep]] - np.mean(v[self.e[et][:, rep]], axis=1)[:, np.newaxis]
                 if method == 'max':
                     aes = np.append(aes,
                                     np.max(np.sqrt(um**2 + vm**2), axis=1)
@@ -1853,18 +1849,30 @@ class Mesh:
                 detJ = dxdr * dyds * dzdt + dxds * dydt * dzdr\
                     + dydr * dzds * dxdt - dzdr * dyds * dxdt\
                     - dxdr * dzds * dydt - dydr * dxds * dzdt
-                dphidx = (
-                    (dyds*dzdt - dzds*dydt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
-                - ((dydr*dzdt - dzdr*dydt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                dphidx = \
+                + ((dyds*dzdt - dzds*dydt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                + ((dzdr*dydt - dydr*dzdt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
                 + ((dydr*dzds - dzdr*dyds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
-                dphidy = -(
-                    (dxds*dzdt - dzds*dxdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                dphidy = \
+                + ((dzds*dxdt - dxds*dzdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
                 + ((dxdr*dzdt - dzdr*dxdt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
-                - ((dxdr*dzds - dzdr*dxds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
-                dphidz = (
-                    (dxds*dydt - dyds*dxdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
-                - ((dxdr*dydt - dydr*dxdt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                + ((dzdr*dxds - dxdr*dzds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
+                dphidz = \
+                + ((dxds*dydt - dyds*dxdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                + ((dydr*dxdt - dxdr*dydt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
                 + ((dxdr*dyds - dydr*dxds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
+                # dphidx = (
+                #     (dyds*dzdt - dzds*dydt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                # - ((dydr*dzdt - dzdr*dydt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                # + ((dydr*dzds - dzdr*dyds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
+                # dphidy = -(
+                #     (dxds*dzdt - dzds*dxdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                # + ((dxdr*dzdt - dzdr*dxdt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                # - ((dxdr*dzds - dzdr*dxds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
+                # dphidz = (
+                #     (dxds*dydt - dyds*dxdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                # - ((dxdr*dydt - dydr*dxdt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                # + ((dxdr*dyds - dydr*dxds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
                 wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
                 repnzv = np.arange(ne * nfun) + i * ne * nfun
                 col[repnzv] = e.ravel()   # repdof.ravel()
@@ -2425,11 +2433,11 @@ class Mesh:
             mb.Plot(U, coef, n, plotnodes, alpha=alpha, edgecolor=edgecolor,
                     facecolor=facecolor, **kwargs)
         else:   # otherwise
-            fig = plt.figure()
             if self.dim == 2:
                 facecolor = kwargs.pop("facecolor", "None")
                 ax = plt.gca()
             else:
+                fig = plt.figure()
                 facecolor = kwargs.pop("facecolor", "w")  # "w"
                 ax = fig.add_subplot(111, projection="3d")
                 # ax = Axes3D(plt.figure())
@@ -3055,6 +3063,36 @@ class Mesh:
             self.e[k] = table[self.e[k]]
         self.n = nnew
 
+    def KeepElemsConnectedToThisNode(self, node_id=0):
+        """
+        Removes the hanging elements is case of non connexity
+        Keeps the elements connected to node id node_id
+        Solves a Poisson problem to find connectivity.
+
+        Usage :
+            m.KeepElemsConnectedToThisNode()
+
+        """
+        if len(self.conn) == 0:
+            self.Connectivity()
+        used_nodes = self.conn[:, 0] > -1
+        rep = self.conn[used_nodes, 0]
+        repk = np.ix_(rep, rep)
+        K = self.Laplacian()[repk]
+        dof_id = self.conn[node_id, 0]
+        rep = np.setdiff1d(np.arange(K.shape[0]), dof_id)
+        repk = np.ix_(rep, rep)
+        x = np.zeros(self.ndof//self.dim)
+        x[dof_id] = 1
+        b = -K @ x
+        from scipy.sparse.linalg import cg
+        x[rep], info = cg(K[repk], b[rep], tol=0.01)
+        plt.plot(x, 'k.')
+        # m.VTKSol('outliers', np.hstack((x, x, x)))
+        for k in self.e.keys():
+            keep_elem = x[self.conn[self.e[k][:, 0], 0]] > 0.5
+            self.e[k] = self.e[k][keep_elem]
+
     def RemoveUnusedNodes(self):
         """
         Removes all the nodes that are not connected to an element and
@@ -3215,7 +3253,7 @@ class Mesh:
         plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
 
-    def SelectNodesBox(self, box=None):
+    def SelectNodesBox(self, box=None, plot=None):
         """
         Selection of all the nodes of a mesh lying in a box defined by two
         points clics.
@@ -3244,12 +3282,13 @@ class Mesh:
             else:
                 inside = isInBox(box, self.n[:, 0], self.n[:, 1])
         (nset,) = np.where(inside)
-        self.Plot()
-        if self.dim == 3:
-            ax = plt.gca()
-            ax.plot(self.n[nset, 0], self.n[nset, 1], self.n[nset, 2], "ro")
-        else:
-            plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
+        if plot is True:
+            self.Plot()
+            if self.dim == 3:
+                ax = plt.gca()
+                ax.plot(self.n[nset, 0], self.n[nset, 1], self.n[nset, 2], "ro")
+            else:
+                plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
 
     def SelectLine(self, eps=1e-8):

@@ -63,7 +63,7 @@ px.PlotMeshImage(f, m, cam)
 
 m.Connectivity()
 m.DICIntegration(cam)
-U = px.MultiscaleInit(f, g, m, cam, scales=[2, 1])
+U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
 U, res = px.Correlate(f, g, m, cam, U0=U)
 
 m.Plot(U, alpha=0.5)

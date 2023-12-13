@@ -18,11 +18,11 @@ g = px.Image('zoom-0070_1.tif').Load()
 # f.SelectROI()
 roi = np.array([[537, 24], [850, 488]])
 m = dict()
-m[0], cam = px.MeshFromROI(roi, 50, f, typel=2)  # tri3
-m[1], _ = px.MeshFromROI(roi, 50, f, typel=3)    # qua4
-m[2], _ = px.MeshFromROI(roi, 50, f, typel=9)    # tri6
-m[3], _ = px.MeshFromROI(roi, 50, f, typel=10)   # qua9
-m[4], _ = px.MeshFromROI(roi, 50, f, typel=16)   # qua8
+m[0], cam = px.MeshFromROI(roi, 50, typel=2)  # tri3
+m[1], _ = px.MeshFromROI(roi, 50, typel=3)    # qua4
+m[2], _ = px.MeshFromROI(roi, 50, typel=9)    # tri6
+m[3], _ = px.MeshFromROI(roi, 50, typel=10)   # qua9
+m[4], _ = px.MeshFromROI(roi, 50, typel=16)   # qua8
 
 for k in m.keys():
     px.PlotMeshImage(f, m[k], cam)

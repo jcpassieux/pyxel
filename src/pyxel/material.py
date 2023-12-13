@@ -91,12 +91,19 @@ def Hooke(p, typc='isotropic_2D_ps'):
     if typc == 'isotropic_3D':
         E = p[0]
         v = p[1]
-        return E / ((1+v)*(1-2*v)) * np.array([[1-v, v, v, 0, 0, 0],
-                                               [v, 1-v, v, 0, 0, 0],
-                                               [v, v, 1-v, 0, 0, 0],
-                                               [0, 0, 0, (1 - v) / 2, 0, 0],
-                                               [0, 0, 0, 0, (1 - v) / 2, 0],
-                                               [0, 0, 0, 0, 0, (1 - v) / 2]])
+        # C = np.array([[(E*v - E)/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), 0, 0, 0],
+        #               [-E*v/(2*v**2 + v - 1), (E*v - E)/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), 0, 0, 0],
+        #               [-E*v/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), (E*v - E)/(2*v**2 + v - 1), 0, 0, 0],
+        #               [0, 0, 0, E/(2*v + 2), 0, 0],
+        #               [0, 0, 0, 0, E/(2*v + 2), 0],
+        #               [0, 0, 0, 0, 0, E/(2*v + 2)]])
+        C = E / (2*(1+v)*(1-2*v)) * np.array([[2*(1-v), 2*v, 2*v, 0, 0, 0],
+                                            [2*v, 2*(1-v), 2*v, 0, 0, 0],
+                                            [2*v, 2*v, 2*(1-v), 0, 0, 0],
+                                            [0, 0, 0, (1 - 2*v), 0, 0],
+                                            [0, 0, 0, 0, (1 - 2*v), 0],
+                                            [0, 0, 0, 0, 0, (1 - 2*v)]])
+        return C
     else:
         raise Exception('Unknown elastic constitutive regime (3D)')
 
@@ -139,3 +146,17 @@ def Strain2Stress(hooke, En, Es):
         Sn = np.c_[SXX, SYY, SZZ]
         Ss = np.c_[SXY, SXZ, SYZ]
     return Sn, Ss
+
+
+# %%
+# import sympy as sp
+# E, v = sp.symbols('E, v')
+# Cinv = sp.Matrix([[1/E, -v/E, -v/E, 0, 0, 0],
+#             [-v/E, 1/E, -v/E, 0, 0, 0],
+#             [-v/E, -v/E, 1/E, 0, 0, 0],
+#             [0, 0, 0, (1+v)/E, 0, 0],
+#             [0, 0, 0, 0, (1+v)/E, 0],
+#             [0, 0, 0, 0, 0, (1+v)/E]])
+# C = Cinv**-1
+# sp.pycode(C)
+

@@ -438,9 +438,10 @@ def MeshFromROI(roi, dx, typel=3):
             m = TetraMeshBox(roi, dx)
         else:
             m = StructuredMesh(roi, dx, typel=typel)
-        xm = np.mean(m.n, axis=0)
-        m.n -= xm[np.newaxis]
-        cam = CameraVol([1, xm[0], xm[1], xm[2], 0, 0, 0])
+        # xm = np.mean(m.n, axis=0)
+        # m.n -= xm[np.newaxis]
+        # cam = CameraVol([1, xm[0], xm[1], xm[2], 0, 0, 0])
+        cam = CameraVol([1, 0, 0, 0, 0, 0, 0])
         return m, cam
     else:
         m = StructuredMesh(roi, dx, typel=typel)
@@ -450,7 +451,7 @@ def MeshFromROI(roi, dx, typel=3):
         return m, cam
 
 def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None, 
-              L=None, eps=None, maxiter=30, disp=True, EB=False):
+              L=None, eps=None, maxiter=30, disp=True, EB=False, direct=True):
     """Perform FE-Digital Image Correlation.
 
     Parameters
@@ -515,54 +516,70 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             H = dic.ComputeLHS_EB(f, m, cam)
         else:
             H = dic.ComputeLHS(f, m, cam)
+    if l0 == 0:
+        l0 = None
     if eps is None:
         eps = 1e-3
-    if Basis is not None:
-        # Reduced Basis
-        print('reduced basis')
-        H_LU = splalg.splu(Basis.T @ H @ Basis)
+    no_reg = True
+    if l0 is not None:
+        # Weak regularisation
+        no_reg = False
+        if L is None:
+            L = m.Laplacian()
+        T = 10 * m.GetApproxElementSize()
+        V = m.PlaneWave(T)
+        H0 = V.dot(H.dot(V))
+        L0 = V.dot(L.dot(V))
+        ll = (l0/T)**2 * H0 / L0
+        print('Regularization: Weak with param = %2.3f' % ll)
+        Hfull = H + ll * L
     else:
-        if l0 is not None:
-            # Tikhonov regularisation
-            if L is None:
-                L = m.Laplacian()
-            T = 10 * m.GetApproxElementSize(cam)
-            V = m.PlaneWave(T)
-            H0 = V.dot(H.dot(V))
-            L0 = V.dot(L.dot(V))
-            l = (l0/T)**2 * H0 / L0
-            print('Regularization param = %2.3f' % l)
-            H_LU = splalg.splu(H + l * L)
-        else:
-            if disp:
-                print("no reg")
-            H_LU = splalg.splu(H)
+        Hfull = H.copy()
+    if Basis is not None:
+        # Strong Regularization
+        no_reg = False
+        print('Regularization: Strong with reduced basis')
+        Hfull = Basis.T @ Hfull @ Basis
+    if no_reg:
+        print('Regularization: None')
+    if direct:
+        print('Factorization...')
+        Hfull = splalg.splu(Hfull)
+    else:
+        eps_zero = 1e-5 * np.min(Hfull)
+        Mfull = sps.diags(1/(Hfull.diagonal() + eps_zero))
     stdr_old = 100
     for ik in range(0, maxiter):
         if EB:
             [b, res] = dic.ComputeRHS_EB(g, m, cam, U)
         else:
             [b, res] = dic.ComputeRHS(g, m, cam, U)
+        if l0 is not None:
+            b -= ll * L @ U
         if Basis is not None:
-            da = H_LU.solve(Basis.T @ b)
-            dU = Basis @ da
-        elif l0 is not None:
-            dU = H_LU.solve(b - l * L.dot(U))
+            b = Basis.T @ b
+        if direct:
+            dU = Hfull.solve(b)
         else:
-            dU = H_LU.solve(b)
+            dU, info = splalg.cg(Hfull, b, tol=0.1, M=Mfull)
+            if info:
+                print('Iterative solver did not reach convergence!')
+                break
+        if Basis is not None:
+            dU = Basis @ dU
         U += dU
         err = np.linalg.norm(dU) / np.linalg.norm(U)
         stdr = np.std(res)
         if disp:
             print("Iter # %2d | std(res)=%2.2f gl | dU/U=%1.2e" % (ik + 1, stdr, err))
-        if err < eps :
+        if err < eps:
             # if err < eps or abs(stdr - stdr_old) < 1e-3:
             break
         stdr_old = stdr
     return U, res
 
 def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
-                   Basis=None, eps=None, disp=True):
+                   Basis=None, eps=None, disp=True, direct=True):
     """Perform Multigrid initialization for FE-Digital Image Correlation.
 
     Parameters
@@ -604,25 +621,23 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         m.Connectivity()
     # estimate average element size in pixels
     aes = int(m.GetApproxElementSize(cam))
-    if l0 is None:
-        # l0 = 0.0
-        # for et in m.e.keys():
-        #     n1 = m.n[m.e[et][:, 0]]
-        #     n2 = m.n[m.e[et][:, 1]]
-        #     l0 = max(l0, 4 * min(np.linalg.norm(n1 - n2, axis=1)))
-        if cam is None:
-            l0 = 30
-        else:
-            l0 = 30/cam.get_p()[0]
-        print('Auto reg. length l0 = %2.3e' % l0)
-    if l0 == 0:
-        l0 = None
     print('Average Element Size in px: %3d' % aes)
+    if l0 is None:
+        if Basis is None:
+            if cam is None:
+                l0 = 30
+            else:
+                l0 = 30/cam.get_p()[0]
+            print('Auto reg. length l0 = %2.3e' % l0)
+        else:
+            l0 = 0
+        L = None
+    else:
+        L = m.Laplacian()
     if U0 is None:
         U = np.zeros(m.ndof)
     else:
         U = U0.copy()
-    L = m.Laplacian()
     for js in range(len(scales)):
         iscale = scales[js]
         if disp:
@@ -637,7 +652,8 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
             cam2 = None
         m2 = m.Copy()
         if len(f.pix.shape) == 3:
-            aesi = min(5, aes // (2**iscale))  #• max 5 integration points > Fast
+            aesi = min(5, aes // (2**iscale))  # max 5 integration points > Fast
+            aesi = max(1, aesi)  # not smaller than 1
             m2.DVCIntegration(aesi)
         else:
             aes2 = max(aes // (2**iscale), 2)
@@ -654,9 +670,10 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         # plt.axis('equal')
         # from .utils import PlotMeshImage3d
         # PlotMeshImage3d(f, m2, cam2)
-        
-        U, r = Correlate(f, g, m2, cam2, l0=l0 * 2 ** iscale, 
-                         Basis=Basis, L=L, U0=U, eps=eps, disp=disp)
+        U, r = Correlate(f, g, m2, cam2, l0=l0*2**iscale, Basis=Basis,
+                         L=L, U0=U, eps=eps, disp=disp, direct=direct)
+   
+        # PlotMeshImage3d(g, m2, cam2, U)
     return U
 
 
