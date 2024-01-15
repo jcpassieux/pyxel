@@ -1,13 +1,13 @@
 [build-system]
 requires = [
-    "setuptools>=42",
+    "setuptools==68.2.2",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyxel-dic"
-version = "3.0.8"
+version = "3.1.0"
 authors = [
   { name="JC Passieux", email="jc.passieux@gmail.com" },
 ]

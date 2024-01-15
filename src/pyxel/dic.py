@@ -531,7 +531,7 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         H0 = V.dot(H.dot(V))
         L0 = V.dot(L.dot(V))
         ll = (l0/T)**2 * H0 / L0
-        print('Regularization: Weak with param = %2.3f' % ll)
+        print('Regularization: Weak with λ = %2.3f' % ll)
         Hfull = H + ll * L
     else:
         Hfull = H.copy()
@@ -546,8 +546,15 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         print('Factorization...')
         Hfull = splalg.splu(Hfull)
     else:
+        # DIAGONAL PRECONDITIONER
+        print('Jacobi Preconditioner...')
         eps_zero = 1e-5 * np.min(Hfull)
         Mfull = sps.diags(1/(Hfull.diagonal() + eps_zero))
+        # ILU PRECONDITIONER
+        # print('Incomplete LU Factorization...')
+        # MLU = splalg.spilu(Hfull, drop_tol=0.1)
+        # M = lambda x: MLU.solve(x)
+        # Mfull = splalg.LinearOperator(Hfull.shape, M)
     stdr_old = 100
     for ik in range(0, maxiter):
         if EB:
@@ -786,7 +793,7 @@ def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM'):
         flow.setVariationalRefinementIterations(5)	    # Number of iterations
         flow.setFinestScale(0)
         flow.setPatchSize(13)
-        flow.setPatchStride(7)
+        flow.setPatchStride(1)
     UV = flow.calc(imf.pix.astype('uint8'), img.pix.astype('uint8'), None)
     U = UV[::,::,0]
     V = UV[::,::,1]

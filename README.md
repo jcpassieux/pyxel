@@ -40,7 +40,7 @@ The gray level conservation problem is written in the physical space. It relies 
       f = px.Image('img-0.tif').Load()
       g = px.Image('img-1.tif').Load()
       roi = np.array([[ 100,   100], [ 500,  500]])
-      m, cam = px.MeshFromROI(roi, 50, f, typel=3)
+      m, cam = px.MeshFromROI(roi, 50, typel=3)
       U, res = px.Correlate(f, g, m, cam)
       ```
     - A multiscale initialization is usually required
