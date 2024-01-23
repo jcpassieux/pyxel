@@ -34,8 +34,8 @@ if do_calibration:
     cam = ls.Calibration()
 else:
     # reuse previous calibration parameters
-    p = np.array([1.05449047e+04, 5.12335842e-02,
-                 -9.63541211e-02, -4.17489457e-03])
+    p = np.array([1.05449047e+04, 8.12335842e-02,
+                  -9.63541211e-02, -1.57497122e+00])
     cam = px.Camera(p)
 
 px.PlotMeshImage(f, m, cam)

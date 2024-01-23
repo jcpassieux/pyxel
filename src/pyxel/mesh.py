@@ -1010,6 +1010,7 @@ class Mesh:
         self.pgy = []
         self.phix = None
         self.phiy = None
+        self.dphixdx = None
         self.wdetJ = []
         self.dim = dim
 
@@ -1268,6 +1269,7 @@ class Mesh:
         qx[self.conn[rep, :]] = self.n[rep, :]
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
+        self.dphixdx = None
 
     def DICIntegrationPixel(self, cam):
         """ Builds a pixel integration scheme with integration points at the
@@ -1351,6 +1353,7 @@ class Mesh:
             (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
         self.phiy = sp.sparse.csr_matrix(
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+        self.dphixdx = None
 
     def __FastDICIntegElem(self, e, et, n=10):
         # parent element
@@ -1488,6 +1491,7 @@ class Mesh:
         qx[self.conn[rep, :]] = self.n[rep, :]
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
+        self.dphixdx = None
 
     def __DVCIntegElem(self, e, et, n=10):
         # parent element
@@ -1548,6 +1552,7 @@ class Mesh:
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
         self.pgz = self.phiz.dot(qx)
+        self.dphixdx = None
 
     def __GaussIntegElem(self, e, et):
         # parent element
@@ -1781,7 +1786,7 @@ class Mesh:
 
     def Stiffness(self, hooke):
         """Assembles Stiffness Operator"""
-        if not hasattr(self, "dphixdx"):
+        if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
@@ -1822,7 +1827,7 @@ class Mesh:
 
     def StiffnessAxi(self, hooke):
         """Assembles Stiffness Operator"""
-        if not hasattr(self, "dphixdx"):
+        if self.dphixdx is None:
             m = self.Copy()
             print('Gauss Integ.')
             m.GaussIntegration()
@@ -1847,7 +1852,7 @@ class Mesh:
 
     def Laplacian(self):
         """Assembles Tikhonov (Laplacian) Operator"""
-        if not hasattr(self, "dphixdx"):
+        if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
@@ -1910,7 +1915,7 @@ class Mesh:
 
     def Mass(self, rho):
         """Assembles Mass Matrix"""
-        if not hasattr(self, "phix"):
+        if self.phix is None:
             m = self.Copy()
             m.GaussIntegration()
             wdetJ = sp.sparse.diags(m.wdetJ)
@@ -2024,7 +2029,7 @@ class Mesh:
               + '.vtu' + " written.")
 
     def StrainAtGP(self, U):
-        if not hasattr(self, "dphixdx"):
+        if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
             epsx = m.dphixdx @ U
@@ -2038,7 +2043,7 @@ class Mesh:
 
     def GP2DOFs(self, gp_field):
         # Chaml2Chpoint
-        if not hasattr(self, "dphixdx"):
+        if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
@@ -2054,7 +2059,7 @@ class Mesh:
         return nd_field
 
     def StrainAtNodes(self, U):
-        if not hasattr(self, "dphixdx"):
+        if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
