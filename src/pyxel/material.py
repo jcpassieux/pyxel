@@ -3,7 +3,7 @@ import numpy as np
 
 
 def Hooke(p, typc='isotropic_2D_ps'):
-    """Compute 2D Hooke tensor from elastic constants
+    """Compute Hooke tensor from elastic constants
 
     Parameters
     ----------
@@ -17,7 +17,10 @@ def Hooke(p, typc='isotropic_2D_ps'):
         'orthotropic_2D'  
         'laminate_2D'
         'isotropic_3D'  
-
+    el_set (OPTIONAL) required for heterogeneous samples
+    it is a dict with keys as element type (like mesh.e) and value are id
+    of the material type which refers to the dict of materials p
+    
     Returns
     -------
     Numpy array
@@ -28,17 +31,20 @@ def Hooke(p, typc='isotropic_2D_ps'):
         E = p[0]
         v = p[1]
         return E / (1 - v**2) * np.array([[1, v, 0], [v, 1, 0], [0, 0, (1 - v) / 2]])
+        # return E / (1 - v**2) * np.array([1, 1, 0.5*(1 - v), v, v])
     elif typc == 'isotropic_2D_pe':
         E = p[0]
         v = p[1]
         return E / ((1 + v)*(1 - 2*v)) * np.array([[1-v, v, 0], [v, 1-v, 0], [0, 0, (1 - 2*v) / 2]])
+        # return E / ((1 + v)*(1 - 2*v)) * np.array([1-v, 1-v, 0.5*(1-2*v), v, v])
     elif typc == 'isotropic_2D_axi':
         E = p[0]
         v = p[1]
         return E / ((1 + v)*(1 - 2*v)) * np.array([[1-v, v, v, 0],
-                                                   [v, 1-v, v, 0],
-                                                   [v, v, 1-v, 0],
-                                                   [0, 0, 0, (1 - 2*v) / 2]])
+                                                    [v, 1-v, v, 0],
+                                                    [v, v, 1-v, 0],
+                                                    [0, 0, 0, (1 - 2*v) / 2]])
+        # return E/((1+v)*(1-2*v)) * np.array([1-v, 1-v, 1-v, 0.5*(1-2*v), v, v, v, v, v, v])
     elif typc == 'orthotropic_2D':
         El = p[0]
         Et = p[1]
@@ -91,12 +97,6 @@ def Hooke(p, typc='isotropic_2D_ps'):
     if typc == 'isotropic_3D':
         E = p[0]
         v = p[1]
-        # C = np.array([[(E*v - E)/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), 0, 0, 0],
-        #               [-E*v/(2*v**2 + v - 1), (E*v - E)/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), 0, 0, 0],
-        #               [-E*v/(2*v**2 + v - 1), -E*v/(2*v**2 + v - 1), (E*v - E)/(2*v**2 + v - 1), 0, 0, 0],
-        #               [0, 0, 0, E/(2*v + 2), 0, 0],
-        #               [0, 0, 0, 0, E/(2*v + 2), 0],
-        #               [0, 0, 0, 0, 0, E/(2*v + 2)]])
         C = E / (2*(1+v)*(1-2*v)) * np.array([[2*(1-v), 2*v, 2*v, 0, 0, 0],
                                             [2*v, 2*(1-v), 2*v, 0, 0, 0],
                                             [2*v, 2*v, 2*(1-v), 0, 0, 0],

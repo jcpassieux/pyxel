@@ -13,13 +13,14 @@ PYthon library for eXperimental mechanics using Finite ELements
 import os
 import numpy as np
 import scipy as sp
+from scipy.sparse import diags, csr_matrix
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import art3d
 import matplotlib.pyplot as plt
 import matplotlib.collections as cols
 import matplotlib.animation as animation
 # from numba import njit # uncomment for just in time compilation
-from .utils import meshgrid, isInBox
+from .utils import meshgrid, isInBox, full_screen
 from .vtktools import PVDFile
 from .material import *
 import meshio
@@ -134,6 +135,17 @@ def ReadMesh(fn, dim=2):
     m = Mesh(e, n, dim)
     m.point_data = mesh.point_data
     m.cell_data = mesh.cell_data
+    m.point_sets = mesh.point_sets
+    # change a dict (set) of list (eltype) to a dict (set) of dict (eltype)
+    cell_sets = dict()
+    for si in mesh.cell_sets.keys():
+        cell_set = dict()
+        cid = 0
+        for ie in m.e.keys():
+            cell_set[ie] = mesh.cell_sets[si][cid]
+            cid += 1
+        cell_sets[si] = cell_set
+    m.cell_sets = cell_sets
     return m
 
 
@@ -1013,6 +1025,8 @@ class Mesh:
         self.dphixdx = None
         self.wdetJ = []
         self.dim = dim
+        self.cell_sets = {}
+        self.point_sets = {}
 
     def Copy(self):
         m = Mesh(self.e.copy(), self.n.copy())
@@ -1257,12 +1271,12 @@ class Mesh:
                 vale = np.append(vale, valej[:npg])
             self.wdetJ = np.append(self.wdetJ, wdetJj[:npg])
         self.npg = len(self.wdetJ)
-        self.phix = sp.sparse.csr_matrix(
+        self.phix = csr_matrix(
             (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csr_matrix(
+        self.phiy = csr_matrix(
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         if EB:
-            self.Me = sp.sparse.csr_matrix(
+            self.Me = csr_matrix(
                 (vale, (rowe, cole)), shape=(self.npg, ne))
         qx = np.zeros(self.ndof)
         (rep,) = np.where(self.conn[:, 0] >= 0)
@@ -1349,9 +1363,9 @@ class Mesh:
             col[rangephi] = repj.ravel()
             val[rangephi] = elem[je].phi.ravel()
             nzv += np.prod(elem[je].phi.shape)
-        self.phix = sp.sparse.csr_matrix(
+        self.phix = csr_matrix(
             (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csr_matrix(
+        self.phiy = csr_matrix(
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         self.dphixdx = None
 
@@ -1482,9 +1496,9 @@ class Mesh:
             self.wdetJ = np.append(self.wdetJ, wdetJj)
             npg += len(wdetJj)
         self.npg = len(self.wdetJ)
-        self.phix = sp.sparse.csr_matrix(
+        self.phix = csr_matrix(
             (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csr_matrix(
+        self.phiy = csr_matrix(
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         rep, = np.where(self.conn[:, 0] >= 0)
         qx = np.zeros(self.ndof)
@@ -1540,11 +1554,11 @@ class Mesh:
             self.wdetJ = np.append(self.wdetJ, wdetJj)
             npg += len(wdetJj)
         self.npg = len(self.wdetJ)
-        self.phix = sp.sparse.csr_matrix(
+        self.phix = csr_matrix(
             (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
-        self.phiy = sp.sparse.csr_matrix(
+        self.phiy = csr_matrix(
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
-        self.phiz = sp.sparse.csr_matrix(
+        self.phiz = csr_matrix(
             (val, (row, self.conn[col, 2])), shape=(self.npg, self.ndof))
         rep, = np.where(self.conn[:, 0] >= 0)
         qx = np.zeros(self.ndof)
@@ -1711,32 +1725,32 @@ class Mesh:
             coly = self.conn[col, 1]
             colz = self.conn[col, 2]
             # shape funs
-            self.phix = sp.sparse.csr_matrix(
+            self.phix = csr_matrix(
                 (val, (row, colx)), shape=(self.npg, self.ndof))
-            self.phiy = sp.sparse.csr_matrix(
+            self.phiy = csr_matrix(
                 (val, (row, coly)), shape=(self.npg, self.ndof))
-            self.phiz = sp.sparse.csr_matrix(
+            self.phiz = csr_matrix(
                 (val, (row, colz)), shape=(self.npg, self.ndof))
             # phix
-            self.dphixdx = sp.sparse.csr_matrix(
+            self.dphixdx = csr_matrix(
                 (valx, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphixdy = sp.sparse.csr_matrix(
+            self.dphixdy = csr_matrix(
                 (valy, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphixdz = sp.sparse.csr_matrix(
+            self.dphixdz = csr_matrix(
                 (valz, (row, colx)), shape=(self.npg, self.ndof))
             # phiy
-            self.dphiydx = sp.sparse.csr_matrix(
+            self.dphiydx = csr_matrix(
                 (valx, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphiydy = sp.sparse.csr_matrix(
+            self.dphiydy = csr_matrix(
                 (valy, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphiydz = sp.sparse.csr_matrix(
+            self.dphiydz = csr_matrix(
                 (valz, (row, coly)), shape=(self.npg, self.ndof))
             # phiz
-            self.dphizdx = sp.sparse.csr_matrix(
+            self.dphizdx = csr_matrix(
                 (valx, (row, colz)), shape=(self.npg, self.ndof))
-            self.dphizdy = sp.sparse.csr_matrix(
+            self.dphizdy = csr_matrix(
                 (valy, (row, colz)), shape=(self.npg, self.ndof))
-            self.dphizdz = sp.sparse.csr_matrix(
+            self.dphizdz = csr_matrix(
                 (valz, (row, colz)), shape=(self.npg, self.ndof))
             # gp coordinates
             rep, = np.where(self.conn[:, 0] >= 0)
@@ -1766,23 +1780,41 @@ class Mesh:
             self.npg = len(self.wdetJ)
             colx = self.conn[col, 0]
             coly = self.conn[col, 1]
-            self.phix = sp.sparse.csr_matrix(
+            self.phix = csr_matrix(
                 (val, (row, colx)), shape=(self.npg, self.ndof))
-            self.phiy = sp.sparse.csr_matrix(
+            self.phiy = csr_matrix(
                 (val, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphixdx = sp.sparse.csr_matrix(
+            self.dphixdx = csr_matrix(
                 (valx, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphixdy = sp.sparse.csr_matrix(
+            self.dphixdy = csr_matrix(
                 (valy, (row, colx)), shape=(self.npg, self.ndof))
-            self.dphiydx = sp.sparse.csr_matrix(
+            self.dphiydx = csr_matrix(
                 (valx, (row, coly)), shape=(self.npg, self.ndof))
-            self.dphiydy = sp.sparse.csr_matrix(
+            self.dphiydy = csr_matrix(
                 (valy, (row, coly)), shape=(self.npg, self.ndof))
             rep, = np.where(self.conn[:, 0] >= 0)
             qx = np.zeros(self.ndof)
             qx[self.conn[rep, :]] = self.n[rep, :]
             self.pgx = self.phix.dot(qx)
             self.pgy = self.phiy.dot(qx)
+
+    def Elem2GaussPoint(self, el_list):
+        """
+        From a python dict of element index or floats
+        builds a list of label at the gauss points
+        """
+        gp_list = np.array([], dtype=int)
+        if self.dim == 3:
+            for je in self.e.keys():
+                _, _, _, wg, _, _, _, _ = ShapeFunctions(je)
+                gpl = np.tile(el_list[je], len(wg))
+                gp_list = np.append(gp_list, gpl)
+        else:   # dim 2
+            for je in self.e.keys():
+                _, _, wg, _, _, _ = ShapeFunctions(je)
+                gpl = np.tile(el_list[je], len(wg))
+                gp_list = np.append(gp_list, gpl)
+        return gp_list
 
     def Stiffness(self, hooke):
         """Assembles Stiffness Operator"""
@@ -1791,38 +1823,33 @@ class Mesh:
             m.GaussIntegration()
         else:
             m = self
-        wdetJ = sp.sparse.diags(m.wdetJ)
         if self.dim == 3:
             Bxy = m.dphixdy + m.dphiydx
             Bxz = m.dphixdz + m.dphizdx
             Byz = m.dphiydz + m.dphizdy
             K = (
-                 hooke[0, 0] * m.dphixdx.T @ wdetJ @ m.dphixdx
-                 + hooke[1, 1] * m.dphiydy.T @ wdetJ @ m.dphiydy
-                 + hooke[2, 2] * m.dphizdz.T @ wdetJ @ m.dphizdz
-                 + hooke[3, 3] * Bxy.T @ wdetJ @ Bxy
-                 + hooke[4, 4] * Bxz.T @ wdetJ @ Bxz
-                 + hooke[5, 5] * Byz.T @ wdetJ @ Byz
-                 + hooke[0, 1] * m.dphixdx.T @ wdetJ @ m.dphiydy
-                 + hooke[0, 2] * m.dphixdx.T @ wdetJ @ m.dphizdz
-                 + hooke[1, 0] * m.dphiydy.T @ wdetJ @ m.dphixdx
-                 + hooke[1, 2] * m.dphiydy.T @ wdetJ @ m.dphizdz
-                 + hooke[2, 0] * m.dphizdz.T @ wdetJ @ m.dphixdx
-                 + hooke[2, 1] * m.dphizdz.T @ wdetJ @ m.dphiydy
+                 m.dphixdx.T @ diags(m.wdetJ * hooke[0, 0]) @ m.dphixdx
+                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 1]) @ m.dphiydy
+                 + m.dphizdz.T @ diags(m.wdetJ * hooke[2, 2]) @ m.dphizdz
+                 + Bxy.T @ diags(m.wdetJ * hooke[3, 3]) @ Bxy
+                 + Bxz.T @ diags(m.wdetJ * hooke[4, 4]) @ Bxz
+                 + Byz.T @ diags(m.wdetJ * hooke[5, 5]) @ Byz
+                 + m.dphixdx.T @ diags(m.wdetJ * hooke[0, 1]) @ m.dphiydy
+                 + m.dphixdx.T @ diags(m.wdetJ * hooke[0, 2]) @ m.dphizdz
+                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 0]) @ m.dphixdx
+                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 2]) @ m.dphizdz
+                 + m.dphizdz.T @ diags(m.wdetJ * hooke[2, 0]) @ m.dphixdx
+                 + m.dphizdz.T @ diags(m.wdetJ * hooke[2, 1]) @ m.dphiydy
                )
         else:
             Bxy = m.dphixdy + m.dphiydx
             K = (
-                 hooke[0, 0] * m.dphixdx.T @ wdetJ @ m.dphixdx
-                 + hooke[1, 1] * m.dphiydy.T @ wdetJ @ m.dphiydy
-                 + hooke[2, 2] * Bxy.T @ wdetJ @ Bxy
-                 + hooke[0, 1] * m.dphixdx.T @ wdetJ @ m.dphiydy
-                 # + hooke[0, 2] * m.dphixdx.T @ wdetJ @ Bxy
-                 # + hooke[1, 2] * m.dphiydy.T @ wdetJ @ Bxy
-                 + hooke[1, 0] * m.dphiydy.T @ wdetJ @ m.dphixdx
-                 # + hooke[2, 0] * Bxy.T @ wdetJ @ m.dphixdx
-                 # + hooke[2, 1] * Bxy.T @ wdetJ @ m.dphiydy
-               )
+                 m.dphixdx.T @ diags(m.wdetJ * hooke[0, 0]) @ m.dphixdx
+                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 1]) @ m.dphiydy
+                 + Bxy.T @ diags(m.wdetJ * hooke[2, 2]) @ Bxy
+                 + m.dphixdx.T @ diags(m.wdetJ * hooke[0, 1]) @ m.dphiydy
+                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 0]) @ m.dphixdx
+                 )
         return K
 
     def StiffnessAxi(self, hooke):
@@ -1833,20 +1860,20 @@ class Mesh:
             m.GaussIntegration()
         else:
             m = self
-        wdetJr = sp.sparse.diags(m.wdetJ*m.pgx)   # r dr dz !
+        wdetJr = m.wdetJ*m.pgx   # r dr dz !
         Bxy = m.dphixdy + m.dphiydx
-        Nr = sp.sparse.diags(1/m.pgx) @ m.phix
+        Nr = diags(1/m.pgx) @ m.phix
         K = (
-             hooke[0, 0] * m.dphixdx.T @ wdetJr @ m.dphixdx
-             + hooke[1, 1] * m.dphiydy.T @ wdetJr @ m.dphiydy
-             + hooke[2, 2] * Nr.T @ wdetJr @ Nr
-             + hooke[3, 3] * Bxy.T @ wdetJr @ Bxy
-             + hooke[0, 1] * m.dphixdx.T @ wdetJr @ m.dphiydy
-             + hooke[0, 2] * m.dphixdx.T @ wdetJr @ Nr
-             + hooke[1, 0] * m.dphiydy.T @ wdetJr @ m.dphixdx
-             + hooke[1, 2] * m.dphiydy.T @ wdetJr @ Nr
-             + hooke[2, 0] * Nr.T @ wdetJr @ m.dphixdx
-             + hooke[2, 1] * Nr.T @ wdetJr @ m.dphiydy
+             m.dphixdx.T @ diags(wdetJr * hooke[0, 0]) @ m.dphixdx
+             + m.dphiydy.T @ diags(wdetJr * hooke[1, 1]) @ m.dphiydy
+             + Nr.T @ diags(wdetJr * hooke[2, 2]) @ Nr
+             + Bxy.T @ diags(wdetJr * hooke[3, 3]) @ Bxy
+             + m.dphixdx.T @ diags(wdetJr * hooke[0, 1]) @ m.dphiydy
+             + m.dphixdx.T @ diags(wdetJr * hooke[0, 2]) @ Nr
+             + m.dphiydy.T @ diags(wdetJr * hooke[1, 0]) @ m.dphixdx
+             + m.dphiydy.T @ diags(wdetJr * hooke[1, 2]) @ Nr
+             + Nr.T @ diags(wdetJr * hooke[2, 0]) @ m.dphixdx
+             + Nr.T @ diags(wdetJr * hooke[2, 1]) @ m.dphiydy
            )
         return K
 
@@ -1857,7 +1884,7 @@ class Mesh:
             m.GaussIntegration()
         else:
             m = self
-        wdetJ = sp.sparse.diags(m.wdetJ)
+        wdetJ = diags(m.wdetJ)
         if self.dim == 3:
             L = m.dphixdx.T @ wdetJ @ m.dphixdx + \
                 m.dphixdy.T @ wdetJ @ m.dphixdy + \
@@ -1910,7 +1937,7 @@ class Mesh:
                     col[nzv + np.arange(4)] = dofn[[0, 1, 0, 1], 2]
                     val[nzv + np.arange(4)] = np.array([1, -1, -1, 1]) / d
                     nzv += 4
-        return sp.sparse.csr_matrix((val, (row, col)),
+        return csr_matrix((val, (row, col)),
                                     shape=(self.ndof, self.ndof))
 
     def Mass(self, rho):
@@ -1918,13 +1945,13 @@ class Mesh:
         if self.phix is None:
             m = self.Copy()
             m.GaussIntegration()
-            wdetJ = sp.sparse.diags(m.wdetJ)
-            M = rho * m.phix.T @ wdetJ @ m.phix\
-                + rho * m.phiy.T @ wdetJ @ m.phiy
+            wdetJ = diags(m.wdetJ * rho)
+            M = m.phix.T @ wdetJ @ m.phix\
+                + m.phiy.T @ wdetJ @ m.phiy
         else:
-            wdetJ = sp.sparse.diags(self.wdetJ)
-            M = rho * self.phix.T @ wdetJ @ self.phix\
-                + rho * self.phiy.T @ wdetJ @ self.phiy
+            wdetJ = diags(self.wdetJ * rho)
+            M = self.phix.T @ wdetJ @ self.phix\
+                + self.phiy.T @ wdetJ @ self.phiy
         return M
 
     def VTKSolSeries(self, filename, UU):
@@ -1967,11 +1994,30 @@ class Mesh:
         cells = dict()
         for et in self.e.keys():
             cells[eltype_n2s[et]] = self.e[et].astype('int32')
-            
+
         points = self.n
         if self.dim == 2:
             points = np.hstack((points, np.zeros((len(self.n), 1))))
         mesh = meshio.Mesh(points, cells)
+
+        # Export element sets
+        cell_data = {}
+        for s in self.cell_sets.keys():
+            elsets = []
+            for et in self.e.keys():
+                elset = np.zeros(len(self.e[et]), dtype=int)
+                elset[self.cell_sets[s][et]] = 1
+                elsets += [elset]
+            cell_data[s] = elsets
+        
+        # Export node sets
+        point_data = {}
+        for s in self.point_sets.keys():
+            pset = np.zeros(len(self.n))
+            pset[self.point_sets[s]] = 1
+            point_data[s] = pset
+        
+        # Export cell sets
         mesh.cell_data = cell_data
         mesh.point_data = point_data
         mesh.write(filename)
@@ -2053,9 +2099,9 @@ class Mesh:
         if type(gp_field) is list:
             nd_field = []
             for i in range(len(gp_field)):
-                nd_field += [sp.sparse.diags(1/wx) @ phi.T @ gp_field[i]]
+                nd_field += [diags(1/wx) @ phi.T @ gp_field[i]]
         else:
-            nd_field = sp.sparse.diags(1/wx) @ phi.T @ gp_field
+            nd_field = diags(1/wx) @ phi.T @ gp_field
         return nd_field
 
     def StrainAtNodes(self, U):
@@ -2070,9 +2116,9 @@ class Mesh:
             exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
             wx = np.sum(m.phix, axis=0).A[0] + 1e-12
             wy = np.sum(m.phiy, axis=0).A[0] + 1e-12
-            EpsN = sp.sparse.diags(1/wx) @ m.phix.T @ exxgp\
-            + sp.sparse.diags(1/wy) @ m.phiy.T @ eyygp
-            EpsS = sp.sparse.diags(1/wx) @ m.phix.T @ exygp
+            EpsN = diags(1/wx) @ m.phix.T @ exxgp\
+            + diags(1/wy) @ m.phiy.T @ eyygp
+            EpsS = diags(1/wx) @ m.phix.T @ exygp
             EpsN = self.DOF2Nodes(EpsN)
             EpsS = self.DOF2Nodes(EpsS)
             return EpsN, EpsS
@@ -2086,12 +2132,12 @@ class Mesh:
             wx = np.sum(m.phix, axis=0).A[0] + 1e-12
             wy = np.sum(m.phiy, axis=0).A[0] + 1e-12
             wz = np.sum(m.phiz, axis=0).A[0] + 1e-12
-            EpsN = sp.sparse.diags(1/wx) @ m.phix.T @ exxgp\
-            + sp.sparse.diags(1/wy) @ m.phiy.T @ eyygp\
-            + sp.sparse.diags(1/wz) @ m.phiz.T @ ezzgp
-            EpsS = sp.sparse.diags(1/wx) @ m.phix.T @ exygp\
-            + sp.sparse.diags(1/wy) @ m.phiy.T @ exzgp\
-            + sp.sparse.diags(1/wz) @ m.phiz.T @ eyzgp
+            EpsN = diags(1/wx) @ m.phix.T @ exxgp\
+            + diags(1/wy) @ m.phiy.T @ eyygp\
+            + diags(1/wz) @ m.phiz.T @ ezzgp
+            EpsS = diags(1/wx) @ m.phix.T @ exygp\
+            + diags(1/wy) @ m.phiy.T @ exzgp\
+            + diags(1/wz) @ m.phiz.T @ eyzgp
             EpsN = self.DOF2Nodes(EpsN)
             EpsS = self.DOF2Nodes(EpsS)
             return EpsN, EpsS
@@ -2813,15 +2859,16 @@ class Mesh:
                 newe[je] = self.e[je]
         self.e = newe
 
-    def RemoveElemsOutsideRoi(self, roi, cam=None):
+    def ElemsInsideRoi(self, roi, cam=None):
         """
-        Removes all the elements whose center lie in the Region of Interest of
-        an image f.
+        Find the elements that are inside a region of interest (ROI)
         Usage :
-            m.RemoveElemsOutsideRoi(cam, roi)
+            m.ElemsInsideRoi(roi, cam=None)
 
         where  roi = f.SelectROI()
+        Returns a dict with a list of elements.
         """
+        inside = dict()
         if self.dim == 3:
             if cam is None:
                 u, v, w = self.n[:, 0], self.n[:, 1], self.n[:, 2]
@@ -2831,7 +2878,7 @@ class Mesh:
                 umoy = np.mean(u[self.e[je]], axis=1)
                 vmoy = np.mean(v[self.e[je]], axis=1)
                 wmoy = np.mean(w[self.e[je]], axis=1)
-                inside = isInBox(roi, umoy, vmoy, wmoy)
+                inside[je] = isInBox(roi, umoy, vmoy, wmoy)
         else:
             if cam is None:
                 u, v = self.n[:, 0], self.n[:, 1]
@@ -2840,8 +2887,21 @@ class Mesh:
             for je in self.e.keys():
                 umoy = np.mean(u[self.e[je]], axis=1)
                 vmoy = np.mean(v[self.e[je]], axis=1)
-                inside = isInBox(roi, umoy, vmoy)
-        self.e[je] = self.e[je][inside, :]
+                inside[je] = isInBox(roi, umoy, vmoy)
+        return inside
+
+    def RemoveElemsOutsideRoi(self, roi, cam=None):
+        """
+        Removes all the elements whose center lie in the Region of Interest of
+        an image f.
+        Usage :
+            m.RemoveElemsOutsideRoi(roi, cam=None)
+
+        where  roi = f.SelectROI()
+        """
+        inside = self.ElemsInsideRoi(roi, cam=cam)
+        for je in self.e.keys():
+            self.e[je] = self.e[je][inside[je], :]
 
     def RemoveDoubleNodes(self):
         """
@@ -3010,12 +3070,7 @@ class Mesh:
         """
         plt.figure()
         self.Plot()
-        figManager = plt.get_current_fig_manager()
-        if hasattr(figManager.window, 'showMaximized'):
-            figManager.window.showMaximized()
-        else:
-            if hasattr(figManager.window, 'maximize'):
-                figManager.resize(figManager.window.maximize())
+        full_screen()
         if title is None:
             if n < 0:
                 plt.title("Select several points... and press enter")
@@ -3033,12 +3088,7 @@ class Mesh:
         """
         plt.figure()
         self.Plot()
-        figManager = plt.get_current_fig_manager()
-        if hasattr(figManager.window, 'showMaximized'):
-            figManager.window.showMaximized()
-        else:
-            if hasattr(figManager.window, 'maximize'):
-                figManager.resize(figManager.window.maximize())
+        full_screen()
         plt.title("Select " + str(n) + " points... and press enter")
         pts1 = np.array(plt.ginput(n, timeout=0))
         plt.close()
@@ -3061,12 +3111,7 @@ class Mesh:
         if box is None:
             plt.figure()
             self.Plot()
-            figManager = plt.get_current_fig_manager()
-            if hasattr(figManager.window, 'showMaximized'):
-                figManager.window.showMaximized()
-            else:
-                if hasattr(figManager.window, 'maximize'):
-                    figManager.resize(figManager.window.maximize())
+            full_screen()
             plt.title("Select 2 points... and press enter")
             pts1 = np.array(plt.ginput(2, timeout=0))
             plt.close()
@@ -3097,12 +3142,7 @@ class Mesh:
         """
         plt.figure()
         self.Plot()
-        figManager = plt.get_current_fig_manager()
-        if hasattr(figManager.window, 'showMaximized'):
-            figManager.window.showMaximized()
-        else:
-            if hasattr(figManager.window, 'maximize'):
-                figManager.resize(figManager.window.maximize())
+        full_screen()
         plt.title("Select 2 points of a line... and press enter")
         pts1 = np.array(plt.ginput(2, timeout=0))
         plt.close()
@@ -3130,12 +3170,7 @@ class Mesh:
         """
         plt.figure()
         self.Plot()
-        figManager = plt.get_current_fig_manager()
-        if hasattr(figManager.window, 'showMaximized'):
-            figManager.window.showMaximized()
-        else:
-            if hasattr(figManager.window, 'maximize'):
-                figManager.resize(figManager.window.maximize())
+        full_screen()
         plt.title("Select 3 points on a circle... and press enter")
         pts1 = np.array(plt.ginput(3, timeout=0))
         plt.close()
@@ -3316,3 +3351,28 @@ class Mesh:
         m.KeepVolElems()
         # m.Plot()
         return m
+
+    def AssignMaterial2GaussPoint(self, hooke_dict):
+        """
+        hooke_dict is a python dict whose keys are the elements sets names
+        defined in MESH.cell_sets and the values are hooke matrices
+
+        MESH.cell_sets has to be a python dict [keys:set name]
+        of dict [keys: element type]
+
+        Returns a ND.ARRAY of hooke values for each gauss point.
+        """
+        if self.npg == []:
+            raise Exception('build quadrature (MESH.GaussIntegration) prior.')
+        # build a dict [keys:eltype] with material id for each element
+        size_hooke = list(hooke_dict.values())[0].shape
+        hooke = np.zeros(size_hooke + (self.npg,))
+        for s in hooke_dict.keys():
+            elset = dict.fromkeys(self.e.keys())
+            for et in self.e.keys():
+                elset[et] = np.zeros(len(self.e[et]), dtype=int)
+                elset[et][self.cell_sets[s][et]] = 1
+            el_gp = self.Elem2GaussPoint(elset)
+            hooke += np.kron(el_gp[np.newaxis], hooke_dict[s][np.newaxis].T)
+        return hooke
+    

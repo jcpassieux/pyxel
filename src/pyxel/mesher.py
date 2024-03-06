@@ -226,6 +226,63 @@ def StructuredMeshHex8(box, lc):
 
     return m
 
+def StructuredMeshTet4(box, lc):
+    """
+    Meshes a box with hexahedral elements
+
+    Parameters
+    ----------
+    box = np.array([[xmin, ymin, zmin],
+                    [xmax, ymax, zmax]])    in mesh unit
+    lc : mesh length.
+
+    Returns
+    -------
+    m : Tet4 mesh.
+
+    """
+    if type(lc) is int:
+        lc = [lc, lc, lc]
+    # Create a structured hexahedral mesh
+    x0 = box[0, 0]
+    y0 = box[0, 1]
+    z0 = box[0, 2]
+    lx = box[1, 0] - x0
+    ly = box[1, 1] - y0
+    lz = box[1, 2] - z0
+    nx = int(lx/lc[0])
+    ny = int(ly/lc[1])
+    nz = int(lz/lc[2])
+    gmsh.initialize()
+    gmsh.model.add("lug")
+    gmsh.model.geo.addPoint(x0, y0, z0, tag=1)
+    gmsh.model.geo.addPoint(x0+lx, y0, z0, tag=2)
+    gmsh.model.geo.addPoint(x0+lx, y0+ly, z0, tag=3)
+    gmsh.model.geo.addPoint(x0, y0+ly, z0, tag=4)
+    gmsh.model.geo.addLine(1, 2, tag=5)
+    gmsh.model.geo.mesh.setTransfiniteCurve(5, nx+1)
+    gmsh.model.geo.addLine(2, 3, tag=6)
+    gmsh.model.geo.mesh.setTransfiniteCurve(6, ny+1)
+    gmsh.model.geo.addLine(3, 4, tag=7)
+    gmsh.model.geo.mesh.setTransfiniteCurve(7, nx+1)
+    gmsh.model.geo.addLine(4, 1, tag=8)
+    gmsh.model.geo.mesh.setTransfiniteCurve(8, ny+1)
+    gmsh.model.geo.addCurveLoop([5, 6, 7, 8], 1)
+    gmsh.model.geo.addPlaneSurface([1], 1)
+    gmsh.model.geo.mesh.setTransfiniteSurface(1, "Left", [1, 2, 3, 4])
+    gmsh.model.geo.extrude([(2, 1)], 0, 0, lz, [nz, ], recombine=False)
+    gmsh.option.setNumber('General.Verbosity', 1)
+    gmsh.option.setNumber('Mesh.Algorithm', 1)
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(3)
+    gmsh.write("lug.msh")
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
+    gmsh.finalize()
+    m = ReadMesh("lug.msh", 3)
+    m.KeepVolElems()
+    # m.Plot()
+    return m
 
 def StructuredMeshHex20(box, lc):
     """
@@ -319,8 +376,8 @@ def StructuredMesh(box, dx, typel=3):
         return StructuredMeshQ8(box, dx)
     elif typel == 10:
         return StructuredMeshQ9(box, dx)
-    # elif typel == 4:
-    #     return StructuredMeshTet4(box, dx)
+    elif typel == 4:
+        return StructuredMeshTet4(box, dx)
     elif typel == 5:
         return StructuredMeshHex8(box, dx)
     elif typel == 17:

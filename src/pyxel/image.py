@@ -13,7 +13,7 @@ import os
 import numpy as np
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
-from .utils import PlotMeshImage
+from .utils import PlotMeshImage, full_screen
 from .vtktools import VTIWriter, PVDFile
 import cv2
 from skimage import io
@@ -190,8 +190,7 @@ class Image:
         """
         plt.figure()
         self.Plot()
-        figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        full_screen()
         if title is None:
             if n < 0:
                 plt.title("Select some points... and press enter")
@@ -219,8 +218,7 @@ class Image:
         from matplotlib.widgets import RectangleSelector
 
         fig, ax = plt.subplots()
-        figManager = plt.get_current_fig_manager()
-        figManager.window.showMaximized()
+        full_screen()
         if m is not None:
             PlotMeshImage(self, m, cam, newfig=False)
         else:

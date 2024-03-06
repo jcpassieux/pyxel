@@ -451,7 +451,7 @@ def MeshFromROI(roi, dx, typel=3):
         return m, cam
 
 def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None, 
-              L=None, eps=None, maxiter=30, disp=True, EB=False, direct=True):
+              L=None, eps=None, maxiter=30, disp=True, EB=False, direct=False):
     """Perform FE-Digital Image Correlation.
 
     Parameters
@@ -571,7 +571,6 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
             dU, info = splalg.cg(Hfull, b, tol=0.1, M=Mfull)
             if info:
                 print('Iterative solver did not reach convergence!')
-                break
         if Basis is not None:
             dU = Basis @ dU
         U += dU

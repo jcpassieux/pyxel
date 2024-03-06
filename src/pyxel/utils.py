@@ -123,3 +123,13 @@ def PlotMeshImage3d(f, m, cam=None, U=None):
     plt.subplot(224)
     mb.Plot(n = np.c_[v, u], edgecolor='y', alpha=0.6)
 
+
+def full_screen():
+    # to set matplotlib figures in full screen (works for windows at least)
+    figManager = plt.get_current_fig_manager()
+    if hasattr(figManager, 'window'):
+        if hasattr(figManager.window, 'showMaximized'):
+            figManager.window.showMaximized()
+        elif hasattr(figManager.window, 'maximize'):
+            figManager.resize(figManager.window.maximize())
+    plt.tight_layout()
