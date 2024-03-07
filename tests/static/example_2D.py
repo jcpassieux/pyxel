@@ -51,10 +51,20 @@ F = -K@U
 KLU = splalg.splu(K[repk])
 U[rep] = KLU.solve(F[rep])
 
-m.VTKSol('Sol2D_'+test, U)
+
+# %% Post-Processing > Matplotlib
 
 m.Plot(U, 10)
-m.PlotContourStrain(U)
+m.PlotContourDispl(U, s=10)
+m.PlotContourStrain(U, s=10)
+m.PlotContourStress(U, C)
+
+# %% Post-processing > Paraview
+
+m.Write('mesh.vtu')
+m.VTKSol('Sol2D_'+test, U)
+m.VTK
+
 
 # %% Generating 2D meshes with GMSH
 

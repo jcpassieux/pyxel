@@ -2078,69 +2078,64 @@ class Mesh:
         if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
-            epsx = m.dphixdx @ U
-            epsy = m.dphiydy @ U
-            epsxy = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
-        else:
-            epsx = self.dphixdx @ U
-            epsy = self.dphiydy @ U
-            epsxy = 0.5 * self.dphixdy @ U + 0.5 * self.dphiydx @ U
-        return epsx, epsy, epsxy
-
-    def GP2DOFs(self, gp_field):
-        # Chaml2Chpoint
-        if self.dphixdx is None:
-            m = self.Copy()
-            m.GaussIntegration()
-        else:
-            m = self
-        phi = m.phix[:, m.conn[:,0]]
-        wx = np.sum(phi, axis=0).A[0] + 1e-12
-        if type(gp_field) is list:
-            nd_field = []
-            for i in range(len(gp_field)):
-                nd_field += [diags(1/wx) @ phi.T @ gp_field[i]]
-        else:
-            nd_field = diags(1/wx) @ phi.T @ gp_field
-        return nd_field
-
-    def StrainAtNodes(self, U):
-        if self.dphixdx is None:
-            m = self.Copy()
-            m.GaussIntegration()
         else:
             m = self
         if self.dim == 2:
-            exxgp = m.dphixdx @ U
-            eyygp = m.dphiydy @ U
-            exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
-            wx = np.sum(m.phix, axis=0).A[0] + 1e-12
-            wy = np.sum(m.phiy, axis=0).A[0] + 1e-12
-            EpsN = diags(1/wx) @ m.phix.T @ exxgp\
-            + diags(1/wy) @ m.phiy.T @ eyygp
-            EpsS = diags(1/wx) @ m.phix.T @ exygp
-            EpsN = self.DOF2Nodes(EpsN)
-            EpsS = self.DOF2Nodes(EpsS)
-            return EpsN, EpsS
+            eps_normal = np.c_[m.dphixdx @ U, m.dphiydy @ U]
+            eps_shear = np.c_[0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U,
+                              np.zeros(m.npg)]
         else:   # dim 3
-            exxgp = m.dphixdx @ U
-            eyygp = m.dphiydy @ U
-            ezzgp = m.dphizdz @ U
-            exygp = 0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U
-            exzgp = 0.5 * m.dphixdz @ U + 0.5 * m.dphizdx @ U
-            eyzgp = 0.5 * m.dphiydz @ U + 0.5 * m.dphizdy @ U
-            wx = np.sum(m.phix, axis=0).A[0] + 1e-12
-            wy = np.sum(m.phiy, axis=0).A[0] + 1e-12
-            wz = np.sum(m.phiz, axis=0).A[0] + 1e-12
-            EpsN = diags(1/wx) @ m.phix.T @ exxgp\
-            + diags(1/wy) @ m.phiy.T @ eyygp\
-            + diags(1/wz) @ m.phiz.T @ ezzgp
-            EpsS = diags(1/wx) @ m.phix.T @ exygp\
-            + diags(1/wy) @ m.phiy.T @ exzgp\
-            + diags(1/wz) @ m.phiz.T @ eyzgp
-            EpsN = self.DOF2Nodes(EpsN)
-            EpsS = self.DOF2Nodes(EpsS)
-            return EpsN, EpsS
+            eps_normal = np.c_[m.dphixdx @ U,
+                               m.dphiydy @ U,
+                               m.dphizdz @ U]
+            eps_shear = np.c_[0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U,
+                              0.5 * m.dphixdz @ U + 0.5 * m.dphizdx @ U,
+                              0.5 * m.dphiydz @ U + 0.5 * m.dphizdy @ U]
+        return eps_normal, eps_shear
+    
+    def GP2DOF(self, gp_field):
+        """
+        gp_field : ND.ARRAY
+        if gp_field has size 1 x npg, then the DOF vector is on the first comp.
+        otherwize, gp_field must be of size: dim x npg
+        """
+        if self.phix is None:
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
+        eps = 1e-12
+        if gp_field.ndim == 2:  # strain or stress field with 2 or 3 components
+            if self.dim == 2: # dim 2
+                wx = np.sum(m.phix, axis=0).A[0] + eps
+                wy = np.sum(m.phiy, axis=0).A[0] + eps
+                dof_field = diags(1/wx) @ m.phix.T @ gp_field[:, 0] +\
+                            diags(1/wy) @ m.phiy.T @ gp_field[:, 1]
+            elif len(gp_field) == 3:  # dim 3
+                wx = np.sum(m.phix, axis=0).A[0] + eps
+                wy = np.sum(m.phiy, axis=0).A[0] + eps
+                wz = np.sum(m.phiz, axis=0).A[0] + eps
+                dof_field = diags(1/wx) @ m.phix.T @ gp_field[:, 0] +\
+                            diags(1/wy) @ m.phiy.T @ gp_field[:, 1] +\
+                            diags(1/wz) @ m.phiz.T @ gp_field[:, 2]
+        else:  # only one comp.
+            wx = np.sum(m.phix, axis=0).A[0] + eps
+            dof_field = diags(1/wx) @ m.phix.T @ gp_field
+        return dof_field
+
+    def StrainAtNodes(self, U):
+        eps_normal, eps_shear = self.StrainAtGP(U)
+        if self.dim == 2:
+            eps_normal = self.GP2DOF(eps_normal)
+            eps_normal = self.DOF2Nodes(eps_normal)
+            eps_shear = self.GP2DOF(eps_shear)
+            eps_shear = self.DOF2Nodes(eps_shear)
+        else:   # dim 3
+            eps_normal = self.GP2DOF(eps_normal)
+            eps_normal = self.DOF2Nodes(eps_normal)
+            eps_shear = self.GP2DOF(eps_shear)
+            eps_shear = self.DOF2Nodes(eps_shear)
+        return eps_normal, eps_shear
 
     def VTKIntegrationPoints(self, cam, f, g, U, filename="IntPts", iscale=2):
         """
@@ -2735,8 +2730,12 @@ class Mesh:
         None.
 
         """
-        EN, ES = self.StrainAtNodes(U)
+        EN, ES = self.StrainAtGP(U)
         SN, SS = Strain2Stress(hooke, EN, ES)
+        SN = self.GP2DOF(SN)
+        SN = self.DOF2Nodes(SN)
+        SS = self.GP2DOF(SS)
+        SS = self.DOF2Nodes(SS)
         self.PlotContourTensorField(U, SN, SS, n=n, 
                         s=s, stype=stype, newfig=newfig, cmap=cmap, 
                         field_name='SIG', **kwargs)

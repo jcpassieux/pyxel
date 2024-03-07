@@ -82,7 +82,14 @@ F = -K@U
 KLU = splalg.splu(K[repk])
 U[rep] = KLU.solve(F[rep])
 
+# %% Post-processing
+m.Plot(U, alpha=0.2)
 m.Plot(U, 50)
+
 m.PlotContourStrain(U)
+
+m.PlotContourDispl(U, s=30)
+
+m.PlotContourStress(U, hooke)
 
 m.VTKSol('test_displ', U)
