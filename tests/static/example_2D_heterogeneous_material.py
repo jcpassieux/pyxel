@@ -8,6 +8,7 @@ Created on Tue Mar  5 17:41:15 2024
 import numpy as np
 import pyxel as px
 import scipy.sparse.linalg as splalg
+import matplotlib.pyplot as plt
 
 # %% Tiny testcase with two elements > handmade elem sets
 # o  ----------------- ->
@@ -86,10 +87,17 @@ U[rep] = KLU.solve(F[rep])
 m.Plot(U, alpha=0.2)
 m.Plot(U, 50)
 
-m.PlotContourStrain(U)
+m.PlotContourStrain(U, cmap='RdBu')
 
 m.PlotContourDispl(U, s=30)
 
 m.PlotContourStress(U, hooke)
+
+# possibility to plot directly as gauss points
+EN, ES = m.StrainAtGP(U)
+plt.scatter(m.pgx, m.pgy, c=EN[:, 1], cmap="RdBu", s=1)
+plt.colorbar()
+plt.axis('off')
+plt.axis('equal')
 
 m.VTKSol('test_displ', U)
