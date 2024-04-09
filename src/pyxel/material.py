@@ -109,7 +109,7 @@ def Hooke(p, typc='isotropic_2D_ps'):
 
 
 def Strain2Stress(hooke, En, Es):
-    if len(hooke) == 3:  # dim 2
+    if len(hooke) == 3:  # dim 2 plane strain or plane stress
         SXX = En[:, 0] * hooke[0, 0] + En[:, 1] * \
             hooke[0, 1] + 2 * Es[:, 0] * hooke[0, 2]
         SYY = En[:, 0] * hooke[1, 0] + En[:, 1] * \
@@ -118,6 +118,25 @@ def Strain2Stress(hooke, En, Es):
             hooke[2, 1] + 2 * Es[:, 0] * hooke[2, 2]
         Sn = np.c_[SXX, SYY]
         Ss = np.c_[SXY, 0*SXY]
+    elif len(hooke) == 4:  # 2D axisymetry
+        SXX = En[:, 0] * hooke[0, 0] +\
+            En[:, 1] * hooke[0, 1] +\
+            En[:, 2] * hooke[0, 2] +\
+            2 * Es[:, 0] * hooke[0, 3]
+        SYY = En[:, 0] * hooke[1, 0] +\
+            En[:, 1] * hooke[1, 1] +\
+            En[:, 2] * hooke[1, 2] +\
+            2 * Es[:, 0] * hooke[1, 3]
+        SZZ = En[:, 0] * hooke[2, 0] +\
+            En[:, 1] * hooke[2, 1] +\
+            En[:, 2] * hooke[2, 2] +\
+            2 * Es[:, 0] * hooke[2, 3]
+        SXY = En[:, 0] * hooke[3, 0] +\
+            En[:, 1] * hooke[3, 1] +\
+            En[:, 2] * hooke[3, 2] +\
+            2 * Es[:, 0] * hooke[3, 3]
+        Sn = np.c_[SXX, SYY, SZZ]
+        Ss = np.c_[SXY, 0*SXY, 0*SXY]
     else:  # dim 3
         i = 0
         SXX = En[:, 0] * hooke[i, 0] + En[:, 1] * hooke[i, 1] + \

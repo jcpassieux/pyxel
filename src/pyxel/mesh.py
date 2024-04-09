@@ -1428,22 +1428,30 @@ class Mesh:
                 x2 = u[eet[:, 1]]
                 y2 = v[eet[:, 1]]
                 z2 = w[eet[:, 1]]
-                x3 = u[eet[:, 2]]
-                y3 = v[eet[:, 2]]
-                z3 = w[eet[:, 2]]
-                x4 = u[eet[:, 3]]
-                y4 = v[eet[:, 3]]
-                z4 = w[eet[:, 3]]
-                l1 = np.sqrt((x1-x4)**2 + (y1-y4)**2 + (z1-z4)**2)
-                l2 = np.sqrt((x1-x3)**2 + (y1-y3)**2 + (z1-z3)**2)
-                l3 = np.sqrt((x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2)
-                aes = np.append(aes, np.hstack((l1, l2, l3)))
-            if method == 'max':
-                return np.mean(aes) + np.std(aes) * 0.5
-            elif method == 'min':
-                return np.mean(aes) - np.std(aes) * 0.5
-            elif method == 'mean':
-                return np.mean(aes)
+                if et != 1: # tetraedral elements
+                    x3 = u[eet[:, 2]]
+                    y3 = v[eet[:, 2]]
+                    z3 = w[eet[:, 2]]
+                    if et != 2:
+                        x4 = u[eet[:, 3]]
+                        y4 = v[eet[:, 3]]
+                        z4 = w[eet[:, 3]]
+                        l1 = np.sqrt((x1-x4)**2 + (y1-y4)**2 + (z1-z4)**2)
+                        l2 = np.sqrt((x1-x3)**2 + (y1-y3)**2 + (z1-z3)**2)
+                        l3 = np.sqrt((x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2)
+                        aes = np.append(aes, np.hstack((l1, l2, l3)))
+                    else:
+                        l2 = np.sqrt((x1-x3)**2 + (y1-y3)**2 + (z1-z3)**2)
+                        l3 = np.sqrt((x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2)
+                        aes = np.append(aes, np.hstack((l2, l3)))
+                else: # bar/beam elements
+                    aes = np.sqrt((x1-x2)**2 + (y1-y2)**2 + (z1-z2)**2)
+                if method == 'max':
+                    return np.mean(aes) + np.std(aes) * 0.5
+                elif method == 'min':
+                    return np.mean(aes) - np.std(aes) * 0.5
+                elif method == 'mean':
+                    return np.mean(aes)
         else:   # 2D
             if cam is None:
                 u = self.n[:, 0]
@@ -1456,6 +1464,8 @@ class Mesh:
                     rep = np.arange(3)
                 elif et in [3, 10, 16]:
                     rep = np.arange(4)
+                elif et in [1]:
+                    rep = np.arange(2)
                 um = u[self.e[et][:, rep]] - np.mean(u[self.e[et][:, rep]], axis=1)[:, np.newaxis]
                 vm = v[self.e[et][:, rep]] - np.mean(v[self.e[et][:, rep]], axis=1)[:, np.newaxis]
                 if method == 'max':
@@ -2074,16 +2084,22 @@ class Mesh:
         print("Meshfile " + os.path.join("vtk", dir0, filename)
               + '.vtu' + " written.")
 
-    def StrainAtGP(self, U):
+    def StrainAtGP(self, U, axisym=False):
         if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
             m = self
         if self.dim == 2:
-            eps_normal = np.c_[m.dphixdx @ U, m.dphiydy @ U]
-            eps_shear = np.c_[0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U,
-                              np.zeros(m.npg)]
+            if axisym:
+                Bxy = 0.5 * (m.dphixdy + m.dphiydx)
+                Nr = diags(1/m.pgx) @ m.phix
+                eps_normal = np.c_[m.dphixdx @ U, m.dphiydy @ U, Nr @ U]
+                eps_shear = np.c_[Bxy @ U, np.zeros(m.npg), np.zeros(m.npg)]
+            else:
+                eps_normal = np.c_[m.dphixdx @ U, m.dphiydy @ U]
+                eps_shear = np.c_[0.5 * m.dphixdy @ U + 0.5 * m.dphiydx @ U,
+                                  np.zeros(m.npg)]
         else:   # dim 3
             eps_normal = np.c_[m.dphixdx @ U,
                                m.dphiydy @ U,
@@ -2111,7 +2127,7 @@ class Mesh:
                 wy = np.sum(m.phiy, axis=0).A[0] + eps
                 dof_field = diags(1/wx) @ m.phix.T @ gp_field[:, 0] +\
                             diags(1/wy) @ m.phiy.T @ gp_field[:, 1]
-            elif len(gp_field) == 3:  # dim 3
+            else:  # dim 3
                 wx = np.sum(m.phix, axis=0).A[0] + eps
                 wy = np.sum(m.phiy, axis=0).A[0] + eps
                 wz = np.sum(m.phiz, axis=0).A[0] + eps
@@ -2125,16 +2141,10 @@ class Mesh:
 
     def StrainAtNodes(self, U):
         eps_normal, eps_shear = self.StrainAtGP(U)
-        if self.dim == 2:
-            eps_normal = self.GP2DOF(eps_normal)
-            eps_normal = self.DOF2Nodes(eps_normal)
-            eps_shear = self.GP2DOF(eps_shear)
-            eps_shear = self.DOF2Nodes(eps_shear)
-        else:   # dim 3
-            eps_normal = self.GP2DOF(eps_normal)
-            eps_normal = self.DOF2Nodes(eps_normal)
-            eps_shear = self.GP2DOF(eps_shear)
-            eps_shear = self.DOF2Nodes(eps_shear)
+        eps_normal = self.GP2DOF(eps_normal)
+        eps_normal = self.DOF2Nodes(eps_normal)
+        eps_shear = self.GP2DOF(eps_shear)
+        eps_shear = self.DOF2Nodes(eps_shear)
         return eps_normal, eps_shear
 
     def VTKIntegrationPoints(self, cam, f, g, U, filename="IntPts", iscale=2):
@@ -2730,14 +2740,20 @@ class Mesh:
         None.
 
         """
-        EN, ES = self.StrainAtGP(U)
+        axisym = False
+        if len(hooke) == 4:  # 2D axisymetric
+            axisym = True
+        EN, ES = self.StrainAtGP(U, axisym=axisym)
         SN, SS = Strain2Stress(hooke, EN, ES)
+        if axisym:  # plot only in-plane stress.
+            SN = SN[:, :2]
+            SS = SS[:, :2]
         SN = self.GP2DOF(SN)
         SN = self.DOF2Nodes(SN)
         SS = self.GP2DOF(SS)
         SS = self.DOF2Nodes(SS)
-        self.PlotContourTensorField(U, SN, SS, n=n, 
-                        s=s, stype=stype, newfig=newfig, cmap=cmap, 
+        self.PlotContourTensorField(U, SN, SS, n=n,
+                        s=s, stype=stype, newfig=newfig, cmap=cmap,
                         field_name='SIG', **kwargs)
 
     def PlotNodeLabels(self, d=[0, 0], **kwargs):
@@ -2902,7 +2918,7 @@ class Mesh:
         for je in self.e.keys():
             self.e[je] = self.e[je][inside[je], :]
 
-    def RemoveDoubleNodes(self):
+    def RemoveDoubleNodes(self, eps=None):
         """
         Removes the double nodes thus changes connectivity
         Warning: both self.e and self.n are modified!
@@ -2911,16 +2927,30 @@ class Mesh:
             m.RemoveDoubleNodes()
 
         """
-        nnew = np.unique(self.n, axis=0)
-        table = -1 * np.ones(len(self.n), dtype='int')
-        eps = 1e-5 * self.GetApproxElementSize()
-        for jn in range(len(self.n)):
-            rep, = np.where(np.linalg.norm(nnew-self.n[jn, :][np.newaxis],
-                                           axis=1) < eps)
-            table[jn] = rep
+        if eps is None:
+            eps = 1e-5 * self.GetApproxElementSize()
+        scale = 10 ** np.floor(np.log10(eps))  # tolerance between two nodes
+        nnew = np.round(self.n/scale) * scale
+        nnew, ind, inv = np.unique(nnew, axis=0, return_index=True,
+                                   return_inverse=True)
+        self.n = self.n[ind]  # keep the initial precision of remaining nodes
         for k in self.e.keys():
-            self.e[k] = table[self.e[k]]
-        self.n = nnew
+            self.e[k] = inv[self.e[k]]
+
+    def RemoveDoubleElems(self):
+        """
+        Removes elements that appear twice
+        Warning: both self.e is modified!
+
+        Usage :
+            m.RemoveDoubleElems()
+
+        """
+        for k in self.e.keys():
+            e_sort = np.sort(self.e[k], axis=1)
+            _, ind, inv = np.unique(e_sort, axis=0,
+                                   return_index=True, return_inverse=True)
+            self.e[k] = self.e[k][ind, :]
 
     def KeepElemsConnectedToThisNode(self, node_id=0):
         """
@@ -3374,4 +3404,63 @@ class Mesh:
             el_gp = self.Elem2GaussPoint(elset)
             hooke += np.kron(el_gp[np.newaxis], hooke_dict[s][np.newaxis].T)
         return hooke
-    
+
+    def FEComposition(self, mc):
+        """
+        Composition of a micro mesh by the element mappings of self mesh.
+        Only works with homogeneous element type in self.
+        
+        Parameters
+        ----------
+        mc : PYXEL.MESH
+            is a micro FE mesh defined within the parent element of self
+
+        Returns
+        -------
+        TYPE PYXEL.MESH
+          The composition of the micro and self meshes
+
+        """
+        et = list(self.e.keys())
+        if len(et) > 1:
+            raise Exception('Only one elem type in macro mesh = ' + str(et))
+        else:
+            et = et[0]
+        nelem = 0
+        nelem = len(self.e[et])
+        nnc = len(mc.n)
+        ng = np.zeros((nelem*nnc, self.dim))
+        eg = {}
+        nec = {}
+        for eti in mc.e.keys():
+            nec[eti] = len(mc.e[eti])
+            eg[eti] = np.zeros((nelem*nec[eti], mc.e[eti].shape[1]), dtype='int64')
+        ielem = 0
+        if self.dim == 2:
+            _, _, _, N, _, _ = ShapeFunctions(et)
+            for je in range(len(self.e[et])):
+                rep = np.arange(nnc) + ielem * nnc
+                phi = N(mc.n[:, 0], mc.n[:, 1])
+                ng[rep, :] = phi @ self.n[self.e[et][je]]
+                for eti in mc.e.keys():
+                    rep = np.arange(nec[eti]) + ielem * nec[eti]
+                    eg[eti][rep, :] = mc.e[eti] + ielem * nnc
+                ielem += 1
+        else:
+            _, _, _, _, N, _, _, _ = ShapeFunctions(et)
+            for je in range(len(self.e[et])):
+                rep = np.arange(nnc) + ielem * nnc
+                phi = N(mc.n[:, 0], mc.n[:, 1], mc.n[:, 2])
+                ng[rep, :] = phi @ self.n[self.e[et][je]]
+                for eti in mc.e.keys():
+                    rep = np.arange(nec[eti]) + ielem * nec[eti]
+                    eg[eti][rep, :] = mc.e[eti] + ielem * nnc
+                ielem += 1
+        mg = Mesh(eg, ng, self.dim)
+        print('Removing Unused nodes...')
+        mg.RemoveUnusedNodes()
+        print('Removing Double nodes...')
+        mg.RemoveDoubleNodes()
+        print('Removing Double Elements...')
+        mg.RemoveDoubleElems()
+        return mg

@@ -8,6 +8,7 @@ Created on Fri Nov 18 13:25:49 2022
 import numpy as np
 import pyxel as px
 import scipy.sparse.linalg as splalg
+import matplotlib.pyplot as plt
 
 #%% Testcase with 2D axisymmetric
 
@@ -42,7 +43,22 @@ U[rep] = KLU.solve(F[rep])
 
 m.VTKSol('Sol2DAxi', U)
 
+m.Plot(U, 10)
+m.PlotContourDispl(U)
 
+# plots only the in-plane components of stress.
+m.PlotContourStress(U, C)
+
+# %%
+
+EN, ES = m.StrainAtGP(U, axisym=True)
+SN, SS = px.Strain2Stress(C, EN, ES)
+
+plt.figure()
+m.Plot()
+plt.scatter(m.pgx, m.pgy, c=SN[:, 2])
+plt.colorbar()
+plt.axis('equal')
 
 #%% generating axisymmetric mesh
 import gmsh

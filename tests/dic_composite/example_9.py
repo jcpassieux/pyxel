@@ -37,12 +37,14 @@ m.VTKSol('toto_spline', U, n=[50, 50])
 # %% Same with a non square spline domain
 
 a = 0.925
-Xi = np.array([[0.5, 0.75, 1],
-               [0.5*a, 0.75*a, 1*a],
+ri = 0.5
+re = 1.58
+Xi = np.array([[ri, 0.5*(re-ri), re],
+               [ri*a, 0.5*(re-ri)*a, re*a],
                [0, 0, 0]])
 Yi = np.array([[0, 0, 0],
-               [0.5*a, 0.75*a, 1*a],
-               [0.5, 0.75, 1]])
+               [ri*a, 0.5*(re-ri)*a, re*a],
+               [ri, 0.5*(re-ri), re]])
 
 ctrlPts = np.array([Xi, Yi])
 degree = [2, 2]
@@ -58,7 +60,7 @@ m.KnotInsertion([newt, newr])
 # m.DegreeElevation(np.array([3, 3]))
 m.Plot()
 
-cam = px.Camera([100, 6.95, -5.35, 0])
+cam = px.Camera([100, 6.95, -5.36, 0])
 px.PlotMeshImage(f, m, cam)
 
 m.Connectivity()

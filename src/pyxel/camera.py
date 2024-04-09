@@ -420,7 +420,13 @@ class CameraNL:
         # rho2 = (u-u0)**2 + (v-v0)**2
         # ud = (u - u0) * (1 + r1*rho2) + u0 
         # vd = (v - v0) * (1 + r1*rho2) + v0
-        # sp.pycode(sp.diff(vd, Y))
+        # list_nulle = (sp.diff(ud, X), sp.diff(ud, Y), sp.diff(vd, X), sp.diff(vd, Y))
+        # variable_namer = sp.numbered_symbols('v')
+        # replacements, reduced = sp.cse(list_nulle, symbols=variable_namer)
+        # for key, val in replacements:
+        #     print(key, '=', sp.pycode(val))
+        # for i, r in enumerate(reduced):
+        #     print('deriv[{}]'.format(i), '=', sp.pycode(r))
         f = self.f
         tx = self.tx
         ty = self.ty
@@ -428,10 +434,26 @@ class CameraNL:
         u0 = self.u0
         v0 = self.v0
         r1 = self.r1
-        dudx = f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.sin(rz) + r1*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*(2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.sin(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.cos(rz))
-        dudy = -f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.cos(rz) + r1*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*(-2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.cos(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.sin(rz))
-        dvdx = f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.cos(rz) + r1*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*(2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.sin(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.cos(rz))
-        dvdy = f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.sin(rz) + r1*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*(-2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.cos(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.sin(rz))
+        v0 = np.sin(rz)
+        v1 = np.cos(rz)
+        v2 = f*(X*v1 + Y*v0 + tx) - v0
+        v3 = f*(X*v0 - Y*v1 - ty) - u0
+        v4 = f*(r1*(v2**2 + v3**2) + 1)
+        v5 = v0*v4
+        v6 = 2*f
+        v7 = v3*v6
+        v8 = v0*v7 + v1*v2*v6
+        v9 = v1*v4
+        v10 = 2*f*v0*v2 - v1*v7
+        v11 = r1*v2
+        dudx = r1*v3*v8 + v5
+        dudy = r1*v10*v3 - v9
+        dvdx = v11*v8 + v9
+        dvdy = v10*v11 + v5
+        # dudx = f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.sin(rz) + r1*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*(2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.sin(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.cos(rz))
+        # dudy = -f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.cos(rz) + r1*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*(-2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.cos(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.sin(rz))
+        # dvdx = f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.cos(rz) + r1*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*(2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.sin(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.cos(rz))
+        # dvdy = f*(r1*((f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)**2 + (f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)**2) + 1)*np.sin(rz) + r1*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*(-2*f*(f*(X*np.sin(rz) - Y*np.cos(rz) - ty) - u0)*np.cos(rz) + 2*f*(f*(X*np.cos(rz) + Y*np.sin(rz) + tx) - v0)*np.sin(rz))
         return dudx, dudy, dvdx, dvdy
 
     def dPdp(self, X, Y):
