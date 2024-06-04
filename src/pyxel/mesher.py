@@ -171,7 +171,7 @@ def StructuredMeshHex8(box, lc):
     m : Structured C8 mesh.
 
     """
-    if type(lc) is int:
+    if type(lc) is not list:
         lc = [lc, lc, lc]
     # Create a structured hexahedral mesh
     lx = box[1, 0] - box[0, 0]

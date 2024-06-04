@@ -1007,7 +1007,33 @@ def ShapeFunctions(eltype):
         zg = zg.ravel()
         wg = np.kron(np.kron(wg, wg), wg)
         return xg, yg, zg, wg, N, dN_xi, dN_eta, dN_zeta
+# %%  Beam elements
 
+def ElementaryStiffnessSpring(E, S, L):
+    a = E * S / L
+    Ke = a * np.array([[1, -1],
+                       [-1, 1]])
+    return Ke
+
+
+def ElementaryStiffnessBendingZ(E, Iz, L, p=0):
+    # p: phi_y for shear flexibility
+    b = E * Iz / ((1+p) * L**3)
+    Ke = b * np.array([[12 , 6*L       , -12 , 6*L       ],
+                       [6*L, (4+p)*L**2, -6*L, (2-p)*L**2],
+                       [-12, -6*L      , 12  , -6*L      ],
+                       [6*L, (2-p)*L**2, -6*L, (4+p)*L**2]])
+    return Ke
+
+
+def ElementaryStiffnessBendingY(E, Iy, L, p=0):
+    # p: phi_z for shear fLexibiLity
+    b = E * Iy / ((1+p) * L**3)
+    Ke = b * np.array([[12  , -6*L      , -12, -6*L      ],
+                       [-6*L, (4+p)*L**2, 6*L, (2-p)*L**2],
+                       [-12 , 6*L       , 12 , 6*L       ],
+                       [-6*L, (2-p)*L**2, 6*L, (4+p)*L**2]])
+    return Ke
 
 # %%
 class Mesh:
@@ -1041,7 +1067,7 @@ class Mesh:
         m.wdetJ = self.wdetJ.copy()
         return m
 
-    def Connectivity(self, order='C'):
+    def Connectivity(self, order='C', dof_per_node=None):
         """
         Associate DOFs to each node
 
@@ -1051,6 +1077,9 @@ class Mesh:
             DESCRIPTION. The default is 'C'.
             'C' ordered by component.
             'N' ordered by node.
+            
+        dof_per_node : INT, optional
+            Number of degrees of freedom per node
 
         """
         print("Connectivity.")
@@ -1058,21 +1087,17 @@ class Mesh:
         for je in self.e.keys():
             used_nodes = np.unique(np.append(used_nodes, self.e[je].ravel()))
         nn = len(used_nodes)
-        self.ndof = nn * self.dim
+        if dof_per_node is None:
+            dpn = self.dim
+        else:
+            dpn = dof_per_node
+        self.ndof = nn * dpn
         if order == 'C':
-            self.conn = -np.ones(self.n.shape[0], dtype=int)
-            self.conn[used_nodes] = np.arange(nn)
-            if self.dim == 2:
-                self.conn = np.c_[self.conn, self.conn + nn * (self.conn >= 0)]
-            else:
-                self.conn = np.c_[
-                    self.conn,
-                    self.conn + nn * (self.conn >= 0),
-                    self.conn + 2 * nn * (self.conn >= 0),
-                ]
+            self.conn = -np.ones((self.n.shape[0], dpn), dtype=int)
+            self.conn[used_nodes] = np.kron(np.ones((dpn, 1), dtype=int), np.arange(nn)).T + np.arange(dpn)[np.newaxis] * nn
         elif order == 'N':
-            self.conn = -np.ones((self.n.shape[0], self.dim), dtype=int)
-            self.conn[used_nodes] = np.arange(self.ndof).reshape(nn, self.dim)
+            self.conn = -np.ones((self.n.shape[0], dpn), dtype=int)
+            self.conn[used_nodes] = np.arange(self.ndof).reshape(nn, dpn)
 
     def DOF2Nodes(self, Udof, fillzero=False):
         """
@@ -1870,9 +1895,10 @@ class Mesh:
             m.GaussIntegration()
         else:
             m = self
-        wdetJr = m.wdetJ*m.pgx   # r dr dz !
+        wdetJr = m.wdetJ * m.pgx   # r dr dz !
         Bxy = m.dphixdy + m.dphiydx
         Nr = diags(1/m.pgx) @ m.phix
+        # convention without 2 pi (both in right and left hand sides)
         K = (
              m.dphixdx.T @ diags(wdetJr * hooke[0, 0]) @ m.dphixdx
              + m.dphiydy.T @ diags(wdetJr * hooke[1, 1]) @ m.dphiydy
@@ -1886,6 +1912,61 @@ class Mesh:
              + Nr.T @ diags(wdetJr * hooke[2, 1]) @ m.dphiydy
            )
         return K
+
+    def StiffnessBeam(self, bp):
+        """
+        Assemble Stiffness Operator for 2D and 3D Beams
+        bp: Beam Properties (see materials.py)
+        """
+        E = bp['E']
+        S = bp['S']
+        Iz = bp['Iz']
+        G = bp['G']
+        if self.dim == 3:
+            Iy = bp['Iy']
+            J = bp['J']
+        phi = bp['phi']
+        ndof = (2*self.dim*(self.dim+1)//2)**2
+        nzv = ndof * len(self.e[1])  # only elements of type 1
+        row = np.zeros(nzv, dtype='int64')
+        col = np.zeros(nzv, dtype='int64')
+        val = np.zeros(nzv)
+        for ie in range(len(self.e[1])):
+            nodes = self.e[1][ie]
+            v = np.diff(self.n[nodes], axis=0)[0]
+            L = np.linalg.norm(v)
+            if self.dim == 3:
+                c = G*J/L
+                t = v/L
+                z = np.array([0, 0, 1])
+                if t@z > 1-1e-8:
+                    z = np.array([1, 0, 0])
+                n = np.cross(z, t)
+                b = np.cross(t, n)
+                T = np.kron(np.eye(2), np.c_[t, n, b])
+                Ke = np.zeros((12, 12))
+                Ke[np.ix_([0, 6], [0, 6])] += ElementaryStiffnessSpring(E, S, L)
+                Ke[np.ix_([1, 5, 7, 11], [1, 5, 7, 11])] += ElementaryStiffnessBendingZ(E, Iz, L, phi)
+                Ke[np.ix_([2, 4, 8, 10], [2, 4, 8, 10])] += ElementaryStiffnessBendingY(E, Iy, L, phi)
+                Ke[np.ix_([3, 9], [3, 9])] += ElementaryStiffnessSpring(G, J, L)
+            else:
+                c = v[0]/L
+                s = v[1]/L
+                Ke = np.zeros((6, 6))
+                Ke[np.ix_([0, 3], [0, 3])] += ElementaryStiffnessSpring(E, S, L)
+                Ke[np.ix_([1, 2, 4, 5], [1, 2, 4, 5])] += ElementaryStiffnessBendingZ(E, Iz, L, phi)
+                T = np.array([[c, -s, 0],
+                              [s, c, 0],
+                              [0, 0, 1]])
+            H = np.kron(np.eye(2), T)
+            Ke = H @ Ke @ H.T
+            rep = self.conn[self.e[1][ie]].ravel()
+            cole, rowe = np.meshgrid(rep, rep)
+            row[np.arange(ndof)+ndof*ie] = rowe.ravel()
+            col[np.arange(ndof)+ndof*ie] = cole.ravel()
+            val[np.arange(ndof)+ndof*ie] = Ke.ravel()
+        return sp.sparse.csc_matrix((val, (row, col)), shape=(self.ndof, self.ndof))
+
 
     def Laplacian(self):
         """Assembles Tikhonov (Laplacian) Operator"""
@@ -2115,11 +2196,8 @@ class Mesh:
         if gp_field has size 1 x npg, then the DOF vector is on the first comp.
         otherwize, gp_field must be of size: dim x npg
         """
-        if self.phix is None:
-            m = self.Copy()
-            m.GaussIntegration()
-        else:
-            m = self
+        m = self.Copy()
+        m.GaussIntegration()
         eps = 1e-12
         if gp_field.ndim == 2:  # strain or stress field with 2 or 3 components
             if self.dim == 2: # dim 2
@@ -2555,7 +2633,8 @@ class Mesh:
                 plt.show()
 
     def PlotContourTensorField(self, U, Fn, Fs, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='rainbow', field_name='Field', **kwargs):
+                          newfig=True, cmap='rainbow', field_name='Field',
+                          clim=None, **kwargs):
         """
         Plots the STRESS/STRAIN field using Matplotlib Library.
 
@@ -2675,7 +2754,7 @@ class Mesh:
             plt.show()
 
     def PlotContourStrain(self, U, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='rainbow', **kwargs):
+                          newfig=True, cmap='rainbow', clim=None, **kwargs):
         """
         Plots the strain field using Matplotlib Library.
 
@@ -2706,7 +2785,8 @@ class Mesh:
         """
         EN, ES = self.StrainAtNodes(U)
         self.PlotContourTensorField(U, EN, ES, n=n, s=s, stype=stype,
-                          newfig=newfig, cmap=cmap, field_name='EPS', **kwargs)
+                          newfig=newfig, cmap=cmap, field_name='EPS', clim=clim,
+                          **kwargs)
 
 
     def PlotContourStress(self, U, hooke, n=None, s=1.0, stype='comp',
@@ -2931,7 +3011,7 @@ class Mesh:
             eps = 1e-5 * self.GetApproxElementSize()
         scale = 10 ** np.floor(np.log10(eps))  # tolerance between two nodes
         nnew = np.round(self.n/scale) * scale
-        nnew, ind, inv = np.unique(nnew, axis=0, return_index=True,
+        _, ind, inv = np.unique(nnew, axis=0, return_index=True,
                                    return_inverse=True)
         self.n = self.n[ind]  # keep the initial precision of remaining nodes
         for k in self.e.keys():
@@ -3175,6 +3255,40 @@ class Mesh:
         plt.title("Select 2 points of a line... and press enter")
         pts1 = np.array(plt.ginput(2, timeout=0))
         plt.close()
+        n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
+        n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
+        v = np.diff(self.n[[n1, n2]], axis=0)[0]
+        nv = np.linalg.norm(v)
+        v = v / nv
+        n = np.array([v[1], -v[0]])
+        c = n.dot(self.n[n1, :])
+        (rep,) = np.where(abs(self.n.dot(n) - c) < eps)
+        c1 = v.dot(self.n[n1, :])
+        c2 = v.dot(self.n[n2, :])
+        nrep = self.n[rep, :]
+        (rep2,) = np.where(((nrep.dot(v) - c1)
+                            * (nrep.dot(v) - c2)) < nv * 1e-2)
+        nset = rep[rep2]
+        self.Plot()
+        plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
+        return nset
+
+    def SelectEndLine(self, edge='left', eps=1e-8):
+        """
+        Return nodes on the left, right, top or bottom end
+        """
+        x_lef = np.min(self.n[:, 0])
+        x_rig = np.max(self.n[:, 0])
+        y_bot = np.min(self.n[:, 1])
+        y_top = np.max(self.n[:, 1])
+        if edge == 'left':
+            pts1 = np.array([[x_lef, y_bot], [x_lef, y_top]])
+        elif edge == 'right':
+            pts1 = np.array([[x_rig, y_bot], [x_rig, y_top]])
+        elif edge == 'top':
+            pts1 = np.array([[x_lef, y_top], [x_rig, y_top]])
+        elif edge == 'bottom':
+            pts1 = np.array([[x_lef, y_bot], [x_rig, y_bot]])
         n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
         n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
         v = np.diff(self.n[[n1, n2]], axis=0)[0]

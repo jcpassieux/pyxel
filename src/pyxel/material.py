@@ -108,6 +108,30 @@ def Hooke(p, typc='isotropic_2D_ps'):
         raise Exception('Unknown elastic constitutive regime (3D)')
 
 
+def BeamProperties(p):
+    """
+    p: geometric and mechanical parameters:
+        3D: p = [E, nu, S, Igz, k, Igy, J]
+        2D: p = [E, nu, S, Igz, k]
+    k: used to compute shear flexibility 
+        k = 6/7 (circular) or 5/6 rectangular (TIMOSHENKO)
+        k = None for EULER BERNOULLI
+    """
+    bp = {'E': p[0], 'v': p[1], 'S': p[2], 'Iz': p[3]}
+    bp['G'] = bp['E']/(2*(1+bp['v']))
+    if len(p) > 5:
+        bp['Iy'] = p[5]
+        bp['J'] = p[6]
+    k = p[4]
+    if k is None:
+        # EULER BERNOULLI
+        bp['phi'] = 0
+    else:
+        # TIMOSHENKO
+        bp['phi'] = 12 * bp['E'] * bp['Iz']/(bp['G']*bp['S']*k*bp['L']**2)
+    return bp
+
+
 def Strain2Stress(hooke, En, Es):
     if len(hooke) == 3:  # dim 2 plane strain or plane stress
         SXX = En[:, 0] * hooke[0, 0] + En[:, 1] * \
