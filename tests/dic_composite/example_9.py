@@ -23,8 +23,6 @@ m.Connectivity()
 
 m.DICIntegration(cam)
 
-px.PlotMeshImage(f, m, cam)
-
 U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
 U, res = px.Correlate(f, g, m, cam, U0=U)
 
@@ -60,7 +58,8 @@ m.KnotInsertion([newt, newr])
 # m.DegreeElevation(np.array([3, 3]))
 m.Plot()
 
-cam = px.Camera([100, 6.95, -5.36, 0])
+cam = px.Camera(2)
+cam.set_p([np.pi/2, 5.36, 6.95, 1/100])
 px.PlotMeshImage(f, m, cam)
 
 m.Connectivity()

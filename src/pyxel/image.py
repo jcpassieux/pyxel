@@ -198,9 +198,33 @@ class Image:
                 plt.title("Select " + str(n) + " points... and press enter")
         else:
             plt.title(title)
-        pts1 = np.array(plt.ginput(n, timeout=0)) - \
-            np.array([[self.x0, self.y0]])
+        pts1 = np.array(plt.ginput(n, timeout=0))[:, ::-1]
+        # convention image coord. sys.
+        # - Origin: top-left
+        # - first comp: downward vertical
+        # - second comp: horizontal to right
+        pts1 -= np.array([[self.x0, self.y0]])
         plt.close()
+        return pts1
+
+    def FineTuning(self, pts1):
+        """Redefine and refine the points selected in the images.           
+        """
+        # Arg: f pyxel image or Array of pyxel images
+        for j in range(len(pts1)):  # loop on points
+            x = int(pts1[j, 0])
+            y = int(pts1[j, 1])
+            umin = max(0, x - 50)
+            vmin = max(0, y - 50)
+            umax = min(self.pix.shape[1] - 1, x + 50)
+            vmax = min(self.pix.shape[0] - 1, y + 50)
+            fsub = self.pix[vmin:vmax, umin:umax]
+            plt.imshow(fsub, cmap="gray", interpolation="none")
+            plt.plot(x - umin, y - vmin, "y+")
+            figManager = plt.get_current_fig_manager()
+            figManager.window.showMaximized()
+            pts1[j, :] = np.array(plt.ginput(1))[0] + np.array([umin, vmin])
+            plt.close()
         return pts1
 
     def SelectROI(self, m=None, cam=None):

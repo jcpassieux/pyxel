@@ -17,9 +17,8 @@ g = px.Image('zoom-0070_1.tif').Load()
 
 m = px.ReadMesh('abaqus_q4_m.inp')
 
-p = np.array([1.05449047e+04, 8.12335842e-02,
-              -9.63541211e-02, -1.57497122e+00])
-cam = px.Camera(p)
+cam = px.Camera(2)
+cam.set_p([3.144718, 0.096486, 0.081304, 0.000095])
 
 m.Connectivity()
 m.DICIntegration(cam, EB=True)

@@ -8,13 +8,13 @@ from .camera import Camera
 
 def LSfromLine(f, pts1):
     """Compute level set of a line from a point cloud"""
-    b = pts1.T.dot(np.ones_like(pts1[:, 0]))
+    b = pts1.T.dot(np.ones_like(pts1[:, 1]))
     A = pts1.T.dot(pts1)
     res = np.linalg.solve(A, b)
     ui = np.arange(0, f.pix.shape[0])
     vi = np.arange(0, f.pix.shape[1])
     [Yi, Xi] = np.meshgrid(vi, ui)
-    lvlset = (Xi * res[1] + Yi * res[0] - 1) / np.linalg.norm(res)
+    lvlset = (Xi * res[0] + Yi * res[1] - 1) / np.linalg.norm(res)
     lvl = Image("lvl")
     lvl.pix = abs(lvlset)
     return lvl
@@ -22,8 +22,8 @@ def LSfromLine(f, pts1):
 def LSfromPoint(f, pts1):
     """Compute level set from one single point"""
     pts1 = pts1.ravel()
-    ui = np.arange(f.pix.shape[0]) - pts1[1]
-    vi = np.arange(f.pix.shape[1]) - pts1[0]
+    ui = np.arange(f.pix.shape[0]) - pts1[0]
+    vi = np.arange(f.pix.shape[1]) - pts1[1]
     [Yi, Xi] = np.meshgrid(vi, ui)
     lvl = Image("lvl")
     lvl.pix = np.sqrt(Xi ** 2 + Yi ** 2)
@@ -42,14 +42,14 @@ def LSfromCircle(f, pts1):
     ui = np.arange(0, f.pix.shape[0])
     vi = np.arange(0, f.pix.shape[1])
     [Yi, Xi] = np.meshgrid(vi, ui)
-    lvlset = abs(np.sqrt((Xi - cpos[1]) ** 2 + (Yi - cpos[0]) ** 2) - R)
+    lvlset = abs(np.sqrt((Xi - cpos[0]) ** 2 + (Yi - cpos[1]) ** 2) - R)
     lvl = Image("lvl")
     lvl.pix = abs(lvlset)
     return lvl
 
 class LSCalibrator:
     """Calibration of a front parallel setting 2D-DIC"""
-    def __init__(self, f, m):
+    def __init__(self, f, m, cam=None):
         self.f = f
         self.m = m
         self.ptsi = dict()
@@ -57,7 +57,10 @@ class LSCalibrator:
         self.feat = dict()
         self.nfeat = 0
         self.lvl = dict()
-        self.cam = None
+        if cam is None:
+            self.cam = Camera(m.dim)
+        else:
+            self.cam = cam
 
     def Init3Pts(self, ptsm=None, ptsM=None):
         """Initialization of the calibration using 3 points.
@@ -74,12 +77,13 @@ class LSCalibrator:
             print(" ************************************************* ")
             print(" *  SELECT 3 characteristic points in the image  * ")
             print(" ************************************************* ")
-            ptsm = self.f.SelectPoints(3)[:, [1, 0]]
+            ptsm = self.f.SelectPoints(3)
         if ptsM is None:
             print(" ************************************************* ")
             print(" * SELECT the 3 corresponding points on the mesh * ")
             print(" ************************************************* ")
             ptsM = self.m.SelectPoints(3)
+
         cm = np.mean(ptsm, axis=0)
         cM = np.mean(ptsM, axis=0)
         dm = np.linalg.norm(ptsm - cm, axis=1)
@@ -91,8 +95,9 @@ class LSCalibrator:
         vm /= np.linalg.norm(vm)
         vM /= np.linalg.norm(vM)
         angl = np.arccos(vM @ vm)
-        p = np.array([scale, 0, 0, np.pi / 2 - angl])
-        self.cam = Camera(p)
+        self.cam.T[2, 0] = np.mean(dM/dm) * self.cam.K[0,0]
+        self.cam.R[2, 0] = angl        
+        p = self.cam.get_p()
         for i in range(40):
             up, vp = self.cam.P(ptsM[:, 0], ptsM[:, 1])
             dPudp, dPvdp = self.cam.dPdp(ptsM[:, 0], ptsM[:, 1])
@@ -103,10 +108,10 @@ class LSCalibrator:
             p += 0.8 * dp
             self.cam.set_p(p)
             err = np.linalg.norm(dp) / np.linalg.norm(p)
-            print(
-                "Iter # %2d | disc=%2.2f %% | dU/U=%1.2e"
-                % (i + 1, np.linalg.norm(ptsm.T.ravel() - np.append(up, vp))
-                    / np.linalg.norm(ptsm.T.ravel()) * 100, err))
+            res = np.linalg.norm(ptsm.T.ravel() - np.append(up, vp)) / \
+                np.linalg.norm(ptsm.T.ravel())
+            print("Iter # %2d | disc=%2.2f %% | dU/U=%1.2e" %\
+                  (i + 1, res*100, err))
             if err < 1e-5:
                 break
 
@@ -191,15 +196,16 @@ class LSCalibrator:
                 vmin = max(0, y - 50)
                 umax = min(self.f.pix.shape[1] - 1, x + 50)
                 vmax = min(self.f.pix.shape[0] - 1, y + 50)
-                fsub = self.f.pix[vmin:vmax, umin:umax]
+                fsub = self.f.pix[umin:umax, vmin:vmax]
                 plt.imshow(fsub, cmap="gray", interpolation="none")
                 plt.plot(x - umin, y - vmin, "y+")
                 figManager = plt.get_current_fig_manager()
                 figManager.window.showMaximized()
-                self.ptsi[i][j, :] = np.array(plt.ginput(1))[0] + np.array([umin, vmin])
+                self.ptsi[i][j, :] = np.array(plt.ginput(1))[0, ::-1]
+                self.ptsi[i][j, :] += np.array([umin, vmin])
                 plt.close()
 
-    def Calibration(self):
+    def Calibration(self, cam=None):
         """Performs the calibration provided that sufficient features have been 
         selected using NewPoint(), NewLine() or NewCircle().
             
@@ -216,6 +222,7 @@ class LSCalibrator:
                 self.lvl[i] = LSfromLine(self.f, self.ptsi[i])
             elif "point" in self.feat[i]:
                 self.lvl[i] = LSfromPoint(self.f, self.ptsi[i])
+
         # Calibration
         xp = dict()
         yp = dict()
@@ -223,20 +230,21 @@ class LSCalibrator:
             self.lvl[i].BuildInterp()
             xp[i] = self.m.n[self.ptsm[i], 0]
             yp[i] = self.m.n[self.ptsm[i], 1]
-        if self.cam is None:
-            if len(self.feat) > 2:
-                ptsm = np.empty((0, 2))
-                ptsM = np.empty((0, 2))
-                for i in self.feat.keys():
-                    ptsm = np.vstack((ptsm, np.mean(self.ptsi[i], axis=0)))
-                    ptsM = np.vstack((ptsM, np.mean(self.m.n[self.ptsm[i]], axis=0)))
-                self.Init3Pts(ptsm, ptsM)
-            else:
-                self.Init3Pts()
+        # if self.cam is None:
+        if len(self.feat) > 2:
+            ptsm = np.empty((0, 2))
+            ptsM = np.empty((0, 2))
+            for i in self.feat.keys():
+                ptsm = np.vstack((ptsm, np.mean(self.ptsi[i], axis=0)))
+                ptsM = np.vstack((ptsM, np.mean(self.m.n[self.ptsm[i]], axis=0)))
+            self.Init3Pts(ptsm, ptsM)
+        else:
+            self.Init3Pts()
         p = self.cam.get_p()
-        C = np.diag(p)
-        if p[-1] == 0:
-            C[-1, -1] = 1
+        C = np.eye(len(p))
+        # C = np.diag(p)
+        # if p[-1] == 0:
+        #     C[-1, -1] = 1
         for i in range(40):
             M = np.zeros((len(p), len(p)))
             b = np.zeros(len(p))
@@ -256,6 +264,18 @@ class LSCalibrator:
                 % (i + 1, np.mean(lp) / max(self.f.pix.shape) * 100, err))
             if err < 1e-5:
                 break
-        print("cam = px.Camera(np.array([%f, %f, %f, %f]))" % (p[0], p[1], p[2], p[3]))
+        print("p = np.array([%f, %f, %f, %f])" % (p[0], p[1], p[2], p[3]))
         return self.cam
 
+    def SavePoints(self, filename):
+        points = {'ptsi': self.ptsi, 'ptsm': self.ptsm, 'feat': self.feat}
+        np.savez(filename, **points)
+        print("Writing file %s.npz" % filename)
+
+    def LoadPoints(self, filename):
+        params = dict(np.load(filename, allow_pickle=True))
+        self.ptsi = params['ptsi'].tolist()
+        self.ptsm = params['ptsm'].tolist()
+        self.feat = params['feat'].tolist()
+        self.nfeat = len(self.feat.keys())
+        print("File %s.npz loaded" % filename)

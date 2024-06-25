@@ -24,6 +24,7 @@ from .utils import meshgrid, isInBox, full_screen
 from .vtktools import PVDFile
 from .material import *
 import meshio
+from .camera import Camera
 
 from numpy.polynomial.legendre import leggauss 
 
@@ -1155,7 +1156,7 @@ class Mesh:
         Udof[self.conn[used_nodes]] = Unodes[used_nodes, :self.dim]
         return Udof
 
-    def DICIntegration(self, cam, EB=False, tri_same=False):
+    def DICIntegration(self, cam, G=False, EB=False, tri_same=False):
         """Compute FE-DIC quadrature rule along with FE shape functions
         operators
 
@@ -1176,6 +1177,9 @@ class Mesh:
         col = np.array([], dtype=int)
         row = np.array([], dtype=int)
         val = np.array([])
+        if G:   # shape function gradient
+            valx = np.array([])
+            valy = np.array([])
         if EB:   # Elementary Brightness and Contrast Correction
             cole = np.array([], dtype=int)
             rowe = np.array([], dtype=int)
@@ -1187,7 +1191,12 @@ class Mesh:
             repdof = self.e[et]
             u = un[self.e[et]]
             v = vn[self.e[et]]
-            _, _, _, N, _, _ = ShapeFunctions(et)
+            if G:
+                xn = self.n[self.e[et], 0]
+                yn = self.n[self.e[et], 1]
+                _, _, _, N, Ndx, Ndy = ShapeFunctions(et)
+            else:
+                    _, _, _, N, _, _ = ShapeFunctions(et)
             nfun = N(np.zeros(1), np.zeros(1)).shape[1]
             if et in (3, 10, 16):  # qua4 or qua9 or qua8
                 dist = np.floor(
@@ -1202,6 +1211,9 @@ class Mesh:
                 rowj = np.zeros(npg * nfun, dtype=int)
                 colj = np.zeros(npg * nfun, dtype=int)
                 valj = np.zeros(npg * nfun)
+                if G:   # shape function gradient
+                    valxj = np.zeros(npg * nfun)
+                    valyj = np.zeros(npg * nfun)
                 if EB:   # Elementary Brightness and Contrast Correction
                     rowej = np.zeros(npg, dtype=int)
                     colej = np.zeros(npg, dtype=int)
@@ -1217,6 +1229,20 @@ class Mesh:
                     rowj[rangephi] = reprow.ravel()
                     colj[rangephi] = repcol.ravel()
                     valj[rangephi] = phi.ravel()
+                    if G:
+                        dN_xi = Ndx(xg, yg)
+                        dN_eta = Ndy(xg, yg)
+                        dxdr = dN_xi @ xn[je, :]
+                        dydr = dN_xi @ yn[je, :]
+                        dxds = dN_eta @ xn[je, :]
+                        dyds = dN_eta @ yn[je, :]
+                        detJ = dxdr * dyds - dydr * dxds
+                        dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi\
+                            + (-dydr / detJ)[:, np.newaxis] * dN_eta
+                        dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi\
+                            + (dxdr / detJ)[:, np.newaxis] * dN_eta
+                        valxj[rangephi] = dphidx.ravel()
+                        valyj[rangephi] = dphidy.ravel()
                     if EB:
                         rangeone = npg + np.arange(len(repg))
                         rowej[rangeone] = repg
@@ -1253,6 +1279,9 @@ class Mesh:
                 rowj = np.zeros(npg * nfun, dtype=int)
                 colj = np.zeros(npg * nfun, dtype=int)
                 valj = np.zeros(npg * nfun)
+                if G:   # shape function gradient
+                    valxj = np.zeros(npg * nfun)
+                    valyj = np.zeros(npg * nfun)
                 if EB:   # Elementary Brightness and Contrast Correction
                     rowej = np.zeros(npg, dtype=int)
                     colej = np.zeros(npg, dtype=int)
@@ -1279,6 +1308,20 @@ class Mesh:
                     rowj[rangephi] = reprow.ravel()
                     colj[rangephi] = repcol.ravel()
                     valj[rangephi] = phi.ravel()
+                    if G:
+                        dN_xi = Ndx(xg, yg)
+                        dN_eta = Ndy(xg, yg)
+                        dxdr = dN_xi @ xn[je, :]
+                        dydr = dN_xi @ yn[je, :]
+                        dxds = dN_eta @ xn[je, :]
+                        dyds = dN_eta @ yn[je, :]
+                        detJ = dxdr * dyds - dydr * dxds
+                        dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi\
+                            + (-dydr / detJ)[:, np.newaxis] * dN_eta
+                        dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi\
+                            + (dxdr / detJ)[:, np.newaxis] * dN_eta
+                        valxj[rangephi] = dphidx.ravel()
+                        valyj[rangephi] = dphidy.ravel()
                     if EB:
                         rangeone = npg + np.arange(len(repg))
                         rowej[rangeone] = repg
@@ -1290,6 +1333,9 @@ class Mesh:
             col = np.append(col, colj[:npg * nfun])
             row = np.append(row, rowj[:npg * nfun])
             val = np.append(val, valj[:npg * nfun])
+            if G:
+                valx = np.append(valx, valxj[:npg * nfun])
+                valy = np.append(valy, valyj[:npg * nfun])
             if EB:
                 cole = np.append(cole, colej[:npg])
                 rowe = np.append(rowe, rowej[:npg])
@@ -1300,6 +1346,17 @@ class Mesh:
             (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
         self.phiy = csr_matrix(
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+        if G:
+            self.dphixdx = sp.sparse.csr_matrix(
+                (valx, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
+            self.dphixdy = sp.sparse.csr_matrix(
+                (valy, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
+            self.dphiydx = sp.sparse.csr_matrix(
+                (valx, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+            self.dphiydy = sp.sparse.csr_matrix(
+                (valy, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+        else:
+            self.dphixdx = None
         if EB:
             self.Me = csr_matrix(
                 (vale, (rowe, cole)), shape=(self.npg, ne))
@@ -1308,7 +1365,7 @@ class Mesh:
         qx[self.conn[rep, :]] = self.n[rep, :]
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
-        self.dphixdx = None
+
 
     def DICIntegrationPixel(self, cam):
         """ Builds a pixel integration scheme with integration points at the
@@ -1394,9 +1451,12 @@ class Mesh:
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         self.dphixdx = None
 
-    def __FastDICIntegElem(self, e, et, n=10):
+    def __FastDICIntegElem(self, e, et, n=10, G=False):
         # parent element
-        _, _, _, N, _, _ = ShapeFunctions(et)
+        if G:
+            _, _, _, N, Ndx, Ndy = ShapeFunctions(et)
+        else:
+            _, _, _, N, _, _ = ShapeFunctions(et)
         if et in [2, 9]:   # Triangles
             if et == 2:
                 n = max(n, 1)   # minimum 1 integration point for first order
@@ -1410,6 +1470,9 @@ class Mesh:
             xg = xg.ravel()
             yg = yg.ravel()
         phi = N(xg, yg)
+        if G:
+            dN_xi = Ndx(xg, yg)
+            dN_eta = Ndy(xg, yg)
         # elements
         ne = len(e)  # nb of elements
         nfun = phi.shape[1]  # nb of shape fun per element
@@ -1419,12 +1482,32 @@ class Mesh:
         row = np.zeros(nzv, dtype=int)
         col = np.zeros(nzv, dtype=int)
         val = np.zeros(nzv)
+        if G:
+            valx = np.zeros(nzv)
+            valy = np.zeros(nzv)
+            xn = self.n[e, 0]
+            yn = self.n[e, 1]
+        else:
+            valx = None
+            valy = None
         for i in range(len(xg)):
             repnzv = np.arange(ne * nfun) + i * ne * nfun
             col[repnzv] = e.ravel()   # repdof.ravel()
             row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
             val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
-        return col, row, val, wdetJ
+            if G:
+                dxdr = xn @ dN_xi[i, :]
+                dydr = yn @ dN_xi[i, :]
+                dxds = xn @ dN_eta[i, :]
+                dyds = yn @ dN_eta[i, :]
+                detJ = dxdr * dyds - dxds * dydr
+                dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi[i, :]\
+                    + (-dydr / detJ)[:, np.newaxis] * dN_eta[i, :]
+                dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi[i, :]\
+                    + (dxdr / detJ)[:, np.newaxis] * dN_eta[i, :]
+                valx[repnzv] = dphidx.ravel()
+                valy[repnzv] = dphidy.ravel()
+        return col, row, val, valx, valy, wdetJ
 
     def GetApproxElementSize(self, cam=None, method='min'):
         """ Estimate average/min/max element size
@@ -1510,9 +1593,9 @@ class Mesh:
             elif method == 'mean':
                 return np.mean(aes)
 
-    def DICIntegrationFast(self, n=10):
+    def DICIntegrationFast(self, n=10, G=False):
         """Builds a homogeneous (and fast) integration scheme for DIC"""
-        if hasattr(n, 'rz'):
+        if 'Camera' in str(type(n)):
             # if n is a camera and n is autocomputed
             n = self.GetApproxElementSize(n)
         if type(n) is not int:
@@ -1521,13 +1604,20 @@ class Mesh:
         col = np.array([], dtype=int)
         row = np.array([], dtype=int)
         val = np.array([])
+        if G:   # compute also the shape function gradients
+            valx = np.array([])
+            valy = np.array([])
         npg = 0
         for je in self.e.keys():
-            colj, rowj, valj, wdetJj = self.__FastDICIntegElem(
-                self.e[je], je, n)
+            colj, rowj, valj, valxj, valyj, wdetJj = self.__FastDICIntegElem(
+                self.e[je], je, n, G=G)
+            # colj, rowj, valj, wdetJj = self.__FastDICIntegElem(self.e[je], je, n)
             col = np.append(col, colj)
             row = np.append(row, rowj + npg)
             val = np.append(val, valj)
+            if G:
+                valx = np.append(valx, valxj)
+                valy = np.append(valy, valyj)
             self.wdetJ = np.append(self.wdetJ, wdetJj)
             npg += len(wdetJj)
         self.npg = len(self.wdetJ)
@@ -1535,22 +1625,38 @@ class Mesh:
             (val, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
         self.phiy = csr_matrix(
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+        if G:
+            self.dphixdx = sp.sparse.csr_matrix(
+                (valx, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
+            self.dphixdy = sp.sparse.csr_matrix(
+                (valy, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
+            self.dphiydx = sp.sparse.csr_matrix(
+                (valx, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+            self.dphiydy = sp.sparse.csr_matrix(
+                (valy, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+        else:
+            self.dphixdx = None
         rep, = np.where(self.conn[:, 0] >= 0)
         qx = np.zeros(self.ndof)
         qx[self.conn[rep, :]] = self.n[rep, :]
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
-        self.dphixdx = None
 
-    def __DVCIntegElem(self, e, et, n=10):
+    def __DVCIntegElem(self, e, et, n=10, G=False):
         # parent element
-        _, _, _, _, N, _, _, _ = ShapeFunctions(et)
         if et in [4, ]:   # Tet4
             n = max(n, 1)   # minimum 1 integration point for first order
             xg, yg, zg = SubTetIso(n)
         elif et in [5, ]:   # Hex8
             n = max(n, 2)   # minimum 2 integration points
             xg, yg, zg = SubHexIso(n)
+        if G:
+            _, _, _, _, N, Ndx, Ndy, Ndz = ShapeFunctions(et)
+            dN_xi = Ndx(xg, yg, zg)
+            dN_eta = Ndy(xg, yg, zg)
+            dN_zeta = Ndz(xg, yg, zg)
+        else:
+            _, _, _, _, N, _, _, _ = ShapeFunctions(et)
         phi = N(xg, yg, zg)
         # elements
         ne = len(e)  # nb of elements
@@ -1561,14 +1667,53 @@ class Mesh:
         row = np.zeros(nzv, dtype=int)
         col = np.zeros(nzv, dtype=int)
         val = np.zeros(nzv)
+        if G:
+            valx = np.zeros(nzv)
+            valy = np.zeros(nzv)
+            valz = np.zeros(nzv)
+            xn = self.n[e, 0]
+            yn = self.n[e, 1]
+            zn = self.n[e, 2]
+        else:
+            valx = []
+            valy = []
+            valz = []
         for i in range(len(xg)):
             repnzv = np.arange(ne * nfun) + i * ne * nfun
             col[repnzv] = e.ravel()
             row[repnzv] = np.tile(np.arange(ne) + i * ne, [nfun, 1]).T.ravel()
             val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
-        return col, row, val, wdetJ
+            if G:
+                dxdr = xn @ dN_xi[i, :]
+                dydr = yn @ dN_xi[i, :]
+                dzdr = zn @ dN_xi[i, :]
+                dxds = xn @ dN_eta[i, :]
+                dyds = yn @ dN_eta[i, :]
+                dzds = zn @ dN_eta[i, :]
+                dxdt = xn @ dN_zeta[i, :]
+                dydt = yn @ dN_zeta[i, :]
+                dzdt = zn @ dN_zeta[i, :]
+                detJ = dxdr * dyds * dzdt + dxds * dydt * dzdr\
+                    + dydr * dzds * dxdt - dzdr * dyds * dxdt\
+                    - dxdr * dzds * dydt - dydr * dxds * dzdt
+                dphidx = (
+                    (dyds*dzdt - dzds*dydt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                - ((dydr*dzdt - dzdr*dydt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                + ((dydr*dzds - dzdr*dyds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
+                dphidy = - (
+                    (dxds*dzdt - dzds*dxdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                + ((dxdr*dzdt - dzdr*dxdt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                - ((dxdr*dzds - dzdr*dxds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
+                dphidz = (
+                    (dxds*dydt - dyds*dxdt)/detJ)[:, np.newaxis]*dN_xi[i, :]\
+                - ((dxdr*dydt - dydr*dxdt)/detJ)[:, np.newaxis]*dN_eta[i, :]\
+                + ((dxdr*dyds - dydr*dxds)/detJ)[:, np.newaxis]*dN_zeta[i, :]
+                valx[repnzv] = dphidx.ravel()
+                valy[repnzv] = dphidy.ravel()
+                valz[repnzv] = dphidz.ravel()
+        return col, row, val, valx, valy, valz, wdetJ
 
-    def DVCIntegration(self, n=None):
+    def DVCIntegration(self, n=None, G=False):
         """Builds a homogeneous (and fast) integration scheme for DVC"""
         if hasattr(n, 'rz') or n is None:
             # if n is a camera then n is autocomputed
@@ -1580,12 +1725,22 @@ class Mesh:
         col = np.array([], dtype=int)
         row = np.array([], dtype=int)
         val = np.array([])
+        if G:   # compute also the shape function gradients
+            valx = np.array([])
+            valy = np.array([])
+            valz = np.array([])
         npg = 0
         for je in self.e.keys():
-            colj, rowj, valj, wdetJj = self.__DVCIntegElem(self.e[je], je, n)
+            colj, rowj, valj, valxj, valyj, valzj, wdetJj = self.__DVCIntegElem(
+                self.e[je], je, n, G=G
+                )
             col = np.append(col, colj)
             row = np.append(row, rowj + npg)
             val = np.append(val, valj)
+            if G:
+                valx = np.append(valx, valxj)
+                valy = np.append(valy, valyj)
+                valz = np.append(valz, valzj)
             self.wdetJ = np.append(self.wdetJ, wdetJj)
             npg += len(wdetJj)
         self.npg = len(self.wdetJ)
@@ -1595,13 +1750,33 @@ class Mesh:
             (val, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
         self.phiz = csr_matrix(
             (val, (row, self.conn[col, 2])), shape=(self.npg, self.ndof))
+        if G:
+            self.dphixdx = csr_matrix(
+                (valx, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
+            self.dphixdy = csr_matrix(
+                (valy, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
+            self.dphixdz = csr_matrix(
+                (valz, (row, self.conn[col, 0])), shape=(self.npg, self.ndof))
+            self.dphiydx = csr_matrix(
+                (valx, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+            self.dphiydy = csr_matrix(
+                (valy, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+            self.dphiydz = csr_matrix(
+                (valz, (row, self.conn[col, 1])), shape=(self.npg, self.ndof))
+            self.dphizdx = csr_matrix(
+                (valx, (row, self.conn[col, 2])), shape=(self.npg, self.ndof))
+            self.dphizdy = csr_matrix(
+                (valy, (row, self.conn[col, 2])), shape=(self.npg, self.ndof))
+            self.dphizdz = csr_matrix(
+                (valz, (row, self.conn[col, 2])), shape=(self.npg, self.ndof))
+        else:
+            self.dphixdx = None
         rep, = np.where(self.conn[:, 0] >= 0)
         qx = np.zeros(self.ndof)
         qx[self.conn[rep, :]] = self.n[rep, :]
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
         self.pgz = self.phiz.dot(qx)
-        self.dphixdx = None
 
     def __GaussIntegElem(self, e, et):
         # parent element
@@ -2407,6 +2582,7 @@ class Mesh:
                 ax.set_zlim(mid_z - max_range, mid_z + max_range)
                 ax.set_xlim(mid_x - max_range, mid_x + max_range)
                 ax.set_ylim(mid_y - max_range, mid_y + max_range)
+                print('axis equal')
                 # if plotnodes:
                 #     ax.plot(
                 #         n[:, 0],

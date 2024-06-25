@@ -52,6 +52,8 @@ KLU = splalg.splu(K[repk])
 U[rep] = KLU.solve(F[rep])
 
 
+m.PlotContourDispl(U)
+
 # %% Post-Processing > Matplotlib
 
 m.Plot(U, 10)

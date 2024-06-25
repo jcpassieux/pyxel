@@ -444,10 +444,11 @@ def MeshFromROI(roi, dx, typel=3):
         cam = CameraVol([1, 0, 0, 0, 0, 0, 0])
         return m, cam
     else:
+        # roi = np.roll(roi, 1, axis=1)
         m = StructuredMesh(roi, dx, typel=typel)
-        m.n[:,1] *= -1
-        p = np.array([1., 0., 0., 0.])
-        cam = Camera(p)
+        m.n[:, 1] *= -1
+        cam = Camera(2)
+        cam.R[2, 0] = 1.5707963267948966
         return m, cam
 
 def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None, 
@@ -630,10 +631,10 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
     print('Average Element Size in px: %3d' % aes)
     if l0 is None:
         if Basis is None:
-            if cam is None:
-                l0 = 30
-            else:
-                l0 = 30/cam.get_p()[0]
+            # if cam is None:
+            #     l0 = 30
+            # else:
+            l0 = 30 * cam.Get_pix2m()
             print('Auto reg. length l0 = %2.3e' % l0)
         else:
             l0 = 0

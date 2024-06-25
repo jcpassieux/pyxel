@@ -470,7 +470,7 @@ class BSplinePatch(object):
 
     def DICIntegration(self, n=10):
         """ DIC integration: build of the global differential operators """
-        if hasattr(n, 'rz'):
+        if 'Camera' in str(type(n)):
             # if n is a camera then n is autocomputed
             n = self.GetApproxElementSize(n)
         if type(n) == int:
@@ -731,8 +731,8 @@ def SplineFromROI(roi, dx, degree=[2, 2]):
     m = Rectangle(roi, NE, degree)
     m.n[:, 1] *= -1
     m.ctrlPts = m.N2CrtlPts()
-    p = np.array([1., 0., 0., 0.])
-    cam = Camera(p)
+    cam = Camera(2)
+    cam.R[2, 0] = 1.5707963267948966
     return m, cam
 
 
