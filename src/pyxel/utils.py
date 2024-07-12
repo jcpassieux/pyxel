@@ -69,14 +69,17 @@ def PlotMeshImage(f, m, cam, U=None, plot='mesh', newfig=True):
     if newfig:
         plt.figure()
     f.Plot()
-    u, v = cam.P(n[:, 0], n[:, 1])
-    if plot == 'mesh':
-        m.Plot(n=np.c_[v, u], edgecolor="y", alpha=0.6)
-    elif plot == 'strain':
-        m.PlotContourStrain(U, n=np.c_[v, u], alpha=0.8, stype='maxpcp', newfig=False)
-    elif plot == 'displ':
-        m.PlotContourDispl(U, n=np.c_[v, u], alpha=0.8, stype='mag', newfig=False)
+    if m.dim == 3:
+        u, v = cam.P(n[:, 0], n[:, 1], n[:, 2])
+        m.dim = 2
     else:
+        u, v = cam.P(n[:, 0], n[:, 1])        
+    if plot == 'mesh':
+        m.Plot(n=np.c_[u, v], edgecolor="y", alpha=0.6)
+    elif plot == 'strain':
+        m.PlotContourStrain(U, n=np.c_[u, v], alpha=0.8, stype='maxpcp', newfig=False)
+    elif plot == 'displ':
+        m.PlotContourDispl(U, n=np.c_[u, v], alpha=0.8, stype='mag', newfig=False)
         print('Unknown plot type in PlotMeshImage')
     # plt.xlim([0,f.pix.shape[1]])
     # plt.ylim([f.pix.shape[0],0])

@@ -14,6 +14,7 @@ g = px.Image(imagefiles % 1).Load()
 
 m = px.ReadMesh('abaqus_mesh_Q4.inp')
 m.Connectivity()
+m.Plot()
 
 cam = px.Camera(dim=2)
 
@@ -40,7 +41,7 @@ if calib_ext:
     ls.FineTuning()
     cam = ls.Calibration()
 else:
-    cam.set_p([1.559479, -0.023679, 0.012398, 0.494738])
+    cam.set_p([0.011394, -0.018419, 0.007162, 0.493576])
 
 px.PlotMeshImage(f, m, cam)
 

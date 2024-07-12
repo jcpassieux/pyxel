@@ -36,7 +36,7 @@ if do_calibration:
 else:
     # reuse previous calibration parameters
     cam = px.Camera(2)
-    cam.set_p([3.144718, 0.096486, 0.081304, 0.000095])
+    cam.set_p([-1.573863, 0.081188, 0.096383, 0.000095])
 
 px.PlotMeshImage(f, m, cam)
 

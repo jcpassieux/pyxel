@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from .image import Image
 from .camera import Camera
+import cv2
 
 #%% LevelSet Calibration tools
 
@@ -11,9 +12,12 @@ def LSfromLine(f, pts1):
     b = pts1.T.dot(np.ones_like(pts1[:, 1]))
     A = pts1.T.dot(pts1)
     res = np.linalg.solve(A, b)
-    ui = np.arange(0, f.pix.shape[0])
-    vi = np.arange(0, f.pix.shape[1])
-    [Yi, Xi] = np.meshgrid(vi, ui)
+    # ui = np.arange(0, f.pix.shape[0])
+    # vi = np.arange(0, f.pix.shape[1])
+    # [Yi, Xi] = np.meshgrid(vi, ui)
+    vi = np.arange(0, f.pix.shape[0])
+    ui = np.arange(0, f.pix.shape[1])
+    [Xi, Yi] = np.meshgrid(ui, vi)
     lvlset = (Xi * res[0] + Yi * res[1] - 1) / np.linalg.norm(res)
     lvl = Image("lvl")
     lvl.pix = abs(lvlset)
@@ -22,9 +26,9 @@ def LSfromLine(f, pts1):
 def LSfromPoint(f, pts1):
     """Compute level set from one single point"""
     pts1 = pts1.ravel()
-    ui = np.arange(f.pix.shape[0]) - pts1[0]
-    vi = np.arange(f.pix.shape[1]) - pts1[1]
-    [Yi, Xi] = np.meshgrid(vi, ui)
+    vi = np.arange(f.pix.shape[0]) - pts1[0]
+    ui = np.arange(f.pix.shape[1]) - pts1[1]
+    [Xi, Yi] = np.meshgrid(ui, vi)
     lvl = Image("lvl")
     lvl.pix = np.sqrt(Xi ** 2 + Yi ** 2)
     return lvl
@@ -39,9 +43,9 @@ def LSfromCircle(f, pts1):
     cpos = np.linalg.solve(A, b)
     R = np.sqrt(np.linalg.norm(cpos) ** 2 + np.sum(pts2) / pts.shape[0])
     cpos += meanu
-    ui = np.arange(0, f.pix.shape[0])
-    vi = np.arange(0, f.pix.shape[1])
-    [Yi, Xi] = np.meshgrid(vi, ui)
+    vi = np.arange(0, f.pix.shape[0])
+    ui = np.arange(0, f.pix.shape[1])
+    [Xi, Yi] = np.meshgrid(ui, vi)
     lvlset = abs(np.sqrt((Xi - cpos[0]) ** 2 + (Yi - cpos[1]) ** 2) - R)
     lvl = Image("lvl")
     lvl.pix = abs(lvlset)
@@ -84,19 +88,34 @@ class LSCalibrator:
             print(" ************************************************* ")
             ptsM = self.m.SelectPoints(3)
 
+        ptsM[:, 1] *= -1  # sample flip
         cm = np.mean(ptsm, axis=0)
         cM = np.mean(ptsM, axis=0)
         dm = np.linalg.norm(ptsm - cm, axis=1)
         dM = np.linalg.norm(ptsM - cM, axis=1)
-        scale = np.mean(dm / dM)
+        scale = np.mean(dM / dm)
         dmax = np.argmax(dm)
         vm = ptsm[dmax] - cm
         vM = ptsM[dmax] - cM
-        vm /= np.linalg.norm(vm)
-        vM /= np.linalg.norm(vM)
-        angl = np.arccos(vM @ vm)
-        self.cam.T[2, 0] = np.mean(dM/dm) * self.cam.K[0,0]
-        self.cam.R[2, 0] = angl        
+        # signed angle between vM and vm
+        angl = np.arctan2(vm[1],vm[0]) - np.arctan2(vM[1],vM[0])
+        self.cam.T = np.array([[0, 0, scale * self.cam.K[0, 0]]]).T
+        self.cam.R = np.array([[0, 0, angl]]).T
+        cM2x, cM2y = self.cam.P(cM[0], -cM[1])
+        self.cam.T[0, 0] = (cm[0] - cM2x) * self.cam.T[2, 0]
+        self.cam.T[1, 0] = (cm[1] - cM2y) * self.cam.T[2, 0]
+        print(self.cam.R)
+        print(self.cam.T)
+        ptsM[:, 1] *= -1
+        #
+        # m.Plot()
+        # plt.plot(ptsM[:, 0], ptsM[:, 1], 'ko')
+        # #
+        # f.Plot()
+        # plt.plot(ptsm[:, 0], ptsm[:, 1], 'ro')
+        # up, vp = self.cam.P(ptsM[:, 0], ptsM[:, 1])
+        # plt.plot(up, vp, 'y+')
+        #
         p = self.cam.get_p()
         for i in range(40):
             up, vp = self.cam.P(ptsM[:, 0], ptsM[:, 1])
@@ -168,10 +187,12 @@ class LSCalibrator:
             
         """
         if i in self.feat.keys():
-            del self.lvl[i]
+            if i in self.lvl.keys():
+                del self.lvl[i]
             del self.ptsi[i]
             del self.ptsm[i]
             del self.feat[i]
+            self.nfeat -= 1
 
     def FineTuning(self, im=None):
         """Redefine and refine the points selected in the images.
@@ -190,29 +211,29 @@ class LSCalibrator:
             rg = np.array([im])
         for i in rg:  # loop on features
             for j in range(len(self.ptsi[i][:, 1])):  # loop on points
-                x = int(self.ptsi[i][j, 0])
-                y = int(self.ptsi[i][j, 1])
-                umin = max(0, x - 50)
-                vmin = max(0, y - 50)
-                umax = min(self.f.pix.shape[1] - 1, x + 50)
-                vmax = min(self.f.pix.shape[0] - 1, y + 50)
-                fsub = self.f.pix[umin:umax, vmin:vmax]
+                u = int(self.ptsi[i][j, 0])
+                v = int(self.ptsi[i][j, 1])
+                umin = max(0, u - 50)
+                vmin = max(0, v - 50)
+                umax = min(self.f.pix.shape[0] - 1, u + 50)
+                vmax = min(self.f.pix.shape[1] - 1, v + 50)
+                fsub = self.f.pix[vmin:vmax, umin:umax]
                 plt.imshow(fsub, cmap="gray", interpolation="none")
-                plt.plot(x - umin, y - vmin, "y+")
+                plt.plot(u - umin, v - vmin, "y+")
                 figManager = plt.get_current_fig_manager()
                 figManager.window.showMaximized()
-                self.ptsi[i][j, :] = np.array(plt.ginput(1))[0, ::-1]
+                self.ptsi[i][j, :] = np.array(plt.ginput(1)) #[0, ::-1]
                 self.ptsi[i][j, :] += np.array([umin, vmin])
                 plt.close()
 
-    def Calibration(self, cam=None):
-        """Performs the calibration provided that sufficient features have been 
+    def Calibration(self):
+        """Performs the calibration provided that sufficient features have been
         selected using NewPoint(), NewLine() or NewCircle().
-            
+
         Returns
         -------
         pyxel Camera object
-            The calibrated camera model    
+            The calibrated camera model
         """
         # Compute Levelsets
         for i in self.feat.keys():
@@ -222,7 +243,6 @@ class LSCalibrator:
                 self.lvl[i] = LSfromLine(self.f, self.ptsi[i])
             elif "point" in self.feat[i]:
                 self.lvl[i] = LSfromPoint(self.f, self.ptsi[i])
-
         # Calibration
         xp = dict()
         yp = dict()
@@ -230,6 +250,7 @@ class LSCalibrator:
             self.lvl[i].BuildInterp()
             xp[i] = self.m.n[self.ptsm[i], 0]
             yp[i] = self.m.n[self.ptsm[i], 1]
+
         # if self.cam is None:
         if len(self.feat) > 2:
             ptsm = np.empty((0, 2))
@@ -240,7 +261,10 @@ class LSCalibrator:
             self.Init3Pts(ptsm, ptsM)
         else:
             self.Init3Pts()
+
         p = self.cam.get_p()
+        print(self.cam.R)
+        print(self.cam.T)
         C = np.eye(len(p))
         # C = np.diag(p)
         # if p[-1] == 0:

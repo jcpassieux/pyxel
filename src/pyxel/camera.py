@@ -19,6 +19,7 @@ class Camera:
         self.D = np.zeros((1, 5))
         self.R = np.zeros((3, 1))
         self.T = np.zeros((3, 1))
+        # self.R[0, 0] = np.pi  # FLIP to have World CSYS aligned with image CSYS
         self.T[2, 0] = 1.
         self.dim = dim  # 2 for 2D-DIC and 3 for Stereo-DIC
 
@@ -61,9 +62,13 @@ class Camera:
             'intrinsic' > set intrinsic only
             'distortion' > set distortion only
              otherwise > set all parameters
+        2D : p = [rz, tx, ty, tz]
+        3D : p = [rx, ry, rz, tx, ty, tz]
         """
         if p == 'extrinsic':
             if self.dim == 2:
+                # because of the composition of rotations with the flip RZ=pi
+                # the inplane rotation is RY !
                 self.R[2, 0] = pvec[0]
             else:
                 self.R[:, 0] = pvec[:3]
@@ -132,10 +137,23 @@ class Camera:
         """
         if Z is None:
             Z = X*0
-        pts = np.c_[X, Y, Z]
-        # Rmtx, _ = cv2.Rodrigues(self.R)
+        pts = np.c_[X, -Y, -Z]
         temp, _ = cv2.projectPoints(pts, self.R, self.T, self.K, self.D)
         return temp[:, 0, 0], temp[:, 0, 1]
+        # k1, k2, p1, p2, k3 = self.get_p('distortion')
+        # fx, fy, cx, cy = self.get_p('intrinsic')
+        # Rmtx, _ = cv2.Rodrigues(self.R)
+        # RT = np.block([[Rmtx, self.T], [np.zeros((1, 3)), 1]])
+        # Xws = np.vstack((X, Y, Z, X**0))
+        # Xcs = RT @ Xws
+        # xp = Xcs[0]/Xcs[2]
+        # yp = Xcs[1]/Xcs[2]
+        # r2 = xprime**2 + yprime**2
+        # xpp = xp*(1+k1*r2+k2*r2**2+k3*r2**3) + 2*p1*xp*yp+ p2*(r2+2*xp**2)
+        # ypp = yp*(1+k1*r2+k2*r2**2+k3*r2**3) + 2*p2*xp*yp+ p1*(r2+2*yp**2)
+        # u = fx*xpp + cx
+        # v = fy*ypp + cy
+        # return u, v
 
     def Pinv(self, u, v):
         """
@@ -323,7 +341,7 @@ class Camera:
         dvdy = fy*(T25*r11 - T35*T58 + T44*T60 + T56*r01 + T57*r11 - T59*r21 + p1*(T42 + T43))
         dvdz = fy*(T25*r12 - T45*T58 + T54*T60 + T56*r02 + T57*r12 - T59*r22 + p1*(T52 + T53))
         if self.dim == 2:
-            return dudx, dudy, dvdx, dvdy
+            return dudx, -dudy, dvdx, -dvdy
         else:
             return dudx, dudy, dudz, dvdx, dvdy, dvdz
             
@@ -355,12 +373,12 @@ class Camera:
         """
         if Z is None:
             Z = X*0
-        pts = np.c_[X, Y, Z]
+        pts = np.c_[X, -Y, -Z]
         _, jac = cv2.projectPoints(pts, self.R, self.T, self.K, self.D)
         if p == 'extrinsic':
             if self.dim == 2:
-                jac_x = jac[0::2, 2:6]
-                jac_y = jac[1::2, 2:6]
+                jac_x = jac[0::2, [2, 3, 4, 5]]
+                jac_y = jac[1::2, [2, 3, 4, 5]]
             else:
                 jac_x = jac[0::2, :6]
                 jac_y = jac[1::2, :6]
@@ -373,13 +391,22 @@ class Camera:
             jac_y = jac[1::2, ndist:]
         else:  # deriv wrt all params
             if self.dim == 2:
-                jac_x = jac[0::2, 2:]
-                jac_y = jac[1::2, 2:]
+                jac_x = jac[0::2, [2, 3, 4, 5]]
+                jac_y = jac[1::2, [2, 3, 4, 5]]
             else:
                 jac_x = jac[0::2, :]
                 jac_y = jac[1::2, :]
         return jac_x, jac_y
 
+# %% 
+class StereoRig:
+    def __init__(self, cam_list):
+        self.cam = cam_list
+        self.params = {}
+    
+    def LoadParams(self, filename):
+        self.params = dict(np.load(filename))
+    
 
 #%%
 # import sympy as sp

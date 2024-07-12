@@ -36,20 +36,20 @@ class ExportPixMap:
         self.u = np.round(u).astype(int)
         self.v = np.round(v).astype(int)
         self.sizeim = f.pix.shape
-        
+
     def GetUmap(self, U):
         Umap = np.zeros(self.sizeim)
         Vmap = np.zeros(self.sizeim)
         upg = self.m.phix @ U
         vpg = self.m.phiy @ U
-        Umap[self.u, self.v] = upg
-        Vmap[self.u, self.v] = vpg
+        Umap[self.v, self.u] = upg
+        Vmap[self.v, self.u] = vpg
         return Umap, Vmap
-    
+
     def GetROI(self):
         Rmap = np.zeros(self.sizeim)
         roi = self.m.phix @ np.ones(self.m.ndof)
-        Rmap[self.u, self.v] = (roi>0.5).astype(int)
+        Rmap[self.v, self.u] = (roi > 0.5).astype(int)
         return Rmap
 
     def GetResidual(self, f, g, U):
@@ -61,9 +61,9 @@ class ExportPixMap:
         res = g.Interp(u, v)
         res -= np.mean(res)
         res = imref - np.mean(imref) - np.std(imref) / np.std(res) * res
-        Rmap[self.u,self.v] = res
+        Rmap[self.v, self.u] = res
         return Rmap
-    
+
     def PlotDispl(self, U):
         Umap, Vmap = self.GetUmap(U)
         plt.figure()
@@ -76,11 +76,11 @@ class ExportPixMap:
         plt.colorbar()
         plt.title('Displacement V')
         return Umap, Vmap
-    
+
     def PlotResidual(self, f, g, U):
         R = self.GetResidual(f, g, U)
         plt.figure()
-        plt.imshow(R,cmap="RdBu")
+        plt.imshow(R, cmap="RdBu")
         stdr = np.std(R[self.u, self.v])
         plt.clim(-3 * stdr, 3 * stdr)
         plt.colorbar()

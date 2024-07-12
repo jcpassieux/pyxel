@@ -447,9 +447,7 @@ def MeshFromROI(roi, dx, typel=3):
         # roi = np.roll(roi, 1, axis=1)
         m = StructuredMesh(roi, dx, typel=typel)
         m.n[:, 1] *= -1
-        cam = Camera(2)
-        cam.R[2, 0] = 1.5707963267948966
-        return m, cam
+        return m, Camera(2)
 
 def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None, 
               L=None, eps=None, maxiter=30, disp=True, EB=False, direct=False):
@@ -670,7 +668,7 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
         # plt.figure()
         # g.Plot()
         # u, v = cam2.P(m2.n[:, 0], m2.n[:, 1])
-        # m.Plot(n=np.c_[v, u], edgecolor="y", alpha=0.6)
+        # m.Plot(n=np.c_[u, v], edgecolor="y", alpha=0.6)
         # plt.figure()
         # m2.Plot()
         # plt.plot(m2.pgx,m2.pgy,'k.')
@@ -800,16 +798,16 @@ def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM'):
     if m is None:
         return U, V
     else: 
-        u, v = cam.P(m.n[:,0],m.n[:,1])
+        u, v = cam.P(m.n[:,0], m.n[:,1])
         fp = imf.Copy()
-        fp.pix = V
+        fp.pix = U
         fp.BuildInterp()
         du = fp.Interp(u, v)
-        fp.pix = U
+        fp.pix = V
         fp.BuildInterp()
         dv = fp.Interp(u, v)
         
-        Xdx, Ydy = cam.PinvNL(u+du, v+dv)
+        Xdx, Ydy = cam.Pinv(u+du, v+dv)
         Ux = Xdx - m.n[:,0]
         Uy = Ydy - m.n[:,1]
         

@@ -9,10 +9,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 import gmsh
 from .mesh import ReadMesh
-from .camera import Camera
-from .image import Image
+from .camera import Camera, CameraVol
+# from .image import Image
 from .mesh import Mesh
 from skimage import measure
+
+from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
+# from CGAL.CGAL_Mesh_3 import Mesh_3_Complex_3_in_triangulation_3
+from CGAL.CGAL_Mesh_3 import Polyhedral_mesh_domain_3
+from CGAL.CGAL_Mesh_3 import Mesh_3_parameters
+from CGAL.CGAL_Mesh_3 import Default_mesh_criteria
+from CGAL import CGAL_Mesh_3
+
+import meshio
+import os
+# from skimage.filters import gaussian
+# from skimage.io import imread
+# from skimage import measure
 
 #%%
 
@@ -664,23 +677,23 @@ def MeshFromLS(ls, lc, typel='tri'):
     gmsh.finalize()
     m = ReadMesh('tmp.msh')
     print(m.e.keys())
-    if 15 in m.e:
-        del m.e[15]  # remove vertex
-    if 1 in m.e:
-        del m.e[1]  # remove segments
-    if 8 in m.e:
-        del m.e[8]  # remove quadratic segments
+    # if 15 in m.e:
+    #     del m.e[15]  # remove vertex
+    # if 1 in m.e:
+    #     del m.e[1]  # remove segments
+    # if 8 in m.e:
+    #     del m.e[8]  # remove quadratic segments
     return m
 
 
-def MeshFromImage(fpix, h, appls=None, typel='tri'):
+def MeshFromImage(f, thrs, h, appls=None, typel='tri', ext_ls_only=False):
     """
     Builds a mesh from a graylevel image.
 
     Parameters
     ----------
-    f : NUMPY ARRAY (bool pixel map)
-        1: inside, 0: outside the domain to mesh
+    f : NUMPY ARRAY ([0, 255] graylevel pixel map)
+        255: inside, 0: outside the domain to mesh
     h : FLOAT
         approximate finite elements size in pixels
     appls : BOOL
@@ -692,25 +705,32 @@ def MeshFromImage(fpix, h, appls=None, typel='tri'):
     -------
     m : PYXEL.MESH
         mesh of the domain where f equals to 0
+    m : PYXEL.CAMERA 2D
 
     """
-    fpix[:, 0] = 0
-    fpix[0, :] = 0
-    fpix[:, -1] = 0
-    fpix[-1, :] = 0
-    pix = ((1-fpix)*255).astype('uint8')
-    ls = measure.find_contours(pix, 127, fully_connected='low')
+    # fpix[:, 0] = 0
+    # fpix[0, :] = 0
+    # fpix[:, -1] = 0
+    # fpix[-1, :] = 0
+    # pix = ((1-fpix)*255).astype('uint8')
+    pix = 255 - f.pix.astype('uint8')
+    pix[:, 0] = 255
+    pix[0, :] = 255
+    pix[:, -1] = 255
+    pix[-1, :] = 255
+    ls = measure.find_contours(pix, thrs, fully_connected='low')
     #PlotLS(ls,'r.-')
     if appls is not None:
         ls = [measure.approximate_polygon(i, appls) for i in ls]
         # PlotLS(ls,'k.-')
+    if ext_ls_only:
+        ls = [ls[0], ]
     m = MeshFromLS(ls, h, typel)
     # p = np.array([1, 0., 0., np.pi/2])
     # a = Image('')
     # a.pix = f
     m.n = np.c_[m.n[:, 1], -m.n[:, 0]]
-    p = np.array([1, 0., 0., 0])
-    cam = Camera(p)
+    cam = Camera(2)
     return m, cam
 
 # xi = np.arange(-50,51)
@@ -719,3 +739,103 @@ def MeshFromImage(fpix, h, appls=None, typel='tri'):
 # fpix = Z<20
 
 # plt.imshow(fpix)
+
+# %% 
+
+"""
+Image-based mesh generation using CGAL
+with one phase segmentation
+It takes as input a reconstructed tomographic volume
+and generates the volumetric mesh
+
+Author: Ali Rouwane
+
+"""
+
+# Importing CGAL
+# Need to install the python bindings
+# https://pypi.org/project/cgal/
+
+
+def SurfaceToOffFile(verts, faces, filename):
+    """
+    Surface (vertices and faces) to offset file
+    """
+    with open(filename+".off", "w") as f:
+        f.write('OFF\n')
+        f.write(str(verts.shape[0])+' '+str(faces.shape[0])+' '+str(0)+'\n\n')
+        # loop over nodes
+        for i in range(verts.shape[0]):
+            f.write(str(verts[i,0])+' '+str(verts[i,1])+' '+str(verts[i,2])+'\n')
+        # loop over triangles
+        for i in range(faces.shape[0]):
+            f.write('3  '+str(faces[i,0])+' '+str(faces[i,1])+' '+str(faces[i,2])+'\n')
+        f.write(' ')
+
+
+def MeshFromSurface(verts, faces, facet_size, cell_size, facet_angle=30):
+    """
+    Returns a meshio object mesh
+    """
+    offSurfFile = 'temp-off-file'
+
+    SurfaceToOffFile(verts, faces, offSurfFile)
+
+    # Create input polyhedron as an offset file
+    polyhedron = Polyhedron_3(offSurfFile+'.off')
+    os.remove(offSurfFile + '.off')
+
+    # Create domain
+    domain = Polyhedral_mesh_domain_3(polyhedron)
+    params = Mesh_3_parameters()
+
+    # // Mesh criteria
+    # Mesh_criteria criteria(facet_angle=30, facet_size=0.1,
+    #                        facet_distance=0.025,
+    #                        cell_radius_edge_ratio=2, cell_size=0.1)
+    # Mesh criteria (no cell_size set)
+    criteria = Default_mesh_criteria()
+    criteria.facet_angle(facet_angle).facet_size(facet_size).cell_size(cell_size) 
+    # Mesh generation
+    c3t3 = CGAL_Mesh_3.make_mesh_3(domain, criteria, params)
+
+    c3t3.output_to_medit(offSurfFile+'.mesh')
+
+    feMesh = meshio.read(offSurfFile+'.mesh')
+    os.remove(offSurfFile+'.mesh')
+    return feMesh
+
+
+def MeshFromImage3D(f, thrs=128, facet_size=8, cell_size=8):
+    """
+    Builds a mesh from a graylevel volume.
+
+    Parameters
+    ----------
+    f : NUMPY ARRAY (0 255 graylevel pixel map)
+        255: inside, 0: outside the domain to mesh
+    facet_size : FLOAT
+    cell_size : FLOAT
+
+    Returns
+    -------
+    m : PYXEL.MESH
+        mesh of the domain where f equals to 0
+    cam : PYXEL.CAMERAVOL
+
+    """
+    pix = f.pix
+    pix[:, :, 0] = 0
+    pix[:, :, -1] = 0
+    pix[:, 0, :] = 0
+    pix[:, -1, :] = 0
+    pix[0, :, :] = 0
+    pix[-1, :, :] = 0
+    verts, faces, _ , _ = measure.marching_cubes(pix, level=thrs, spacing=(1,1,1), allow_degenerate=False) 
+    mesh = MeshFromSurface(verts, faces, facet_size=facet_size, cell_size=facet_size)
+    output_mesh = 'tmp.vtk'
+    mesh.write(output_mesh)
+    m = ReadMesh('tmp.vtk', 3)
+    os.remove('tmp.vtk')
+    cam = CameraVol([1, 0, 0, 0, 0, 0, 0])
+    return m, cam

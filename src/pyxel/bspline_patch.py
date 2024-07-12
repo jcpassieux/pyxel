@@ -732,7 +732,6 @@ def SplineFromROI(roi, dx, degree=[2, 2]):
     m.n[:, 1] *= -1
     m.ctrlPts = m.N2CrtlPts()
     cam = Camera(2)
-    cam.R[2, 0] = 1.5707963267948966
     return m, cam
 
 

@@ -59,7 +59,7 @@ m.KnotInsertion([newt, newr])
 m.Plot()
 
 cam = px.Camera(2)
-cam.set_p([np.pi/2, 5.36, 6.95, 1/100])
+cam.set_p([0, 6.95, 5.36, 1/100])
 px.PlotMeshImage(f, m, cam)
 
 m.Connectivity()

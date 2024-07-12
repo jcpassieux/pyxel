@@ -2253,8 +2253,6 @@ class Mesh:
         ----------
         filename : STRING
             name of the mesh file, including extension
-        U : NUMPY.ARRAY, optional
-            Displacement DOF vector.
 
         """
         cells = dict()
@@ -2267,7 +2265,6 @@ class Mesh:
         mesh = meshio.Mesh(points, cells)
 
         # Export element sets
-        cell_data = {}
         for s in self.cell_sets.keys():
             elsets = []
             for et in self.e.keys():
@@ -2277,7 +2274,6 @@ class Mesh:
             cell_data[s] = elsets
         
         # Export node sets
-        point_data = {}
         for s in self.point_sets.keys():
             pset = np.zeros(len(self.n))
             pset[self.point_sets[s]] = 1

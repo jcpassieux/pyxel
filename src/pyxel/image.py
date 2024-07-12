@@ -23,8 +23,8 @@ class Image:
     def __init__(self, fname):
         """Contructor"""
         self.fname = fname
-        self.x0 = 0
-        self.y0 = 0
+        self.u0 = 0
+        self.v0 = 0
 
     def LoadPIL(self):
         import PIL.Image as image
@@ -67,15 +67,15 @@ class Image:
                             " not in directory "+os.getcwd())
         return self
 
-    def SetOrigin(self, x0, y0):
-        self.x0 = x0
-        self.y0 = y0
+    def SetOrigin(self, u0, v0):
+        self.u0 = u0
+        self.v0 = v0
 
     def Copy(self):
         """Image Copy"""
         newimg = Image("Copy")
         newimg.pix = self.pix.copy()
-        newimg.SetOrigin(self.x0, self.y0)
+        newimg.SetOrigin(self.u0, self.v0)
         return newimg
 
     def Save(self, fname):
@@ -89,19 +89,22 @@ class Image:
         y = np.arange(0, self.pix.shape[1])
         self.tck = spi.RectBivariateSpline(x, y, self.pix)
 
-    def Interp(self, x, y):
-        """evaluate interpolator at non-integer pixel position x, y"""
+    def Interp(self, u, v):
+        """evaluate interpolator at non-integer pixel position u, v
+            u the right horizontal coord in pixel
+            v the downward vertical in pixel
+        """
         if not hasattr(self, 'tck'):
             self.BuildInterp()
-        return self.tck.ev(x-self.x0, y-self.y0)
+        return self.tck.ev(v-self.v0, u-self.u0)
 
-    def InterpGrad(self, x, y):
-        """evaluate gradient of the interpolator at non-integer pixel position x, y"""
-        return self.tck.ev(x-self.x0, y-self.y0, 1, 0), self.tck.ev(x-self.x0, y-self.y0, 0, 1)
+    def InterpGrad(self, u, v):
+        """evaluate gradient of the interpolator at non-integer pixel position u, v"""
+        return self.tck.ev(v-self.v0, u-self.u0, 0, 1), self.tck.ev(v-self.v0, u-self.u0, 1, 0)
 
-    def InterpHess(self, x, y):
-        """evaluate Hessian of the interpolator at non-integer pixel position x, y"""
-        return self.tck.ev(x-self.x0, y-self.y0, 2, 0), self.tck.ev(x-self.x0, y-self.y0, 0, 2), self.tck.ev(x-self.x0, y-self.y0, 1, 1)
+    def InterpHess(self, u, v):
+        """evaluate Hessian of the interpolator at non-integer pixel position u, v"""
+        return self.tck.ev(v-self.v0, u-self.u0, 0, 2), self.tck.ev(v-self.v0, u-self.u0, 2, 0), self.tck.ev(v-self.v0, u-self.u0, 1, 1)
 
     def Plot(self):
         """Plot Image"""
@@ -147,7 +150,7 @@ class Image:
         )
         nn[1] = nn[1] // scale
         self.pix = im0.reshape(nn)
-        self.SetOrigin(self.x0/scale, self.y0/scale)
+        self.SetOrigin(self.u0/scale, self.u0/scale)
 
     def ToGray(self, type="lum"):
         """Convert RGB to Grayscale :
@@ -198,18 +201,17 @@ class Image:
                 plt.title("Select " + str(n) + " points... and press enter")
         else:
             plt.title(title)
-        pts1 = np.array(plt.ginput(n, timeout=0))[:, ::-1]
-        # convention image coord. sys.
+        pts1 = np.array(plt.ginput(n, timeout=0))
+        # convention image coord. sys. of cv2 and matplotlib
         # - Origin: top-left
-        # - first comp: downward vertical
-        # - second comp: horizontal to right
-        pts1 -= np.array([[self.x0, self.y0]])
+        # - first comp: horizontal to right
+        # - second comp: downward vertical
+        pts1 -= np.array([[self.u0, self.v0]])
         plt.close()
         return pts1
 
     def FineTuning(self, pts1):
-        """Redefine and refine the points selected in the images.           
-        """
+        """Redefine and refine the points selected in the images. """
         # Arg: f pyxel image or Array of pyxel images
         for j in range(len(pts1)):  # loop on points
             x = int(pts1[j, 0])
@@ -249,11 +251,11 @@ class Image:
             self.Plot()
 
         def line_select_callback(eclick, erelease):
-            x1, y1 = eclick.xdata, eclick.ydata
-            x2, y2 = erelease.xdata, erelease.ydata
+            u1, v1 = eclick.xdata, eclick.ydata
+            u2, v2 = erelease.xdata, erelease.ydata
             print(
                 "roi = np.array([[%4d, %4d], [%4d, %4d]])"
-                % (int(x1+self.x0), int(y1+self.y0), int(x2+self.x0), int(y2+self.y0))
+                % (int(u1+self.u0), int(v1+self.v0), int(u2+self.u0), int(v2+self.v0))
             )
 
         rs = RectangleSelector(

@@ -50,6 +50,7 @@ vtk.VTRWriter('test2.vtr')
 
 import numpy as np
 import os
+import xml.etree.ElementTree as ET
 
 #import pdb
 #pdb.set_trace()
@@ -415,3 +416,41 @@ def PVDFile(fileName,ext,npart,nstep):
     pvd.writexml(outFile, newl='\n')
     print("VTK: "+ fileName +".pvd written")
     outFile.close()
+
+
+def VTRParser(filename):
+    tree = ET.parse(filename)
+    root = tree.getroot()
+    print(root.tag)
+    if not root.attrib['type'] == 'RectilinearGrid':
+        raise Exception("Oops!  That was not a RectilinearGrid...")
+    print('\t'+root[0].tag)
+    print('\t\t'+root[0][0].tag)
+    print('\t\t\t'+root[0][0][0].tag)
+    print('\t\t\t\t'+root[0][0][0][0].tag+' '+root[0][0][0][0].attrib['Name'])
+    x_coords = np.array(root[0][0][0][0].text.split(' ')).astype(float)
+    print('\t\t\t\t'+root[0][0][0][1].tag+' '+root[0][0][0][1].attrib['Name'])
+    y_coords = np.array(root[0][0][0][1].text.split(' ')).astype(float)
+    print('\t\t\t\t'+root[0][0][0][2].tag+' '+root[0][0][0][2].attrib['Name'])
+    z_coords = np.array(root[0][0][0][2].text.split(' ')).astype(float)
+    print('\t\t\t'+root[0][0][1].tag)
+    cell_data = {}
+    for data in root[0][0][1]:
+        print('\t\t\t\t'+data.attrib['Name'])
+        cell_data[data.attrib['Name']] = np.array(data.text.split(' ')).astype(float)
+    print('\t\t\t'+root[0][0][2].tag)
+    point_data = {}
+    for data in root[0][0][2]:
+        print('\t\t\t\t'+data.attrib['Name'])
+        point_data[data.attrib['Name']] = np.array(data.text.split(' ')).astype(float)
+    nx = len(x_coords)
+    ny = len(y_coords)
+    nz = len(z_coords)
+    Xtot = np.kron(np.ones(ny*nz), x_coords)
+    Ytot = np.kron(np.ones(nz), np.kron(y_coords, np.ones(nx)))
+    Ztot = np.kron(z_coords, np.ones(ny*nx))
+    n = np.c_[Xtot, Ytot, Ztot]
+    # box = np.array([[0, 0, 0], [nx-1, ny-1, nz-1]])
+    # m = px.StructuredMeshHex8(box, 1)
+    # m.n = n
+    return n, cell_data, point_data
