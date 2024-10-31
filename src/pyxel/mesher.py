@@ -675,6 +675,7 @@ def MeshFromLS(ls, lc, typel='tri'):
     gmsh.model.mesh.generate(2)
     gmsh.write('tmp.msh')
     gmsh.finalize()
+
     m = ReadMesh('tmp.msh')
     print(m.e.keys())
     # if 15 in m.e:
@@ -713,7 +714,7 @@ def MeshFromImage(f, thrs, h, appls=None, typel='tri', ext_ls_only=False):
     # fpix[:, -1] = 0
     # fpix[-1, :] = 0
     # pix = ((1-fpix)*255).astype('uint8')
-    pix = 255 - f.pix.astype('uint8')
+    pix = (255 - f.pix).astype('uint8')
     pix[:, 0] = 255
     pix[0, :] = 255
     pix[:, -1] = 255

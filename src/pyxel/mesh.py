@@ -13,6 +13,7 @@ PYthon library for eXperimental mechanics using Finite ELements
 import os
 import numpy as np
 import scipy as sp
+import scipy.sparse.linalg as splgl
 from scipy.sparse import diags, csr_matrix
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import art3d
@@ -219,7 +220,12 @@ def GetPixelsElem(xn, yn, xpix, ypix, eltype):
     """Finds the pixels that belong to any 2D element and"""
     """inverse the mapping to know their corresponding position in """
     """the parent element."""
-    wg = IsPointInElem2d(xn, yn, xpix, ypix)
+    if eltype in (9,):   # tri6
+        wg = IsPointInElem2d(xn[:3], yn[:3], xpix, ypix)
+    elif eltype in (10, 16):  # qua9 or qua8
+        wg = IsPointInElem2d(xn[:4], yn[:4], xpix, ypix)
+    else:
+        wg = IsPointInElem2d(xn, yn, xpix, ypix)
     ind = np.where(wg)
     xg, yg = InverseFEMapping(xn, yn, xpix[ind], ypix[ind], eltype)
     return xg, yg, xpix[ind], ypix[ind]
@@ -1519,6 +1525,7 @@ class Mesh:
             'max': estimation of the maximum element size
             'min': estimation of the minimum element size
             'mean': estimation of the mean element size
+            'all': a list of length number of elements
         """
         if self.dim == 3:
             aes = []
@@ -1560,6 +1567,8 @@ class Mesh:
                     return np.mean(aes) - np.std(aes) * 0.5
                 elif method == 'mean':
                     return np.mean(aes)
+                elif method == 'all':
+                    return aes
         else:   # 2D
             if cam is None:
                 u = self.n[:, 0]
@@ -1584,7 +1593,7 @@ class Mesh:
                     aes = np.append(aes,
                                     np.min(np.sqrt(um**2 + vm**2), axis=1)
                                     )
-                elif method == 'mean':
+                elif method == 'mean' or method == 'all':
                     aes = np.append(aes, np.sqrt(um**2 + vm**2))
             if method == 'max':
                 return np.mean(aes) + np.std(aes) * 0.5
@@ -1592,6 +1601,9 @@ class Mesh:
                 return np.mean(aes) - np.std(aes) * 0.5
             elif method == 'mean':
                 return np.mean(aes)
+            elif method == 'all':
+                return aes
+
 
     def DICIntegrationFast(self, n=10, G=False):
         """Builds a homogeneous (and fast) integration scheme for DIC"""
@@ -2141,6 +2153,54 @@ class Mesh:
             col[np.arange(ndof)+ndof*ie] = cole.ravel()
             val[np.arange(ndof)+ndof*ie] = Ke.ravel()
         return sp.sparse.csc_matrix((val, (row, col)), shape=(self.ndof, self.ndof))
+
+    def BeamStress(self, bp, U, ie=0, h=None):
+        """
+        Compute beam stress from displacements and beam props
+        """
+        E = bp['E']
+        S = bp['S']
+        Iz = bp['Iz']
+        G = bp['G']
+        if self.dim == 3:
+            Iy = bp['Iy']
+            J = bp['J']
+        phi = bp['phi']
+        ndof = (2*self.dim*(self.dim+1)//2)**2
+        nodes = self.e[1][ie]
+        rep = self.conn[nodes].ravel()
+        v = np.diff(self.n[nodes], axis=0)[0]
+        L = np.linalg.norm(v)
+        if self.dim == 3:
+            c = G*J/L
+            t = v/L
+            z = np.array([0, 0, 1])
+            if t@z > 1-1e-8:
+                z = np.array([1, 0, 0])
+            n = np.cross(z, t)
+            b = np.cross(t, n)
+            T = np.kron(np.eye(2), np.c_[t, n, b])
+            # TODO...
+        else:
+            c = v[0]/L
+            s = v[1]/L
+            if h is None:
+                h = L/10
+            X, Y = np.meshgrid(np.linspace(0, L, 300), np.linspace(0, h, round(h/L*300)))
+            T = np.array([[c, -s, 0],
+                          [s, c, 0],
+                          [0, 0, 1]])
+            H = np.kron(np.eye(2), T)
+            Ueb = H.T @ U[rep]
+            n3 = -6/L**2 + 12*X/L**3
+            n4 = -4/L + 6*X/L**2
+            n5 = 6/L**2 - 12*X/L**3
+            n6 = -2/L + 6*X/L**2
+            Sx = E * (0*X + 1/L) * (Ueb[3] - Ueb[0])
+            Sx += -E * (n3 * Ueb[1] + n4 * Ueb[2] + n5 * Ueb[4] + n6 * Ueb[5]) * (Y-h/2)
+            plt.contourf(Sx, origin='lower', cmap='rainbow')
+            plt.colorbar()
+            plt.axis('equal')
 
 
     def Laplacian(self):
@@ -2768,7 +2828,7 @@ class Mesh:
                      self.e[ie][:, [1, 2, 3]])
                 )
             elif ie == 2 or ie == 9:  # triangles
-                triangles = np.vstack((triangles, self.e[ie]))
+                triangles = np.vstack((triangles, self.e[ie][:, :3]))
         alpha = kwargs.pop("alpha", 1)
         if stype == 'mag':
             Vmag = np.sqrt(V[self.conn[:, 0]]**2 + V[self.conn[:, 1]]**2)
@@ -2848,7 +2908,7 @@ class Mesh:
                      self.e[ie][:, [1, 2, 3]])
                 )
             elif ie == 2 or ie == 9:  # triangles
-                triangles = np.vstack((triangles, self.e[ie]))
+                triangles = np.vstack((triangles, self.e[ie][:, :3]))
         EX = Fn[:, 0]
         EY = Fn[:, 1]
         EXY = Fs[:, 0]
@@ -2864,7 +2924,7 @@ class Mesh:
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
-            plt.title(field_name+"_1")
+            plt.title(r"$"+field_name+"_1$")
             plt.colorbar()
             plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]],
@@ -2872,7 +2932,7 @@ class Mesh:
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
-            plt.title(field_name+"_2")
+            plt.title(r"$"+field_name+"_2$")
             plt.colorbar()
             plt.show()
         elif stype == 'maxpcp':
@@ -2888,7 +2948,7 @@ class Mesh:
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
-            plt.title(field_name+"_max")
+            plt.title(r"$"+field_name+"_{max}$")
             plt.colorbar()
         elif stype == 'mag':
             EVM = np.sqrt(EX**2 + EY**2 + EX * EY + 3 * EXY**2)
@@ -2898,7 +2958,7 @@ class Mesh:
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
-            plt.title(field_name+"_VM")
+            plt.title(r"$"+field_name+"_{VM}$")
             plt.colorbar()
         else:
             """ Plot mesh and field contour """
@@ -2907,26 +2967,26 @@ class Mesh:
             self.Plot(n=n, alpha=0.1)
             plt.axis("off")
             plt.axis("equal")
-            plt.title(field_name+"_X")
+            plt.title(r"$"+field_name+"_X$")
             plt.colorbar()
             plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, EY, 20, alpha=alpha, cmap=cmap)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
-            plt.title(field_name+"_Y")
+            plt.title(r"$"+field_name+"_Y$")
             plt.axis("off")
             plt.colorbar()
             plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY, 20, alpha=alpha, cmap=cmap)
             self.Plot(n=n, alpha=0.1)
             plt.axis("equal")
-            plt.title(field_name+"_XY")
+            plt.title(r"$"+field_name+"_{XY}$")
             plt.axis("off")
             plt.colorbar()
             plt.show()
 
     def PlotContourStrain(self, U, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='rainbow', clim=None, **kwargs):
+                          newfig=True, cmap='viridis', clim=None, **kwargs):
         """
         Plots the strain field using Matplotlib Library.
 
@@ -2957,7 +3017,7 @@ class Mesh:
         """
         EN, ES = self.StrainAtNodes(U)
         self.PlotContourTensorField(U, EN, ES, n=n, s=s, stype=stype,
-                          newfig=newfig, cmap=cmap, field_name='EPS', clim=clim,
+                          newfig=newfig, cmap=cmap, field_name='\epsilon', clim=clim,
                           **kwargs)
 
 
@@ -3006,7 +3066,7 @@ class Mesh:
         SS = self.DOF2Nodes(SS)
         self.PlotContourTensorField(U, SN, SS, n=n,
                         s=s, stype=stype, newfig=newfig, cmap=cmap,
-                        field_name='SIG', **kwargs)
+                        field_name='\sigma', **kwargs)
 
     def PlotNodeLabels(self, d=[0, 0], **kwargs):
         """
@@ -3454,27 +3514,31 @@ class Mesh:
         y_bot = np.min(self.n[:, 1])
         y_top = np.max(self.n[:, 1])
         if edge == 'left':
-            pts1 = np.array([[x_lef, y_bot], [x_lef, y_top]])
+            # pts1 = np.array([[x_lef, y_bot], [x_lef, y_top]])
+            nset, = np.where(abs(self.n[:, 0] - x_lef) < eps)
         elif edge == 'right':
-            pts1 = np.array([[x_rig, y_bot], [x_rig, y_top]])
+            # pts1 = np.array([[x_rig, y_bot], [x_rig, y_top]])
+            nset, = np.where(abs(self.n[:, 0] - x_rig) < eps)
         elif edge == 'top':
-            pts1 = np.array([[x_lef, y_top], [x_rig, y_top]])
+            # pts1 = np.array([[x_lef, y_top], [x_rig, y_top]])
+            nset, = np.where(abs(self.n[:, 1] - y_top) < eps)
         elif edge == 'bottom':
-            pts1 = np.array([[x_lef, y_bot], [x_rig, y_bot]])
-        n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
-        n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
-        v = np.diff(self.n[[n1, n2]], axis=0)[0]
-        nv = np.linalg.norm(v)
-        v = v / nv
-        n = np.array([v[1], -v[0]])
-        c = n.dot(self.n[n1, :])
-        (rep,) = np.where(abs(self.n.dot(n) - c) < eps)
-        c1 = v.dot(self.n[n1, :])
-        c2 = v.dot(self.n[n2, :])
-        nrep = self.n[rep, :]
-        (rep2,) = np.where(((nrep.dot(v) - c1)
-                            * (nrep.dot(v) - c2)) < nv * 1e-2)
-        nset = rep[rep2]
+            # pts1 = np.array([[x_lef, y_bot], [x_rig, y_bot]])
+            nset, = np.where(abs(self.n[:, 1] - y_bot) < eps)
+        # n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
+        # n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
+        # v = np.diff(self.n[[n1, n2]], axis=0)[0]
+        # nv = np.linalg.norm(v)
+        # v = v / nv
+        # n = np.array([v[1], -v[0]])
+        # c = n.dot(self.n[n1, :])
+        # (rep,) = np.where(abs(self.n.dot(n) - c) < eps)
+        # c1 = v.dot(self.n[n1, :])
+        # c2 = v.dot(self.n[n2, :])
+        # nrep = self.n[rep, :]
+        # (rep2,) = np.where(((nrep.dot(v) - c1)
+        #                     * (nrep.dot(v) - c2)) < nv * 1e-2)
+        # nset = rep[rep2]
         self.Plot()
         plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
@@ -3691,7 +3755,7 @@ class Mesh:
             hooke += np.kron(el_gp[np.newaxis], hooke_dict[s][np.newaxis].T)
         return hooke
 
-    def FEComposition(self, mc):
+    def FEComposition(self, mc, separated=False):
         """
         Composition of a micro mesh by the element mappings of self mesh.
         Only works with homogeneous element type in self.
@@ -3708,6 +3772,7 @@ class Mesh:
 
         """
         et = list(self.e.keys())
+        list_meshes = []
         if len(et) > 1:
             raise Exception('Only one elem type in macro mesh = ' + str(et))
         else:
@@ -3727,21 +3792,25 @@ class Mesh:
             for je in range(len(self.e[et])):
                 rep = np.arange(nnc) + ielem * nnc
                 phi = N(mc.n[:, 0], mc.n[:, 1])
-                ng[rep, :] = phi @ self.n[self.e[et][je]]
+                n = phi @ self.n[self.e[et][je]]
+                ng[rep, :] = n.copy()
                 for eti in mc.e.keys():
                     rep = np.arange(nec[eti]) + ielem * nec[eti]
                     eg[eti][rep, :] = mc.e[eti] + ielem * nnc
                 ielem += 1
+                list_meshes.append(Mesh(mc.e.copy(), n, 2))
         else:
             _, _, _, _, N, _, _, _ = ShapeFunctions(et)
             for je in range(len(self.e[et])):
                 rep = np.arange(nnc) + ielem * nnc
                 phi = N(mc.n[:, 0], mc.n[:, 1], mc.n[:, 2])
-                ng[rep, :] = phi @ self.n[self.e[et][je]]
+                n = phi @ self.n[self.e[et][je]]
+                ng[rep, :] = n.copy()
                 for eti in mc.e.keys():
                     rep = np.arange(nec[eti]) + ielem * nec[eti]
                     eg[eti][rep, :] = mc.e[eti] + ielem * nnc
                 ielem += 1
+                list_meshes.append(Mesh(mc.e.copy(), n, 3))
         mg = Mesh(eg, ng, self.dim)
         print('Removing Unused nodes...')
         mg.RemoveUnusedNodes()
@@ -3749,4 +3818,64 @@ class Mesh:
         mg.RemoveDoubleNodes()
         print('Removing Double Elements...')
         mg.RemoveDoubleElems()
-        return mg
+        if separated:
+            return mg, list_meshes
+        else:
+            return mg
+
+    def SolveElastic(self, K, BC, LOAD, distributed=True):
+        """
+        Solving elasticity pb
+        
+        Parameters
+        ----------
+        m : PYXEL MESH
+        K : NUMPY ARRAY : PYXEL STIFNESS MATRIX
+        BC : LIST
+            [ [node_array, [ [dof, value], [dof, value] ] ] , ]
+        LOAD : LIST or NUMPY.ARRAY
+            first option
+            [ [node_array, [ [dof, value], [dof, value] ] ] , ]
+            second option
+            F as the generalized force vector of size m.ndof
+        distributed : BOOL, optional
+            DESCRIPTION. The default is TRUE : Force value is divided by the
+            number of nodes in the node_array.
+            otherwise the value is applied to all nodes.
+            
+        """
+        U = np.zeros(self.ndof)
+        # Dirichlet
+        rmdof = []
+        for bci in BC:
+            nodes = bci[0]
+            for j in range(len(bci[1])):
+                U[self.conn[nodes, bci[1][j][0]]] = bci[1][j][1]
+                rmdof += list(self.conn[nodes, bci[1][j][0]])
+        keepdof = np.setdiff1d(np.arange(self.ndof), rmdof)
+    
+        #Neumann
+        if type(LOAD) is list:
+            F = np.zeros(self.ndof)
+            for ldi in LOAD:
+                nodes = ldi[0]
+                for j in range(len(ldi[1])):
+                    F[self.conn[nodes, ldi[1][j][0]]] = ldi[1][j][1]
+                    if distributed:
+                        F[self.conn[nodes, ldi[1][j][0]]] /= len(nodes)
+        else:
+            F = LOAD.copy()
+    
+        F -= K@U
+        Fr = F[keepdof]
+        Kr = K[np.ix_(keepdof, keepdof)]
+    
+        if Kr.shape[0] < 1e5:
+            U[keepdof] = splgl.spsolve(Kr, Fr)
+        else:
+            eps_zero = 1e-5 * np.min(Kr)
+            Mr = diags(1/(Kr.diagonal() + eps_zero))
+            U[keepdof], info = splgl.cg(Kr, Fr, tol=1e-5, M=Mr)
+        R = K@U - F
+        return U, R
+

@@ -4,7 +4,7 @@
     JC Passieux, INSA Toulouse, 2021
 
     Example 10 : BASIC
-    Initialize with DIC OPtical Flow
+    Initialize with DIS OPtical Flow
 
         """
 

@@ -81,7 +81,7 @@ class ExportPixMap:
         R = self.GetResidual(f, g, U)
         plt.figure()
         plt.imshow(R, cmap="RdBu")
-        stdr = np.std(R[self.u, self.v])
+        stdr = np.std(R[self.v, self.u])
         plt.clim(-3 * stdr, 3 * stdr)
         plt.colorbar()
         plt.title('Residual Map')

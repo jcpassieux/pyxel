@@ -19,7 +19,6 @@ class Camera:
         self.D = np.zeros((1, 5))
         self.R = np.zeros((3, 1))
         self.T = np.zeros((3, 1))
-        # self.R[0, 0] = np.pi  # FLIP to have World CSYS aligned with image CSYS
         self.T[2, 0] = 1.
         self.dim = dim  # 2 for 2D-DIC and 3 for Stereo-DIC
 

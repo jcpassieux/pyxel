@@ -203,3 +203,83 @@ def Strain2Stress(hooke, En, Es):
 # C = Cinv**-1
 # sp.pycode(C)
 
+# %%
+
+def voigt(modulus, volfrac):
+    """
+    Voigt (upper) effective modulus of N phases (arithmetic avg)
+    modulus: list or array of N modulus
+    volfrac: list or array of N volume fractions in [0, 1]
+    """
+    if type(modulus) == list:
+        modulus = np.array(modulus).astype(float)
+    if type(volfrac) == list:
+        volfrac = np.array(volfrac).astype(float)
+    if volfrac.sum() < 1.-1e-10:
+        raise Exception('The total volume fraction should be equal to 1.0')
+    return modulus @ volfrac
+
+def reuss(modulus, volfrac):
+    """
+    Reuss (lower) effective modulus of N phases (harmonic avg)
+    modulus: list or array of N modulus
+    volfrac: list or array of N volume fractions in [0, 1]
+    """
+    if type(modulus) == list:
+        modulus = np.array(modulus).astype(float)
+    if type(volfrac) == list:
+        volfrac = np.array(volfrac).astype(float)
+    if volfrac.sum() < 1.-1e-10:
+        raise Exception('The total volume fraction should be equal to 1.0')
+    if np.sum(modulus < 1e-10):
+        # if one of the modulus is zero (void) > lower bound = 0
+        return 0.0
+    else:
+        return 1.0 / np.sum(volfrac / modulus)
+
+def hill(modulus, volfrac):
+    """
+    Hill average effective modulus, of N phases. 
+    Defined as the average of the Reuss (lower) and Voigt (upper) bounds.
+    modulus: list or array of N modulus
+    volfrac: list or array of N volume fractions in [0, 1]
+    """
+    return 0.5 * voigt(modulus, volfrac) + 0.5 * reuss(modulus, volfrac)
+
+
+def hashin_shtrikman(bulk, shear, volfrac):
+    """
+    Hashin-Shtrikman effective modulus of two phases.
+    Args:
+        volfrac: list or array of volume fractions (must sum to 1.00 or 100%).
+        bluk: bulk modulus of constituents (list or array).
+        shear: shear modulus of constituents (list or array).
+    Returns:
+        python dict with 4 bounds
+    """
+    if type(volfrac) == list:
+        volfrac = np.array(volfrac).astype(float)
+    if type(bulk) == list:
+        bulk = np.array(bulk).astype(float)
+    if type(shear) == list:
+        shear = np.array(shear).astype(float)
+    if volfrac.sum() < 1.-1e-10:
+        raise Exception('The total volume fraction should be equal to 1.0')
+    def z_bulk(shear):
+        return (4/3.) * shear
+    def z_shear(bulk, shear):
+        return shear * (9 * bulk + 8 * shear) / (bulk + 2 * shear) / 6
+    def bound(bulk, volfrac, z):
+        return 1 / np.sum(volfrac / (bulk + z)) - z
+    z_min_bulk = z_bulk(np.amin(shear))
+    if np.sum(bulk < 1e-10) and np.sum(shear < 1e-10):
+        z_min_shear = 0.0
+    else:
+        z_min_shear = z_shear(np.amin(bulk), np.amin(shear))
+    z_max_bulk = z_bulk(np.amax(shear))
+    z_max_shear = z_shear(np.amax(bulk), np.amax(shear))
+    res = {'bulk_lower': bound(bulk, volfrac, z_min_bulk),
+           'bulk_upper': bound(bulk, volfrac, z_max_bulk),
+           'shear_lower': bound(bulk, volfrac, z_min_shear),
+           'shear_upper': bound(bulk, volfrac, z_max_shear)}
+    return res
