@@ -1,9 +1,13 @@
+#!/usr/bin
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Sep 22 17:14:37 2023
+""" Finite Element Digital Image Correlation method
+    JC Passieux, INSA Toulouse, 2024
 
-@author: passieux
+    Example 10 : ADVANCED
+    Use B-Spline (IGA) in DIC
+
 """
+
 
 import numpy as np
 import pyxel as px

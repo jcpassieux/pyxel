@@ -20,7 +20,7 @@ f.pix[:, :, -5:] = 0
 f.GaussianFilter(0.8)
 f.Plot()
 
-m, cam = px.MeshFromImage3D(f)
+m, cam = px.MeshFromImage3D(f, thrs=128, facet_size=8, cell_size=8)
 
 m.Plot()
 

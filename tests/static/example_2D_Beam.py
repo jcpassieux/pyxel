@@ -30,28 +30,16 @@ beam_prop = px.BeamProperties([200e9, 0.3, np.pi*r**2, np.pi*d**4/64, None])
 K = m.StiffnessBeam(beam_prop)
 
 # Apply BCs
-m.Plot()
-repu, = np.where(m.n[:, 1] < -0.03499)
-plt.plot(m.n[repu, 0], m.n[repu, 1], 'ro')
-repu = m.conn[repu, :]
+repu = m.SelectEndLine('bottom', 1e-5)
+repf = m.SelectEndLine('top', 1e-5)
 
-repf, = np.where(m.n[:, 1] > 0.03499)
-plt.quiver(m.n[repf, 0], m.n[repf, 1], m.n[repf, 1]*1, m.n[repf, 1]*0, color='g')
-repf = m.conn[repf, 0]
+BC = [[repu, [[0, 0], [1, 0], [2, 0]]]]    # setting all dofs to 0
+LOAD = [[repf, [[0, 100],]]]     # prescribing x-dimerction force.
 
-U = np.zeros(m.ndof)
-F = np.zeros(m.ndof)
-F[repf] = 100
-
-# Solve
-rep = np.setdiff1d(np.arange(m.ndof), repu)
-repk = np.ix_(rep, rep)
-F -= K@U
-
-KLU = splalg.splu(K[repk])
-U[rep] = KLU.solve(F[rep])
+u, r = m.SolveElastic(K, BC, LOAD)
 
 # Plot results
 plt.figure()
-m.Plot(U, alpha=0.2)
-m.Plot(U, 1000)
+m.Plot(u, alpha=0.2)
+m.Plot(u, 5e4)
+

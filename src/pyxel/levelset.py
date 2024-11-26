@@ -104,8 +104,8 @@ class LSCalibrator:
         cM2x, cM2y = self.cam.P(cM[0], -cM[1])
         self.cam.T[0, 0] = (cm[0] - cM2x) * self.cam.T[2, 0]
         self.cam.T[1, 0] = (cm[1] - cM2y) * self.cam.T[2, 0]
-        print(self.cam.R)
-        print(self.cam.T)
+        # print(self.cam.R)
+        # print(self.cam.T)
         ptsM[:, 1] *= -1
         #
         # m.Plot()
@@ -215,8 +215,8 @@ class LSCalibrator:
                 v = int(self.ptsi[i][j, 1])
                 umin = max(0, u - 50)
                 vmin = max(0, v - 50)
-                umax = min(self.f.pix.shape[0] - 1, u + 50)
-                vmax = min(self.f.pix.shape[1] - 1, v + 50)
+                umax = min(self.f.pix.shape[1] - 1, u + 50)
+                vmax = min(self.f.pix.shape[0] - 1, v + 50)
                 fsub = self.f.pix[vmin:vmax, umin:umax]
                 plt.imshow(fsub, cmap="gray", interpolation="none")
                 plt.plot(u - umin, v - vmin, "y+")
@@ -226,7 +226,7 @@ class LSCalibrator:
                 self.ptsi[i][j, :] += np.array([umin, vmin])
                 plt.close()
 
-    def Calibration(self):
+    def Calibration(self, init3pts=True):
         """Performs the calibration provided that sufficient features have been
         selected using NewPoint(), NewLine() or NewCircle().
 
@@ -251,20 +251,20 @@ class LSCalibrator:
             xp[i] = self.m.n[self.ptsm[i], 0]
             yp[i] = self.m.n[self.ptsm[i], 1]
 
-        # if self.cam is None:
-        if len(self.feat) > 2:
-            ptsm = np.empty((0, 2))
-            ptsM = np.empty((0, 2))
-            for i in self.feat.keys():
-                ptsm = np.vstack((ptsm, np.mean(self.ptsi[i], axis=0)))
-                ptsM = np.vstack((ptsM, np.mean(self.m.n[self.ptsm[i]], axis=0)))
-            self.Init3Pts(ptsm, ptsM)
-        else:
-            self.Init3Pts()
+        if init3pts:
+            if len(self.feat) > 2:
+                ptsm = np.empty((0, 2))
+                ptsM = np.empty((0, 2))
+                for i in self.feat.keys():
+                    ptsm = np.vstack((ptsm, np.mean(self.ptsi[i], axis=0)))
+                    ptsM = np.vstack((ptsM, np.mean(self.m.n[self.ptsm[i]], axis=0)))
+                self.Init3Pts(ptsm, ptsM)
+            else:
+                self.Init3Pts()
 
         p = self.cam.get_p()
-        print(self.cam.R)
-        print(self.cam.T)
+        # print(self.cam.R)
+        # print(self.cam.T)
         C = np.eye(len(p))
         # C = np.diag(p)
         # if p[-1] == 0:

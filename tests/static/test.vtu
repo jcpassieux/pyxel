@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <VTKFile type="UnstructuredGrid" version="0.1" byte_order="LittleEndian" compressor="vtkZLibDataCompressor">
-<!--This file was created by meshio v5.3.4-->
+<!--This file was created by meshio v5.3.5-->
 <UnstructuredGrid>
 <Piece NumberOfPoints="8571" NumberOfCells="8524">
 <Points>
@@ -28,6 +28,15 @@ AwAAAACAAADYCwAAZgAAAE8AAAAaAAAAeJzt26ERACAMBMF0Rv/dUAKDxYEggdkz6z86EbPegiTJMlbv
 </DataArray>
 </PointData>
 <CellData>
+<DataArray type="Int32" Name="gmsh:bounding_entities" format="binary">
+AgAAAACAAABUYwAAOAAAADIAAAA=eJztwwENAAAMw6DOv+kLOSSsmqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo+fzgPIAF4nO3DQQ0AAAwDoat/07OxBySsmqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj56H74Y1g==
+</DataArray>
+<DataArray type="Int32" Name="hard" format="binary">
+AQAAAACAAAAIAAAACwAAAA==eJxjZIAAAAAQAAI=
+</DataArray>
+<DataArray type="Int32" Name="soft" format="binary">
+AQAAAACAAAAIAAAADgAAAA==eJxjYGBgYARiAAAMAAI=
+</DataArray>
 <DataArray type="Int32" Name="Set-1" format="binary">
 AgAAAACAAAAwBQAATQAAABcAAAA=eJzt3MENADAIA7Gw/9JdgR8U2dKNkG8qSX0SXDK9J0mSJEmSJEmSJEnaFgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA907/SknS5Byd+CNd4nGNkYGBgHMWjeBSP4lFMEAMAZRUBTQ==
 </DataArray>

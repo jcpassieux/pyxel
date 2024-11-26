@@ -73,7 +73,7 @@ def PlotMeshImage(f, m, cam, U=None, plot='mesh', newfig=True):
         u, v = cam.P(n[:, 0], n[:, 1], n[:, 2])
         m.dim = 2
     else:
-        u, v = cam.P(n[:, 0], n[:, 1])        
+        u, v = cam.P(n[:, 0], n[:, 1])
     if plot == 'mesh':
         m.Plot(n=np.c_[u, v], edgecolor="y", alpha=0.6)
     elif plot == 'strain':

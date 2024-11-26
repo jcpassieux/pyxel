@@ -20,6 +20,7 @@ from mpl_toolkits.mplot3d import art3d
 import matplotlib.pyplot as plt
 import matplotlib.collections as cols
 import matplotlib.animation as animation
+from matplotlib.tri import Triangulation
 # from numba import njit # uncomment for just in time compilation
 from .utils import meshgrid, isInBox, full_screen
 from .vtktools import PVDFile
@@ -2865,7 +2866,7 @@ class Mesh:
                 plt.show()
 
     def PlotContourTensorField(self, U, Fn, Fs, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='rainbow', field_name='Field',
+                          newfig=True, cmap='RdBu', field_name='Field',
                           clim=None, **kwargs):
         """
         Plots the STRESS/STRAIN field using Matplotlib Library.
@@ -2897,6 +2898,18 @@ class Mesh:
         None.
 
         """
+        def plot_scalar_field(EVM, symmetric=True):
+            hist, vals = np.histogram(abs(EVM), 100)
+            vmax = vals[np.where(hist > 5)[0][-1]]
+            if symmetric:
+                levels = np.linspace(-vmax, vmax, 20)
+            else:
+                levels = np.linspace(0, vmax, 20)
+            plt.tricontourf(triangulation, EVM, list(levels), alpha=alpha, cmap=cmap)
+            plt.axis("off")
+            plt.axis("equal")
+            plt.colorbar()
+        
         if n is None:
             n = self.n.copy()
             n += U[self.conn] * s  # s: amplification scale factor
@@ -2909,84 +2922,68 @@ class Mesh:
                 )
             elif ie == 2 or ie == 9:  # triangles
                 triangles = np.vstack((triangles, self.e[ie][:, :3]))
+        triangulation = Triangulation(n[:, 0], n[:, 1], triangles)
         EX = Fn[:, 0]
         EY = Fn[:, 1]
         EXY = Fs[:, 0]
         alpha = kwargs.pop("alpha", 1)
         if stype == 'pcp':
             E1 = 0.5*EX + 0.5*EY\
-            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
-            E2 = 0.5*EX + 0.5*EY\
             + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            E2 = 0.5*EX + 0.5*EY\
+            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]],
-                            20, alpha=alpha)
+            plot_scalar_field(E1)
+#            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
             plt.title(r"$"+field_name+"_1$")
-            plt.colorbar()
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]],
-                            20, alpha=alpha)
+            plot_scalar_field(E2)
+#            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]], 20, alpha=alpha)
             self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
             plt.title(r"$"+field_name+"_2$")
-            plt.colorbar()
             plt.show()
         elif stype == 'maxpcp':
             E1 = 0.5*EX + 0.5*EY\
-            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
-            E2 = 0.5*EX + 0.5*EY\
             + 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
+            E2 = 0.5*EX + 0.5*EY\
+            - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
             rep, = np.where(abs(E1) < abs(E2))
             E1[rep] = E2[rep]
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1, 20, alpha=alpha, cmap=cmap)
+            plot_scalar_field(E1)
             self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
             plt.title(r"$"+field_name+"_{max}$")
-            plt.colorbar()
         elif stype == 'mag':
+            if cmap == 'RdBu':
+                cmap = 'rainbow'
             EVM = np.sqrt(EX**2 + EY**2 + EX * EY + 3 * EXY**2)
             if newfig:
                 plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EVM, 20, alpha=alpha, cmap=cmap)
+            plot_scalar_field(EVM, symmetric=False)
             self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
             plt.title(r"$"+field_name+"_{VM}$")
-            plt.colorbar()
         else:
             """ Plot mesh and field contour """
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EX, 20, alpha=alpha, cmap=cmap)
+            plot_scalar_field(EX)
             self.Plot(n=n, alpha=0.1)
-            plt.axis("off")
-            plt.axis("equal")
             plt.title(r"$"+field_name+"_X$")
-            plt.colorbar()
+            #
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EY, 20, alpha=alpha, cmap=cmap)
+            plot_scalar_field(EY)
             self.Plot(n=n, alpha=0.1)
-            plt.axis("equal")
             plt.title(r"$"+field_name+"_Y$")
-            plt.axis("off")
-            plt.colorbar()
+            #
             plt.figure()
-            plt.tricontourf(n[:, 0], n[:, 1], triangles, EXY, 20, alpha=alpha, cmap=cmap)
+            plot_scalar_field(EXY)
             self.Plot(n=n, alpha=0.1)
-            plt.axis("equal")
             plt.title(r"$"+field_name+"_{XY}$")
-            plt.axis("off")
-            plt.colorbar()
             plt.show()
 
     def PlotContourStrain(self, U, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='viridis', clim=None, **kwargs):
+                          newfig=True, cmap='RdBu', clim=None, **kwargs):
         """
         Plots the strain field using Matplotlib Library.
 
@@ -3022,7 +3019,7 @@ class Mesh:
 
 
     def PlotContourStress(self, U, hooke, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='rainbow', **kwargs):
+                          newfig=True, cmap='RdBu', **kwargs):
         """
         Plots the stress field using Matplotlib Library.
 
@@ -3210,7 +3207,7 @@ class Mesh:
             if cam is None:
                 u, v = self.n[:, 0], self.n[:, 1]
             else:
-                v, u = cam.P(self.n[:, 0], self.n[:, 1])
+                u, v = cam.P(self.n[:, 0], self.n[:, 1])
             for je in self.e.keys():
                 umoy = np.mean(u[self.e[je]], axis=1)
                 vmoy = np.mean(v[self.e[je]], axis=1)
@@ -3505,7 +3502,7 @@ class Mesh:
         plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
 
-    def SelectEndLine(self, edge='left', eps=1e-8):
+    def SelectEndLine(self, edge='left', eps=1e-8, plot=True):
         """
         Return nodes on the left, right, top or bottom end
         """
@@ -3539,8 +3536,9 @@ class Mesh:
         # (rep2,) = np.where(((nrep.dot(v) - c1)
         #                     * (nrep.dot(v) - c2)) < nv * 1e-2)
         # nset = rep[rep2]
-        self.Plot()
-        plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
+        if plot:
+            self.Plot()
+            plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
         return nset
 
     def SelectCircle(self):
@@ -3875,7 +3873,7 @@ class Mesh:
         else:
             eps_zero = 1e-5 * np.min(Kr)
             Mr = diags(1/(Kr.diagonal() + eps_zero))
-            U[keepdof], info = splgl.cg(Kr, Fr, tol=1e-5, M=Mr)
+            U[keepdof], info = splgl.cg(Kr, Fr, rtol=1e-5, M=Mr)
         R = K@U - F
         return U, R
 

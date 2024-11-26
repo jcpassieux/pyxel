@@ -33,40 +33,26 @@ m.GaussIntegration()
 K = m.Stiffness(C)
 
 # Dirichlet BC at y = -0.035
-repu, = np.where(m.n[:, 1] < -0.03499)
-repu = m.conn[repu, :]
+repb = m.SelectEndLine('bottom', 1e-5)
+rept = m.SelectEndLine('top', 1e-5)
 
-# Dirichlet BC at y = 0.035 second dof only
-repf, = np.where(m.n[:, 1] > 0.03499)
-repf = m.conn[repf, 1]
+BC = [[repb, [[0, 0], [1, 0]]],   # setting all dof to zero on bottom line
+      [rept, [[1, 0.001], ]]]       # setting y-dof of top line to 0.1
 
-U = np.zeros(m.ndof)
-U[repf] = 0.001
-U[repu] = 0.0
-
-rep = np.setdiff1d(np.arange(m.ndof), np.append(repu, repf))
-repk = np.ix_(rep, rep)
-F = -K@U
-
-KLU = splalg.splu(K[repk])
-U[rep] = KLU.solve(F[rep])
-
-
-m.PlotContourDispl(U)
+u, r = m.SolveElastic(K, BC)
 
 # %% Post-Processing > Matplotlib
 
-m.Plot(U, 10)
-m.PlotContourDispl(U, s=10)
-m.PlotContourStrain(U, s=10)
-m.PlotContourStress(U, C)
+m.Plot(alpha=0.1)
+m.Plot(u, 10)
+m.PlotContourDispl(u, s=10, plotmesh=False)
+m.PlotContourStrain(u, s=10, clim=[-0.02, 0.02], cmap='RdBu', plotmesh=False)
+m.PlotContourStress(u, C, clim=[-0.02, 0.02], cmap='RdBu', plotmesh=False)
 
 # %% Post-processing > Paraview
 
 m.Write('mesh.vtu')
 m.VTKSol('Sol2D_'+test, U)
-m.VTK
-
 
 # %% Generating 2D meshes with GMSH
 

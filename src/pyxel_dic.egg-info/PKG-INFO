@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyxel-dic
-Version: 2024.6.28
+Version: 2024.10.31
 Summary: Finite Element (FE) Digital Image/Volume Correlation (DIC/DVC) library for experimental mechanics
 Home-page: https://github.com/jcpassieux/pyxel
 Author: Jean-Charles Passieux
@@ -90,6 +90,7 @@ Requires-Dist: opencv-python
 Requires-Dist: gmsh
 Requires-Dist: scikit-image
 Requires-Dist: interpylate
+Requires-Dist: cgal
 
 # pyxel
 >**py**thon library for e**x**perimental mechanics using finite **el**ements

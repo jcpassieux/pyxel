@@ -6,3 +6,4 @@ opencv-python
 gmsh
 scikit-image
 interpylate
+cgal

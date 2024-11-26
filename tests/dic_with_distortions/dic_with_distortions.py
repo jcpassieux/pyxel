@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 20 08:15:13 2024
+#!/usr/bin
+""" Finite Element Digital Image Correlation method
+    JC Passieux, INSA Toulouse, 2024
 
-@author: passieux
+    Example : BASIC
+    Using 2D-DIC with lesn distorsions
+
 """
 
 import numpy as np
@@ -45,7 +48,7 @@ else:
 
 px.PlotMeshImage(f, m, cam)
 
-m.DICIntegration(cam)
+m.DICIntegrationFast(cam)
 
 U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
 U, res = px.Correlate(f, g, m, cam, U0=U)

@@ -37,12 +37,15 @@ hooke = m.AssignMaterial2GaussPoint(C)
 
 K = m.Stiffness(hooke)
 
-rep = np.array([2, 3, 4, 5, 7, 8, 9, 10, 11])
-repk = np.ix_(rep, rep)
-f = np.zeros(m.ndof)
-f[4:6] = 1
-u = np.zeros(m.ndof)
-u[rep] = splalg.spsolve(K[repk], f[rep])
+nodes_left = [0, 1]
+nodes_left_bottom = [0, ]
+BC = [[nodes_left, [[0, 0], ]],         # blocking x-dof for left nodes
+      [nodes_left_bottom, [[1, 0],]]]   # blocking y-dof for node 0
+
+nodes_right = [4, 5]
+LOAD = [[nodes_right, [[0, 1], ]]]      # set unit force on x-dof
+
+u, r = m.SolveElastic(K, BC, LOAD)
 
 m.Plot(u, 1)
 
@@ -65,39 +68,31 @@ hooke = m.AssignMaterial2GaussPoint(C)
 K = m.Stiffness(hooke)
 
 # Dirichlet BC at y = 0
-repu, = np.where(m.n[:, 1] < 1e-5)
-repu = np.append(m.conn[repu[0], 0], m.conn[repu, 1])
+repb = m.SelectEndLine('bottom', 1e-5)
+rept = m.SelectEndLine('top', 1e-5)
 
-# Dirichlet BC at y = 25 second dof only
-repf, = np.where(m.n[:, 1] > 25-1e-5)
-repf = m.conn[repf, 1]
+BC = [[repb, [[0, 0], [1, 0]]],   # setting all dof to zero on bottom line
+      [rept, [[1, 0.1], ]]]       # setting y-dof of top line to 0.1
 
-U = np.zeros(m.ndof)
-U[repf] = 0.1
-U[repu] = 0.0
-
-rep = np.setdiff1d(np.arange(m.ndof), np.append(repu, repf))
-repk = np.ix_(rep, rep)
-F = -K@U
-
-KLU = splalg.splu(K[repk])
-U[rep] = KLU.solve(F[rep])
+u, r = m.SolveElastic(K, BC)
+m.Plot(u, 50)
 
 # %% Post-processing
-m.Plot(U, alpha=0.2)
-m.Plot(U, 50)
+m.Plot(u, alpha=0.2)
+m.Plot(u, 50)
 
-m.PlotContourStrain(U, cmap='RdBu')
+m.PlotContourStrain(u, cmap='RdBu')
 
-m.PlotContourDispl(U, s=30)
+m.PlotContourDispl(u, s=30)
 
-m.PlotContourStress(U, hooke)
+m.PlotContourStress(u, hooke)
 
 # possibility to plot directly as gauss points
-EN, ES = m.StrainAtGP(U)
+EN, ES = m.StrainAtGP(u)
 plt.scatter(m.pgx, m.pgy, c=EN[:, 1], cmap="RdBu", s=1)
 plt.colorbar()
 plt.axis('off')
 plt.axis('equal')
+m.Plot(alpha=0.1)
 
-m.VTKSol('test_displ', U)
+m.VTKSol('test_displ', u)

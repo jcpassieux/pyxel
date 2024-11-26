@@ -29,6 +29,100 @@ import os
 
 #%%
 
+def OpenHolePlate(box, r, cpos, t, Nr, Nl):
+    """
+    Builds a structured mesh for an horizontal openhole plate
+    
+    Parameters
+    ----------
+    box : 2x2 NUMPY.ARRAY
+        [[xmin, ymin], [xmax, ymax]]
+    r : FLOAT
+        hole radius
+    cpos : NUMPY.ARRAY
+        coordinates of the center [xc, yc]
+    t : FLOAT
+        half width of the refined region, usually 2.5 times radius
+    Nr : INT
+        number of elements in the vertical direction
+    Nl : INT
+        number of elements in the horizontal direction
+    Returns
+    -------
+    PYXEL.MESH
+
+    """
+    x0 = box[0, 0]
+    y0 = box[0, 1]
+    x1 = box[1, 0]
+    y1 = box[1, 1]
+
+    gmsh.initialize()
+    gmsh.model.add("lug")
+    p0 = gmsh.model.geo.addPoint(cpos[0], cpos[1], 0)
+    p1 = gmsh.model.geo.addPoint(x0, y0, 0)
+    p2 = gmsh.model.geo.addPoint(x1, y0, 0)
+    p3 = gmsh.model.geo.addPoint(x1, y1, 0)
+    p4 = gmsh.model.geo.addPoint(x0, y1, 0)
+    p5 = gmsh.model.geo.addPoint(cpos[0] - t, y0, 0)
+    p6 = gmsh.model.geo.addPoint(cpos[0] + t, y0, 0)
+    p7 = gmsh.model.geo.addPoint(cpos[0] + t, y1, 0)
+    p8 = gmsh.model.geo.addPoint(cpos[0] - t, y1, 0)
+    ratio = r/np.sqrt((cpos[1]-y0)**2 + t**2)
+    xr = ratio * t
+    yr = ratio * (cpos[1]-y0)
+    p9 = gmsh.model.geo.addPoint(cpos[0] - xr, cpos[1] - yr, 0)
+    p10 = gmsh.model.geo.addPoint(cpos[0] + xr, cpos[1] - yr, 0)
+    p11 = gmsh.model.geo.addPoint(cpos[0] + xr, cpos[1] + yr, 0)
+    p12 = gmsh.model.geo.addPoint(cpos[0] - xr, cpos[1] + yr, 0)
+    l = []
+    l += [gmsh.model.geo.addLine(p1, p5)]
+    l += [gmsh.model.geo.addLine(p5, p6)]
+    l += [gmsh.model.geo.addLine(p6, p2)]
+    l += [gmsh.model.geo.addLine(p2, p3)]
+    l += [gmsh.model.geo.addLine(p3, p7)]
+    l += [gmsh.model.geo.addLine(p7, p8)]
+    l += [gmsh.model.geo.addLine(p8, p4)]
+    l += [gmsh.model.geo.addLine(p4, p1)]
+    l += [gmsh.model.geo.addLine(p5, p8)]
+    l += [gmsh.model.geo.addLine(p6, p7)]
+    l += [gmsh.model.geo.addLine(p5, p9)]
+    l += [gmsh.model.geo.addLine(p6, p10)]
+    l += [gmsh.model.geo.addLine(p7, p11)]
+    l += [gmsh.model.geo.addLine(p8, p12)]
+    l += [gmsh.model.geo.addCircleArc(p9, p0, p10)]
+    l += [gmsh.model.geo.addCircleArc(p10, p0, p11)]
+    l += [gmsh.model.geo.addCircleArc(p11, p0, p12)]
+    l += [gmsh.model.geo.addCircleArc(p12, p0, p9)]
+    for i in range(len(l)):
+        il = l[i]
+        if i in [0, 2, 4, 6]:
+            gmsh.model.geo.mesh.setTransfiniteCurve(il, Nl)
+        else:
+            gmsh.model.geo.mesh.setTransfiniteCurve(il, Nr)
+    ll = []
+    ll += [gmsh.model.geo.addCurveLoop([l[0], l[8], l[6], l[7]])]
+    ll += [gmsh.model.geo.addCurveLoop([l[10], -l[17], -l[13], -l[8]])]
+    ll += [gmsh.model.geo.addCurveLoop([l[1], l[11], -l[14], -l[10]])]
+    ll += [gmsh.model.geo.addCurveLoop([-l[11], l[9], l[12], -l[15]])]
+    ll += [gmsh.model.geo.addCurveLoop([-l[16], -l[12], l[5], l[13]])]
+    ll += [gmsh.model.geo.addCurveLoop([l[2], l[3], l[4], -l[9]])]
+    for i in range(len(ll)):
+        ss = gmsh.model.geo.addPlaneSurface([ll[i]])
+        gmsh.model.geo.mesh.setTransfiniteSurface(ss)
+    gmsh.option.setNumber('Mesh.RecombineAll', 1)
+    gmsh.option.setNumber('Mesh.RecombinationAlgorithm', 1)
+    gmsh.option.setNumber('Mesh.Recombine3DLevel', 2)
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(2)
+    gmsh.write("mesh.msh")
+    # if '-nopopup' not in sys.argv:
+    #     gmsh.fltk.run()
+    gmsh.finalize()
+    m = ReadMesh("mesh.msh", 2)
+    m.KeepSurfElems()
+    return m
+
 
 def StructuredMeshQ4(box, dx):
     """Build a structured linear Q4 mesh from two points coordinates (box)

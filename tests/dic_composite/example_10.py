@@ -6,7 +6,7 @@
     Example 10 : BASIC
     Initialize with DIS OPtical Flow
 
-        """
+"""
 
 import pyxel as px
 

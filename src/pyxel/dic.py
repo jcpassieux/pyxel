@@ -509,7 +509,13 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         if analysis == 'dvc':
             m.DVCIntegration(cam)
         else:
-            m.DICIntegration(cam, EB=EB)
+            if EB:
+                print('Standart DIC integration for EB')
+                m.DICIntegration(cam, EB=EB)
+            else:
+                print('DIC integration fast')
+                aes = max(1, int(m.GetApproxElementSize(cam)))
+                m.DICIntegrationFast(cam, aes)
     if H is None:
         if EB:
             H = dic.ComputeLHS_EB(f, m, cam)
@@ -567,7 +573,7 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         if direct:
             dU = Hfull.solve(b)
         else:
-            dU, info = splalg.cg(Hfull, b, tol=0.1, M=Mfull)
+            dU, info = splalg.cg(Hfull, b, rtol=0.1, M=Mfull)
             if info:
                 print('Iterative solver did not reach convergence!')
         if Basis is not None:

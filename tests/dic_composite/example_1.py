@@ -6,7 +6,7 @@
     Example 1 : BASIC
     Analyse only one image with a INP Qua4 mesh in m.
 
-        """
+"""
 
 import numpy as np
 import pyxel as px
@@ -57,7 +57,7 @@ m.Plot(U, 30)
 m.PlotContourDispl(U, s=30)
 
 # Visualization: strain fields
-m.PlotContourStrain(U)
+m.PlotContourStrain(U, clim=[-0.02, 0.02], cmap='RdBu')
 
 # Plot deformed Mesh on deformed state image
 px.PlotMeshImage(g, m, cam, U)
