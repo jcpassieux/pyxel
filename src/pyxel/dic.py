@@ -751,7 +751,7 @@ def CorrelateTimeIncr(m, f, imagefile, imnums, cam, scales):
     return UU
 
 
-def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM'):
+def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM', UV0=None):
     """
     Compute initial guess using OpenCV DISFlow routine
 
@@ -783,11 +783,11 @@ def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM'):
     """
     import cv2
     if meth == 'MEDIUM':
-        flow=cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+        flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
     elif meth == 'FAST':
-        flow=cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_FAST)
+        flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_FAST)
     elif meth == 'ULTRAFAST':
-        flow=cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_ULTRAFAST)
+        flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_ULTRAFAST)
     else:
         # MANUAL
         flow = cv2.DISOpticalFlow_create()
@@ -798,13 +798,13 @@ def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM'):
         flow.setFinestScale(0)
         flow.setPatchSize(13)
         flow.setPatchStride(1)
-    UV = flow.calc(imf.pix.astype('uint8'), img.pix.astype('uint8'), None)
-    U = UV[::,::,0]
-    V = UV[::,::,1]
+    UV = flow.calc(imf.pix.astype('uint8'), img.pix.astype('uint8'), UV0)
+    U = UV[::, ::, 0]
+    V = UV[::, ::, 1]
     if m is None:
         return U, V
-    else: 
-        u, v = cam.P(m.n[:,0], m.n[:,1])
+    else:
+        u, v = cam.P(m.n[:, 0], m.n[:, 1])
         fp = imf.Copy()
         fp.pix = U
         fp.BuildInterp()
@@ -812,14 +812,101 @@ def DISFlowInit(imf, img, m=None, cam=None, meth='MEDIUM'):
         fp.pix = V
         fp.BuildInterp()
         dv = fp.Interp(u, v)
-        
         Xdx, Ydy = cam.Pinv(u+du, v+dv)
-        Ux = Xdx - m.n[:,0]
-        Uy = Ydy - m.n[:,1]
-        
+        Ux = Xdx - m.n[:, 0]
+        Uy = Ydy - m.n[:, 1]
         if len(m.conn) == 0 :
             m.Connectivity()
         u = np.zeros(m.ndof)
-        u[m.conn[:,0]] = Ux
-        u[m.conn[:,1]] = Uy
-        return u
+        u[m.conn[:, 0]] = Ux
+        u[m.conn[:, 1]] = Uy
+        u = m.MedianFilter(u)
+        return u, UV
+   
+def DISFlowSeries(filename, imnums, m=None, cam=None, meth='MEDIUM'):
+    """
+    Compute initial guess using OpenCV DISFlow routine
+
+    Parameters
+    ----------
+    filename : STRING
+        Image file names
+    imnums : NUMPY.ARRAY
+        list of image numbers
+    m : PYXEL.MESH
+        finite element mesh
+        if None > return the result of DISFlow
+    cam : PYXEL.CAMERA
+        Camera model
+        if None > return the result of DISFlow
+    meth : STRING, optional
+        'MEDIUM': medium option of DISFlow
+        'FAST': fast option of DISFlow
+        'ULTRAFAST': ultrafast option of DISFlow
+        otherwise: manual settings for DISFlow
+        DESCRIPTION. The default is 'MEDIUM'.
+
+    Returns
+    -------
+    u : NUMPY.ARRAY
+        initial guess DOF vector if m and cam are given
+        returns pixmaps U, V is cam is None
+
+    """
+    import cv2
+    if meth == 'MEDIUM':
+        flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+    elif meth == 'FAST':
+        flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_FAST)
+    elif meth == 'ULTRAFAST':
+        flow = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_ULTRAFAST)
+    else:
+        # MANUAL
+        flow = cv2.DISOpticalFlow_create()
+        flow.setVariationalRefinementAlpha(20.0)		# Laplacian of displacment
+        flow.setVariationalRefinementGamma(10.0)		# Gradient of image consistency
+        flow.setVariationalRefinementDelta(5.0) 	    # Optical flow
+        flow.setVariationalRefinementIterations(5)	    # Number of iterations
+        flow.setFinestScale(0)
+        flow.setPatchSize(13)
+        flow.setPatchStride(1)
+
+    Uall = []
+    Vall = []
+    if m is not None:
+        un, vn = cam.P(m.n[:, 0], m.n[:, 1])
+        fp = Image('none')
+        if len(m.conn) == 0 :
+            m.Connectivity()
+
+    f = Image(filename % imnums[0]).Load()
+    fpix = f.pix.astype('uint8')
+    for i in imnums[1:]:
+        print(" ==== IMAGE %3d === " % i)
+        g = Image(filename % i).Load()
+        if i == imnums[1]:
+            UV = flow.calc(fpix, g.pix.astype('uint8'), None)
+        else:
+            UV = flow.calc(fpix, g.pix.astype('uint8'), UV)
+        if m is None:
+            Uall += [UV[::, ::, 0] ]
+            Vall += [UV[::, ::, 1] ]
+        else:
+            fp.pix = UV[::, ::, 0]
+            fp.BuildInterp()
+            du = fp.Interp(un, vn)
+            fp.pix = UV[::, ::, 1]
+            fp.BuildInterp()
+            dv = fp.Interp(un, vn)
+            Xdx, Ydy = cam.Pinv(un+du, vn+dv)
+            Ux = Xdx - m.n[:, 0]
+            Uy = Ydy - m.n[:, 1]
+            u = np.zeros(m.ndof)
+            u[m.conn[:, 0]] = Ux
+            u[m.conn[:, 1]] = Uy            
+            u = m.MedianFilter(u)
+            Uall += [u ]
+    if m is None:
+        return Uall, Vall
+    else:
+        return Uall

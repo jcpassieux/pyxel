@@ -22,7 +22,7 @@ import matplotlib.collections as cols
 import matplotlib.animation as animation
 from matplotlib.tri import Triangulation
 # from numba import njit # uncomment for just in time compilation
-from .utils import meshgrid, isInBox, full_screen
+from .utils import meshgrid, isInBox, full_screen, PointCloudIntersection
 from .vtktools import PVDFile
 from .material import *
 import meshio
@@ -30,7 +30,74 @@ from .camera import Camera
 
 from numpy.polynomial.legendre import leggauss 
 
-# %%
+
+# %% Mesh tools
+
+def ReadMesh(fn, dim=2):
+    mesh = meshio.read(fn)
+    if mesh.points.shape[1] > dim:       # too much node coordinate
+        # Remove coordinate with minimal std.
+        rmdim = np.argmin(np.std(mesh.points, axis=0))
+        n = np.delete(mesh.points, rmdim, 1)
+    elif mesh.points.shape[1] < dim:     # not enough node coordinates
+        n = np.hstack((mesh.points, np.zeros((len(mesh.points), 1))))
+    else:
+        n = mesh.points
+    e = dict()
+    for et in mesh.cells_dict.keys():
+        e[eltype_s2n[et]] = mesh.cells_dict[et]
+    m = Mesh(e, n, dim)
+    m.point_data = mesh.point_data
+    m.cell_data = mesh.cell_data
+    m.point_sets = mesh.point_sets
+    # change a dict (set) of list (eltype) to a dict (set) of dict (eltype)
+    cell_sets = dict()
+    for si in mesh.cell_sets.keys():
+        cell_set = dict()
+        cid = 0
+        for ie in m.e.keys():
+            cell_set[ie] = mesh.cell_sets[si][cid]
+            cid += 1
+        cell_sets[si] = cell_set
+    m.cell_sets = cell_sets
+    return m
+
+
+def MeshUnion(mlist, difference=False):
+    """
+    Performs the union of a meshlist into one single mesh
+
+    mlist : LIST
+        list of PYXEL.MESH
+    difference : BOOL, DEFAULT is FALSE
+        remove the elements in common
+
+    """
+    ekeys = np.unique([list(mi.e.keys()) for mi in mlist])
+    nnode = np.cumsum([0,] + [len(mi.n) for mi in mlist])
+    eg = {}
+    ng = []
+    for i in ekeys:
+        eg[i] = []
+    for i in range(len(mlist)):
+        ng += [mlist[i].n, ]
+        for et in mlist[i].e.keys():
+            eg[et] += [mlist[i].e[et] + nnode[i], ]
+    ng = np.vstack(ng)
+    for i in ekeys:
+        eg[i] = np.vstack(eg[i])
+    mg = Mesh(eg, ng, mlist[0].dim)
+    print('Removing Unused nodes...')
+    mg.RemoveUnusedNodes()
+    print('Removing Double nodes...')
+    mg.RemoveDoubleNodes()
+    print('Removing Double Elements...')
+    mg.RemoveDoubleElems(difference=difference)
+    return mg
+
+
+# %% Elements tools
+
 def ElTypes():
     """
     Returns a dictionnary of GMSH element types which some of them are used
@@ -121,38 +188,6 @@ eltype_s2n = {}
 for jn in eltype_n2s.keys():
     eltype_s2n[eltype_n2s[jn]] = jn
 
-
-def ReadMesh(fn, dim=2):
-    mesh = meshio.read(fn)
-    if mesh.points.shape[1] > dim:       # too much node coordinate
-        # Remove coordinate with minimal std.
-        rmdim = np.argmin(np.std(mesh.points, axis=0))
-        n = np.delete(mesh.points, rmdim, 1)
-    elif mesh.points.shape[1] < dim:     # not enough node coordinates
-        n = np.hstack((mesh.points, np.zeros((len(mesh.points), 1))))
-    else:
-        n = mesh.points
-    e = dict()
-    for et in mesh.cells_dict.keys():
-        e[eltype_s2n[et]] = mesh.cells_dict[et]
-    m = Mesh(e, n, dim)
-    m.point_data = mesh.point_data
-    m.cell_data = mesh.cell_data
-    m.point_sets = mesh.point_sets
-    # change a dict (set) of list (eltype) to a dict (set) of dict (eltype)
-    cell_sets = dict()
-    for si in mesh.cell_sets.keys():
-        cell_set = dict()
-        cid = 0
-        for ie in m.e.keys():
-            cell_set[ie] = mesh.cell_sets[si][cid]
-            cid += 1
-        cell_sets[si] = cell_set
-    m.cell_sets = cell_sets
-    return m
-
-
-# %%
 class Elem:
     """ Class Element """
 
@@ -472,7 +507,6 @@ def SubTriGmsh(n):
     return c[:, 0], c[:, 1], a
 
 
-# %%
 def AddChildElem(child_list, new_child, sorted_child_list):
     sorted_new_child = tuple(np.sort(new_child))
     if sorted_new_child in child_list.keys():
@@ -482,7 +516,7 @@ def AddChildElem(child_list, new_child, sorted_child_list):
         sorted_child_list[sorted_new_child] = new_child
     return child_list, sorted_child_list
 
-# %%
+# %%  Shape functions
 def ShapeFunctions(eltype):
     """For any type of 2D elements, gives the quadrature rule and
     the shape functions and their derivative"""
@@ -500,9 +534,7 @@ def ShapeFunctions(eltype):
             return np.concatenate(
                 (-0.5 + 0 * x, 0.5 + 0 * x)).reshape((2, len(x))).T
 
-        # def dN_eta(x):
-        #     return False
-        xg, wg = leggauss(1)
+        xg, wg = leggauss(3)
         return xg, wg, N, dN_xi
     elif eltype == 8:
         """
@@ -1043,7 +1075,7 @@ def ElementaryStiffnessBendingY(E, Iy, L, p=0):
                        [-6*L, (2-p)*L**2, 6*L, (4+p)*L**2]])
     return Ke
 
-# %%
+# %% Class Mesh
 class Mesh:
     def __init__(self, e, n, dim=2):
         """Contructor from elems and node arrays"""
@@ -1129,6 +1161,7 @@ class Mesh:
 
         """
         conn = self.conn.copy()
+        conn = conn[:, :self.dim]
         not_used, = np.where(self.conn[:, 0] < 0)
         conn[not_used, 0] = np.max(conn[:, 0])
         conn[not_used, 1] = np.max(conn[:, 1])
@@ -1794,7 +1827,7 @@ class Mesh:
     def __GaussIntegElem(self, e, et):
         # parent element
         if et in (1, 8):  # bar element
-            xg, yg, wg, N, Ndx, Ndy = ShapeFunctions(et)
+            xg, wg, N, Ndx = ShapeFunctions(et)
             phi = N(xg)
             dN_xi = Ndx(xg)
             # elements
@@ -2109,8 +2142,8 @@ class Mesh:
         E = bp['E']
         S = bp['S']
         Iz = bp['Iz']
-        G = bp['G']
         if self.dim == 3:
+            G = bp['G']
             Iy = bp['Iy']
             J = bp['J']
         phi = bp['phi']
@@ -2148,7 +2181,7 @@ class Mesh:
                               [0, 0, 1]])
             H = np.kron(np.eye(2), T)
             Ke = H @ Ke @ H.T
-            rep = self.conn[self.e[1][ie]].ravel()
+            rep = self.conn[nodes].ravel()
             cole, rowe = np.meshgrid(rep, rep)
             row[np.arange(ndof)+ndof*ie] = rowe.ravel()
             col[np.arange(ndof)+ndof*ie] = cole.ravel()
@@ -2234,7 +2267,7 @@ class Mesh:
         Builds a Laplacian like operator from bar elements.
         liste is a list of bar elements and the dofs concerned.
           liste = [node1, node2, dofu=1, dofv=1(, dofw=0)]
-          liste=np.array([[0, 1, 1(, 1)],
+          liste = np.array([[0, 1, 1(, 1)],
                           [1, 2, 0(, 1)]])"""
         nzv = np.sum(liste[:, -dim:], dtype=int) * 4
         row = np.zeros(nzv, dtype=int)
@@ -2266,6 +2299,59 @@ class Mesh:
                     nzv += 4
         return csr_matrix((val, (row, col)),
                                     shape=(self.ndof, self.ndof))
+
+    def Springs(self, liste, dofs=None):
+        """
+        Builds a Spring stiffness from from list of segments.
+        liste is a list of 2 node ids.
+          liste = np.array([[node0, node1],
+                            [node1, node2]])
+        dofs is a list of size 3 (2D) or 6 (3D)
+        which states which dofs are concerned with the springs
+        Default [1, 0, 0] (2D) or [1, 0, 0, 0, 0, 0] (3D)"""
+        dof_per_node = self.dim*(self.dim+1)//2
+        if dofs is None:
+            dofs = [0] * dof_per_node
+            dofs[0] = 1
+        ndof = (2*dof_per_node)**2
+        nzv = ndof * len(liste)
+        row = np.zeros(nzv, dtype='int64')
+        col = np.zeros(nzv, dtype='int64')
+        val = np.zeros(nzv)
+        for ie in range(len(liste)):
+            nodes = liste[ie]
+            v = np.diff(self.n[nodes], axis=0)[0]
+            L = np.linalg.norm(v)
+            if self.dim == 3:
+                t = v/L
+                z = np.array([0, 0, 1])
+                if t@z > 1-1e-8:
+                    z = np.array([1, 0, 0])
+                n = np.cross(z, t)
+                b = np.cross(t, n)
+                T = np.kron(np.eye(2), np.c_[t, n, b])
+                Ke = np.zeros((12, 12))
+                for i in range(3):
+                    if dofs[i]:
+                        Ke[np.ix_([0+i, 6+i], [0+i, 6+i])] += ElementaryStiffnessSpring(1, 1, L)
+            else:
+                c = v[0]/L
+                s = v[1]/L
+                Ke = np.zeros((6, 6))
+                for i in range(3):
+                    if dofs[i]:
+                        Ke[np.ix_([0+i, 3+i], [0+i, 3+i])] += ElementaryStiffnessSpring(1, 1, L)
+                T = np.array([[c, -s, 0],
+                              [s, c, 0],
+                              [0, 0, 1]])
+            H = np.kron(np.eye(2), T)
+            Ke = H @ Ke @ H.T
+            rep = self.conn[nodes].ravel()
+            cole, rowe = np.meshgrid(rep, rep)
+            row[np.arange(ndof)+ndof*ie] = rowe.ravel()
+            col[np.arange(ndof)+ndof*ie] = cole.ravel()
+            val[np.arange(ndof)+ndof*ie] = Ke.ravel()
+        return sp.sparse.csc_matrix((val, (row, col)), shape=(self.ndof, self.ndof))
 
     def Mass(self, rho):
         """Assembles Mass Matrix"""
@@ -2346,7 +2432,7 @@ class Mesh:
         mesh.write(filename)
         print("Meshfile " + filename + " written.")
 
-    def VTKSol(self, filename, U):
+    def VTKSol(self, filename, U, strain=True, hooke=False):
         """
         Writes a VTK Result file for vizualisation using Paraview.
         Usage:
@@ -2373,22 +2459,33 @@ class Mesh:
             points = np.hstack((points, np.zeros((len(self.n), 1))))
         mesh = meshio.Mesh(points, cells)
         mesh.cell_data = {}
+        mesh.point_data = dict()
         new_u = self.DOF2Nodes(U, fillzero=True)
-        if self.dim == 2:
-            ES, EN = self.StrainAtNodes(U)
-            Ex = ES[:, 0]
-            Ey = ES[:, 1]
-            Exy = EN[:, 0]
-            new_e = np.c_[Ex, Ey, Exy]
-            C = (Ex + Ey) / 2
-            R = np.sqrt((Ex - C) ** 2 + Exy ** 2)
-            new_ep = np.sort(np.c_[C + R, C - R], axis=1)
-            mesh.point_data = {'U': new_u, 'strain': new_e,
-                               'pcp_strain': new_ep}
-        else:
+        mesh.point_data['U'] = new_u
+        if strain:
             EN, ES = self.StrainAtNodes(U)
-            new_e = np.c_[EN, ES]
-            mesh.point_data = {'U': new_u, 'strain': new_e}
+            if self.dim == 2:
+                new_e = np.c_[EN, ES[:, 0]]
+            else:
+                new_e = np.c_[EN, ES]
+            mesh.point_data['strain'] = new_e
+            if self.dim == 2:
+                Ex = EN[:, 0]
+                Ey = EN[:, 1]
+                Exy = ES[:, 0]
+                new_e = np.c_[Ex, Ey, Exy]
+                C = (Ex + Ey) / 2
+                R = np.sqrt((Ex - C) ** 2 + Exy ** 2)
+                new_ep = np.sort(np.c_[C + R, C - R], axis=1)
+                mesh.point_data['pcp_strain'] = new_ep
+            if hooke is not False:
+                SN, SS = Strain2Stress(hooke, EN, ES)
+                if self.dim == 2:
+                    new_s = np.c_[SN, SS[:, 0]]
+                else:
+                    new_s = np.c_[SN, SS]
+                mesh.point_data['stress'] = new_s
+
         # write
         dir0, filename = os.path.split(filename)
         if not os.path.isdir(os.path.join("vtk", dir0)):
@@ -2640,17 +2737,6 @@ class Mesh:
                 ax.set_xlim(mid_x - max_range, mid_x + max_range)
                 ax.set_ylim(mid_y - max_range, mid_y + max_range)
                 print('axis equal')
-                # if plotnodes:
-                #     ax.plot(
-                #         n[:, 0],
-                #         n[:, 1],
-                #         mnew.n[:, 2],
-                #         linestyle="None",
-                #         marker="o",
-                #         color=edgecolor,
-                #         alpha=alpha,
-                #     )
-            plt.show()
 
     def AnimatedPlot(self, U, coef=1, n=None, timeAnim=5,
                      color=('k', 'b', 'r', 'g', 'c')):
@@ -2867,7 +2953,7 @@ class Mesh:
 
     def PlotContourTensorField(self, U, Fn, Fs, n=None, s=1.0, stype='comp',
                           newfig=True, cmap='RdBu', field_name='Field',
-                          clim=None, **kwargs):
+                          clim=1., **kwargs):
         """
         Plots the STRESS/STRAIN field using Matplotlib Library.
 
@@ -2900,7 +2986,8 @@ class Mesh:
         """
         def plot_scalar_field(EVM, symmetric=True):
             hist, vals = np.histogram(abs(EVM), 100)
-            vmax = vals[np.where(hist > 5)[0][-1]]
+            vmax = vals[np.where(np.cumsum(hist)<clim*np.sum(hist))[0][-1]]
+            # vmax = vals[np.where(hist > 5)[0][-1]]
             if symmetric:
                 levels = np.linspace(-vmax, vmax, 20)
             else:
@@ -2980,10 +3067,10 @@ class Mesh:
             plot_scalar_field(EXY)
             self.Plot(n=n, alpha=0.1)
             plt.title(r"$"+field_name+"_{XY}$")
-            plt.show()
+            #plt.show()
 
     def PlotContourStrain(self, U, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='RdBu', clim=None, **kwargs):
+                          newfig=True, cmap='RdBu', clim=1.0, **kwargs):
         """
         Plots the strain field using Matplotlib Library.
 
@@ -2996,6 +3083,8 @@ class Mesh:
             to using self.n instead.
         s : FLOAT, optional
             Deformation scale factor. The default is 1.0.
+        clim : FLOAT, default=1.0
+            scaling the colormap to cmax times max value of the field.
         stype : STRING, optional
             'comp' > plots the 3 components of the strain field
             'mag' > plots the 'VonMises' equivalent strain
@@ -3014,12 +3103,12 @@ class Mesh:
         """
         EN, ES = self.StrainAtNodes(U)
         self.PlotContourTensorField(U, EN, ES, n=n, s=s, stype=stype,
-                          newfig=newfig, cmap=cmap, field_name='\epsilon', clim=clim,
-                          **kwargs)
+                          newfig=newfig, cmap=cmap, field_name='\\epsilon',
+                          clim=clim, **kwargs)
 
 
     def PlotContourStress(self, U, hooke, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='RdBu', **kwargs):
+                          newfig=True, cmap='RdBu', clim=1.0, **kwargs):
         """
         Plots the stress field using Matplotlib Library.
 
@@ -3033,6 +3122,8 @@ class Mesh:
             to using self.n instead.
         s : FLOAT, optional
             Deformation scale factor. The default is 1.0.
+        clim : FLOAT, default=1.0
+            scaling the colormap to cmax times max value of the field.
         stype : STRING, optional
             'comp' > plots the 3 components of the stress field
             'mag' > plots the 'VonMises' equivalent stress
@@ -3063,7 +3154,7 @@ class Mesh:
         SS = self.DOF2Nodes(SS)
         self.PlotContourTensorField(U, SN, SS, n=n,
                         s=s, stype=stype, newfig=newfig, cmap=cmap,
-                        field_name='\sigma', **kwargs)
+                        clim=clim, field_name='\\sigma', **kwargs)
 
     def PlotNodeLabels(self, d=[0, 0], **kwargs):
         """
@@ -3154,6 +3245,25 @@ class Mesh:
         dofs = self.conn[rep[reprep]]
         return dofs
 
+    def FindNodeinBox(self, box):
+        """
+        Returns the dof of all the nodes lying within a rectangle defined
+        by the coordinates of two diagonal points (in the mesh coordinate sys).
+        Used to apply BC for instance.
+        box = np.array([[xmin, ymin],
+                        [xmax, ymax]])    in mesh unit
+        """
+        if self.dim == 2:
+            rep, = np.where(isInBox(box,
+                                    self.n[:, 0],
+                                    self.n[:, 1]))
+        else:
+            rep, = np.where(isInBox(box,
+                                    self.n[:, 0],
+                                    self.n[:, 1],
+                                    self.n[:, 2]))
+        return rep
+
     def KeepEdgeElems(self):
         """
         Removes every but edge elements.
@@ -3216,8 +3326,8 @@ class Mesh:
 
     def RemoveElemsOutsideRoi(self, roi, cam=None):
         """
-        Removes all the elements whose center lie in the Region of Interest of
-        an image f.
+        Removes all the elements whose center don't lie in the Region of 
+        Interest.
         Usage :
             m.RemoveElemsOutsideRoi(roi, cam=None)
 
@@ -3226,6 +3336,19 @@ class Mesh:
         inside = self.ElemsInsideRoi(roi, cam=cam)
         for je in self.e.keys():
             self.e[je] = self.e[je][inside[je], :]
+
+    def RemoveElemsInsideRoi(self, roi, cam=None):
+        """
+        Removes all the elements whose center lie in the Region of Interest.
+        Usage :
+            m.RemoveElemsInsideRoi(roi, cam=None)
+
+        where  roi = f.SelectROI()
+        """
+        inside = self.ElemsInsideRoi(roi, cam=cam)
+        for je in self.e.keys():
+            outside = np.setdiff1d(np.arange(len(self.e[je])), inside[je])
+            self.e[je] = self.e[je][outside, :]
 
     def RemoveDoubleNodes(self, eps=None):
         """
@@ -3246,20 +3369,49 @@ class Mesh:
         for k in self.e.keys():
             self.e[k] = inv[self.e[k]]
 
-    def RemoveDoubleElems(self):
+    def MeshIntersection(self, m2, eps=None):
         """
-        Removes elements that appear twice
-        Warning: both self.e is modified!
+        Performs the intersection between the boundaries of m and 
+        all the nodes of m2
 
+        Usage :
+            m_nodes, m2_nodes = m.MeshIntersection(m2)
+
+        """
+        if eps is None:
+            eps = 1e-5 * self.GetApproxElementSize()
+        # interface nodes of self mesh
+        mb1 = self.BuildBoundaryMesh()
+        interface_nodes = np.unique(mb1.e[1].ravel())
+        # full list of nodes of mesh 2
+        m2n = m2.Copy()
+        m2n.RemoveUnusedNodes()
+        nid1, nid2 = PointCloudIntersection(self.n[interface_nodes], m2n.n, eps=eps)
+        return interface_nodes[nid1], nid2
+
+    def RemoveDoubleElems(self, difference=False):
+        """
+        Removes elements that appear more than once
+        if DIFFERENCE IS TRUE (DEFAULT) keep one occurence of each
+        if DIFFERENCE IS FALSE remove all multiple elements
+
+        Warning: self.e is modified!
         Usage :
             m.RemoveDoubleElems()
 
         """
-        for k in self.e.keys():
-            e_sort = np.sort(self.e[k], axis=1)
-            _, ind, inv = np.unique(e_sort, axis=0,
-                                   return_index=True, return_inverse=True)
-            self.e[k] = self.e[k][ind, :]
+        if difference:
+            for k in self.e.keys():
+                e_sort = np.sort(self.e[k], axis=1)
+                _, ind, cts = np.unique(e_sort, axis=0,
+                                        return_index=True, return_counts=True)
+                keep, = np.where(cts < 2)
+                self.e[k] = self.e[k][ind[keep], :]
+        else:
+            for k in self.e.keys():
+                e_sort = np.sort(self.e[k], axis=1)
+                _, ind = np.unique(e_sort, axis=0, return_index=True)
+                self.e[k] = self.e[k][ind, :]
 
     def KeepElemsConnectedToThisNode(self, node_id=0):
         """
@@ -3400,6 +3552,8 @@ class Mesh:
             qual = np.array(list(qual_sort.values()))[rep, :]
             elems[3] = qual
         edgem = Mesh(elems, self.n, self.dim)
+        edgem.conn = self.conn
+        edgem.ndof = self.ndof
         return edgem
 
     def SelectPoints(self, n=-1, title=None):
@@ -3506,22 +3660,26 @@ class Mesh:
         """
         Return nodes on the left, right, top or bottom end
         """
-        x_lef = np.min(self.n[:, 0])
-        x_rig = np.max(self.n[:, 0])
-        y_bot = np.min(self.n[:, 1])
-        y_top = np.max(self.n[:, 1])
+        used_nodes = np.zeros(0, dtype=int)
+        for je in self.e.keys():
+            used_nodes = np.unique(np.append(used_nodes, self.e[je].ravel()))
+        n = self.n[used_nodes, :]
+        x_lef = np.min(n[:, 0])
+        x_rig = np.max(n[:, 0])
+        y_bot = np.min(n[:, 1])
+        y_top = np.max(n[:, 1])
         if edge == 'left':
             # pts1 = np.array([[x_lef, y_bot], [x_lef, y_top]])
-            nset, = np.where(abs(self.n[:, 0] - x_lef) < eps)
+            nset, = np.where(abs(n[:, 0] - x_lef) < eps)
         elif edge == 'right':
             # pts1 = np.array([[x_rig, y_bot], [x_rig, y_top]])
-            nset, = np.where(abs(self.n[:, 0] - x_rig) < eps)
+            nset, = np.where(abs(n[:, 0] - x_rig) < eps)
         elif edge == 'top':
             # pts1 = np.array([[x_lef, y_top], [x_rig, y_top]])
-            nset, = np.where(abs(self.n[:, 1] - y_top) < eps)
+            nset, = np.where(abs(n[:, 1] - y_top) < eps)
         elif edge == 'bottom':
             # pts1 = np.array([[x_lef, y_bot], [x_rig, y_bot]])
-            nset, = np.where(abs(self.n[:, 1] - y_bot) < eps)
+            nset, = np.where(abs(n[:, 1] - y_bot) < eps)
         # n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
         # n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
         # v = np.diff(self.n[[n1, n2]], axis=0)[0]
@@ -3536,6 +3694,7 @@ class Mesh:
         # (rep2,) = np.where(((nrep.dot(v) - c1)
         #                     * (nrep.dot(v) - c2)) < nv * 1e-2)
         # nset = rep[rep2]
+        nset = used_nodes[nset]
         if plot:
             self.Plot()
             plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
@@ -3600,31 +3759,33 @@ class Mesh:
             body rotation around direction z.
 
         """
+        # active nodes
+        an = np.where(self.conn[:, 0] > -1)[0]
         if self.dim == 3:
             tx = np.zeros(self.ndof)
-            tx[self.conn[:, 0]] = 1
+            tx[self.conn[an, 0]] = 1
             ty = np.zeros(self.ndof)
-            ty[self.conn[:, 1]] = 1
+            ty[self.conn[an, 1]] = 1
             tz = np.zeros(self.ndof)
-            tz[self.conn[:, 2]] = 1
-            v = self.n - np.mean(self.n, axis=0)
+            tz[self.conn[an, 2]] = 1
+            v = self.n[an, :] - np.mean(self.n[an, :], axis=0)
             amp = np.max(np.linalg.norm(v, axis=1))
             rx = np.zeros(self.ndof)
-            rx[self.conn] = np.c_[0*v[:, 0], v[:, 2], -v[:, 1]] / amp
+            rx[self.conn[an, :]] = np.c_[0*v[:, 0], v[:, 2], -v[:, 1]] / amp
             ry = np.zeros(self.ndof)
-            ry[self.conn] = np.c_[-v[:, 2], 0*v[:, 1], v[:, 0]] / amp
+            ry[self.conn[an, :]] = np.c_[-v[:, 2], 0*v[:, 1], v[:, 0]] / amp
             rz = np.zeros(self.ndof)
-            rz[self.conn] = np.c_[v[:, 1], -v[:, 0], 0*v[:, 2]] / amp
+            rz[self.conn[an, :]] = np.c_[v[:, 1], -v[:, 0], 0*v[:, 2]] / amp
             return tx, ty, tz, rx, ry, rz
         else:
             tx = np.zeros(self.ndof)
-            tx[self.conn[:, 0]] = 1
+            tx[self.conn[an, 0]] = 1
             ty = np.zeros(self.ndof)
-            ty[self.conn[:, 1]] = 1
-            v = self.n-np.mean(self.n, axis=0)
+            ty[self.conn[an, 1]] = 1
+            v = self.n[an, :] - np.mean(self.n[an, :], axis=0)
             v = np.c_[-v[:, 1], v[:, 0]] / np.max(np.linalg.norm(v, axis=1))
             rz = np.zeros(self.ndof)
-            rz[self.conn] = v
+            rz[self.conn[an, :]] = v
             return tx, ty, rz
 
     def MedianFilter(self, U):
@@ -3775,51 +3936,23 @@ class Mesh:
             raise Exception('Only one elem type in macro mesh = ' + str(et))
         else:
             et = et[0]
-        nelem = 0
-        nelem = len(self.e[et])
-        nnc = len(mc.n)
-        ng = np.zeros((nelem*nnc, self.dim))
-        eg = {}
-        nec = {}
-        for eti in mc.e.keys():
-            nec[eti] = len(mc.e[eti])
-            eg[eti] = np.zeros((nelem*nec[eti], mc.e[eti].shape[1]), dtype='int64')
-        ielem = 0
         if self.dim == 2:
             _, _, _, N, _, _ = ShapeFunctions(et)
             for je in range(len(self.e[et])):
-                rep = np.arange(nnc) + ielem * nnc
                 phi = N(mc.n[:, 0], mc.n[:, 1])
                 n = phi @ self.n[self.e[et][je]]
-                ng[rep, :] = n.copy()
-                for eti in mc.e.keys():
-                    rep = np.arange(nec[eti]) + ielem * nec[eti]
-                    eg[eti][rep, :] = mc.e[eti] + ielem * nnc
-                ielem += 1
                 list_meshes.append(Mesh(mc.e.copy(), n, 2))
         else:
             _, _, _, _, N, _, _, _ = ShapeFunctions(et)
             for je in range(len(self.e[et])):
-                rep = np.arange(nnc) + ielem * nnc
                 phi = N(mc.n[:, 0], mc.n[:, 1], mc.n[:, 2])
                 n = phi @ self.n[self.e[et][je]]
-                ng[rep, :] = n.copy()
-                for eti in mc.e.keys():
-                    rep = np.arange(nec[eti]) + ielem * nec[eti]
-                    eg[eti][rep, :] = mc.e[eti] + ielem * nnc
-                ielem += 1
                 list_meshes.append(Mesh(mc.e.copy(), n, 3))
-        mg = Mesh(eg, ng, self.dim)
-        print('Removing Unused nodes...')
-        mg.RemoveUnusedNodes()
-        print('Removing Double nodes...')
-        mg.RemoveDoubleNodes()
-        print('Removing Double Elements...')
-        mg.RemoveDoubleElems()
+
         if separated:
-            return mg, list_meshes
+            return list_meshes
         else:
-            return mg
+            return MeshUnion(list_meshes, False)
 
     def SolveElastic(self, K, BC, LOAD, distributed=True):
         """
@@ -3864,8 +3997,8 @@ class Mesh:
         else:
             F = LOAD.copy()
     
-        F -= K@U
-        Fr = F[keepdof]
+        Fbc = F - K@U
+        Fr = Fbc[keepdof]
         Kr = K[np.ix_(keepdof, keepdof)]
     
         if Kr.shape[0] < 1e5:

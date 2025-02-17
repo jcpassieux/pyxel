@@ -31,7 +31,7 @@ import os
 
 def OpenHolePlate(box, r, cpos, t, Nr, Nl):
     """
-    Builds a structured mesh for an horizontal openhole plate
+    Builds a structured mesh for an openhole plate
     
     Parameters
     ----------
@@ -52,6 +52,11 @@ def OpenHolePlate(box, r, cpos, t, Nr, Nl):
     PYXEL.MESH
 
     """
+    rotation = False
+    if np.diff(np.diff(box, axis=0)) > 0:
+        box = box[:, ::-1]
+        rotation = True        
+    
     x0 = box[0, 0]
     y0 = box[0, 1]
     x1 = box[1, 0]
@@ -121,8 +126,57 @@ def OpenHolePlate(box, r, cpos, t, Nr, Nl):
     gmsh.finalize()
     m = ReadMesh("mesh.msh", 2)
     m.KeepSurfElems()
+    if rotation:
+        m.n = m.n[:, ::-1]
     return m
 
+def OpenHolePlateUnstructured(box, r, cpos, lc, lf):
+    """
+    Builds an unstructured mesh for an openhole plate
+    
+    Parameters
+    ----------
+    box : 2x2 NUMPY.ARRAY
+        [[xmin, ymin], [xmax, ymax]]
+    r : FLOAT
+        hole radius
+    cpos : NUMPY.ARRAY
+        coordinates of the center [xc, yc]
+    lc : FLOAT
+        characteristic length of the coarse elements
+    lf : FLOAT
+        characteristic length of the fine elements around the hole
+    Returns
+    -------
+    PYXEL.MESH
+
+    """
+    x = cpos[0]
+    y = cpos[1]
+    gmsh.initialize()
+    gmsh.model.add("P")
+    gmsh.model.geo.addPoint(box[0, 0], box[0, 1], 0, lc, 1)
+    gmsh.model.geo.addPoint(box[1, 0], box[0, 1], 0, lc, 2)
+    gmsh.model.geo.addPoint(box[1, 0], box[1, 1], 0, lc, 3)
+    gmsh.model.geo.addPoint(box[0, 0], box[1, 1], 0, lc, 4)
+    gmsh.model.geo.addPoint(x, y, 0, lf, 5)
+    gmsh.model.geo.addPoint(x-r, y, 0, lf, 6)
+    gmsh.model.geo.addPoint(x+r, y, 0, lf, 7)
+    gmsh.model.geo.addLine(1, 2, 1)
+    gmsh.model.geo.addLine(2, 3, 2)
+    gmsh.model.geo.addLine(3, 4, 3)
+    gmsh.model.geo.addLine(4, 1, 4)
+    gmsh.model.geo.addCircleArc(6, 5, 7, 5)
+    gmsh.model.geo.addCircleArc(7, 5, 6, 6)
+    gmsh.model.geo.addCurveLoop([1, 2, 3, 4, 5, 6], 1)
+    gmsh.model.geo.addPlaneSurface([1], 1)
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(2)
+    gmsh.write("mesh.msh")
+    gmsh.finalize()
+    m = ReadMesh("mesh.msh", 2)
+    m.KeepSurfElems()
+    return m
 
 def StructuredMeshQ4(box, dx):
     """Build a structured linear Q4 mesh from two points coordinates (box)

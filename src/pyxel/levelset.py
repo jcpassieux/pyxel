@@ -288,7 +288,7 @@ class LSCalibrator:
                 % (i + 1, np.mean(lp) / max(self.f.pix.shape) * 100, err))
             if err < 1e-5:
                 break
-        print("p = np.array([%f, %f, %f, %f])" % (p[0], p[1], p[2], p[3]))
+        print("p = np.array([%f, %f, %f, %2.5e])" % (p[0], p[1], p[2], p[3]))
         return self.cam
 
     def SavePoints(self, filename):

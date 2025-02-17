@@ -37,6 +37,18 @@ def isInBox(b, x, y, z=None):
             * (z < (b[1, 2] + e))
         )
 
+def PointCloudIntersection(n1, n2, eps=None):
+    if eps is None:
+        eps = 1e-5 * np.min(np.linalg.norm(n1[:-1]-n1[[-1]], axis=1))
+    scale = 10 ** np.floor(np.log10(eps))  # tolerance between two nodes
+    nnew = np.vstack((n2, n1))
+    nnew = np.round(nnew/scale) * scale
+    _, ind, inv, cnt = np.unique(nnew, axis=0, return_index=True,
+                               return_inverse=True, return_counts=True)
+    rep, = np.where(cnt > 1)
+    table = np.array([np.where(inv == k)[0] for k in rep])
+    table[:, 1] -= len(n2)
+    return table[:, 1], table[:, 0]
 
 #@njit(cache=True)
 def meshgrid(a, b):

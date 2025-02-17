@@ -1,6 +1,6 @@
 # in __init__.py
 
-from .mesh import Mesh, ReadMesh
+from .mesh import Mesh, ReadMesh, MeshUnion
 from .bspline_patch import BSplinePatch, SplineFromROI
 from .bspline_routines import *
 from .image import Image, Volume
