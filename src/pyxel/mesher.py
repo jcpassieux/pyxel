@@ -376,7 +376,8 @@ def StructuredMeshHex8(box, lc):
 
     els = noelem.astype('int32')
     # In order to get the correct ordering of Meshio
-    els = els[:, [2, 0, 1, 3, 6, 4, 5, 7]]
+    # els = els[:, [2, 0, 1, 3, 6, 4, 5, 7]]
+    els = els[:, [0, 1, 3, 2, 4, 5, 7, 6]]
     # els = els[:,[]] # In order to get tge correct ordering of Gmsh
     e = {5: els}
     m = Mesh(e, nodes, 3)

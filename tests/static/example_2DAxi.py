@@ -22,32 +22,30 @@ C = px.Hooke([1e6, 0.3], 'isotropic_2D_axi')
 m.GaussIntegration()
 K = m.StiffnessAxi(C)
 
-# Dirichlet BC at y = -0.035
-repu, = np.where(m.n[:,1] < -0.03499)
-repu = m.conn[repu, 1]
+# Dirichlet BC at the bottom
+repu = m.SelectEndLine('bottom')
+BC = [[repu, [[1, 0], ]], ]
 
-# Dirichlet BC at y = 0.035 second dof only
-repf, = np.where(m.n[:,0] > 0.02499)
-repf = m.conn[repf, 0]
+# Neumann BC on the right end
+fx = 3000.0  # surface traction (N/m²).
+fy = 0.0
+right_box = px.PointCloud2Box(m.n[m.SelectEndLine('right', plot=True)])
+mb = m.BuildBoundaryMesh()
+mb.RemoveElemsOutsideRoi(right_box)
+# m.Plot()
+# mb.Plot(edgecolor='r')
+mb.GaussIntegration()
+F = mb.wdetJ @ mb.phix * fx + mb.wdetJ @ mb.phiy * fy
 
-U = np.zeros(m.ndof)
-F = np.zeros(m.ndof)
-F[repf] = 1
+U, RF = m.SolveElastic(K, BC, F)
 
-rep = np.setdiff1d(np.arange(m.ndof), repu)
-repk = np.ix_(rep, rep)
-F -= K@U
-
-KLU = splalg.splu(K[repk])
-U[rep] = KLU.solve(F[rep])
-
-m.VTKSol('Sol2DAxi', U)
-
-m.Plot(U, 10)
+m.Plot(U, 1)
 m.PlotContourDispl(U)
 
 # plots only the in-plane components of stress.
 m.PlotContourStress(U, C)
+
+m.VTKSol('Sol2DAxi', U)
 
 # %%
 

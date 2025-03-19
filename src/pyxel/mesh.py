@@ -14,7 +14,7 @@ import os
 import numpy as np
 import scipy as sp
 import scipy.sparse.linalg as splgl
-from scipy.sparse import diags, csr_matrix
+from scipy.sparse import diags, csr_matrix, bmat, issparse, coo_array
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import art3d
 import matplotlib.pyplot as plt
@@ -507,14 +507,7 @@ def SubTriGmsh(n):
     return c[:, 0], c[:, 1], a
 
 
-def AddChildElem(child_list, new_child, sorted_child_list):
-    sorted_new_child = tuple(np.sort(new_child))
-    if sorted_new_child in child_list.keys():
-        child_list[sorted_new_child] += 1
-    else:
-        child_list[sorted_new_child] = 1
-        sorted_child_list[sorted_new_child] = new_child
-    return child_list, sorted_child_list
+
 
 # %%  Shape functions
 def ShapeFunctions(eltype):
@@ -2134,10 +2127,11 @@ class Mesh:
            )
         return K
 
-    def StiffnessBeam(self, bp):
+    def StiffnessBeam(self, bp, z=None):
         """
         Assemble Stiffness Operator for 2D and 3D Beams
         bp: Beam Properties (see materials.py)
+        z: approximate n1 direction for 3d. Defaut is random [0.75, 0.66, 0.04]
         """
         E = bp['E']
         S = bp['S']
@@ -2146,36 +2140,37 @@ class Mesh:
             G = bp['G']
             Iy = bp['Iy']
             J = bp['J']
-        phi = bp['phi']
+        phi_l2 = bp['phil2']
         ndof = (2*self.dim*(self.dim+1)//2)**2
         nzv = ndof * len(self.e[1])  # only elements of type 1
         row = np.zeros(nzv, dtype='int64')
         col = np.zeros(nzv, dtype='int64')
         val = np.zeros(nzv)
+        if z is None:
+            z = np.array([0.74675146, 0.66346468, 0.04665701])
         for ie in range(len(self.e[1])):
             nodes = self.e[1][ie]
             v = np.diff(self.n[nodes], axis=0)[0]
             L = np.linalg.norm(v)
             if self.dim == 3:
-                c = G*J/L
+                # c = G*J/L
                 t = v/L
-                z = np.array([0, 0, 1])
-                if t@z > 1-1e-8:
-                    z = np.array([1, 0, 0])
+                if t@z > 1-1e-8 or t@z < 1e-8-1:
+                    print('ERROR : CHOOSE ANOTHER APPROX N1 DIRECTION')
                 n = np.cross(z, t)
                 b = np.cross(t, n)
                 T = np.kron(np.eye(2), np.c_[t, n, b])
                 Ke = np.zeros((12, 12))
                 Ke[np.ix_([0, 6], [0, 6])] += ElementaryStiffnessSpring(E, S, L)
-                Ke[np.ix_([1, 5, 7, 11], [1, 5, 7, 11])] += ElementaryStiffnessBendingZ(E, Iz, L, phi)
-                Ke[np.ix_([2, 4, 8, 10], [2, 4, 8, 10])] += ElementaryStiffnessBendingY(E, Iy, L, phi)
+                Ke[np.ix_([1, 5, 7, 11], [1, 5, 7, 11])] += ElementaryStiffnessBendingZ(E, Iz, L, phi_l2/L**2)
+                Ke[np.ix_([2, 4, 8, 10], [2, 4, 8, 10])] += ElementaryStiffnessBendingY(E, Iy, L, phi_l2/L**2)
                 Ke[np.ix_([3, 9], [3, 9])] += ElementaryStiffnessSpring(G, J, L)
             else:
                 c = v[0]/L
                 s = v[1]/L
                 Ke = np.zeros((6, 6))
                 Ke[np.ix_([0, 3], [0, 3])] += ElementaryStiffnessSpring(E, S, L)
-                Ke[np.ix_([1, 2, 4, 5], [1, 2, 4, 5])] += ElementaryStiffnessBendingZ(E, Iz, L, phi)
+                Ke[np.ix_([1, 2, 4, 5], [1, 2, 4, 5])] += ElementaryStiffnessBendingZ(E, Iz, L, phi_l2/L**2)
                 T = np.array([[c, -s, 0],
                               [s, c, 0],
                               [0, 0, 1]])
@@ -2419,13 +2414,13 @@ class Mesh:
                 elset[self.cell_sets[s][et]] = 1
                 elsets += [elset]
             cell_data[s] = elsets
-        
+
         # Export node sets
         for s in self.point_sets.keys():
             pset = np.zeros(len(self.n))
             pset[self.point_sets[s]] = 1
             point_data[s] = pset
-        
+
         # Export cell sets
         mesh.cell_data = cell_data
         mesh.point_data = point_data
@@ -2525,8 +2520,11 @@ class Mesh:
         if gp_field has size 1 x npg, then the DOF vector is on the first comp.
         otherwize, gp_field must be of size: dim x npg
         """
-        m = self.Copy()
-        m.GaussIntegration()
+        if self.phix is None:
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
         eps = 1e-12
         if gp_field.ndim == 2:  # strain or stress field with 2 or 3 components
             if self.dim == 2: # dim 2
@@ -2617,7 +2615,7 @@ class Mesh:
         self.pgx += self.phix @ U
         self.pgy += self.phiy @ U
 
-    def PreparePlot(self, U=None, coef=1., n=None, **kwargs):
+    def PreparePlot(self, U=None, s=1., n=None, **kwargs):
         """
         Prepare the matplotlib collections for a plot
         """
@@ -2628,7 +2626,7 @@ class Mesh:
         if n is None:
             n = self.n.copy()
         if U is not None:
-            n += coef * U[self.conn[:, :self.dim]]
+            n += s * U[self.conn[:, :self.dim]]
         qua = np.zeros((0, 4), dtype="int64")
         tri = np.zeros((0, 3), dtype="int64")
         bar = np.zeros((0, 2), dtype="int64")
@@ -2663,13 +2661,13 @@ class Mesh:
         # Return the matplotlib collection and the list of vertices
         return pc, nn, n
 
-    def Plot(self, U=None, coef=1, n=None, plotnodes=True, **kwargs):
+    def Plot(self, U=None, s=1, n=None, plotnodes=True, **kwargs):
         """
         Plots the (possibly warped) mesh using Matplotlib Library.
         Inputs:
         -------
             -U: displacement fields for a deformed mesh plot
-            -coef: amplification coefficient
+            -s: scaling: amplification coefficient
             -n: nodes coordinates
 
         Usage:
@@ -2688,7 +2686,7 @@ class Mesh:
             mb = self.BuildBoundaryMesh()
             mb.conn = self.conn
             facecolor = kwargs.pop("facecolor", "w")
-            mb.Plot(U, coef, n, plotnodes, alpha=alpha, edgecolor=edgecolor,
+            mb.Plot(U, s, n, plotnodes, alpha=alpha, edgecolor=edgecolor,
                     facecolor=facecolor, **kwargs)
         else:   # otherwise
             if self.dim == 2:
@@ -2700,7 +2698,7 @@ class Mesh:
                 ax = fig.add_subplot(111, projection="3d")
                 # ax = Axes3D(plt.figure())
                 # ax = plt.figure().add_subplot(projection='3d')
-            pc, nn, n = self.PreparePlot(U, coef, n, alpha=alpha,
+            pc, nn, n = self.PreparePlot(U, s, n, alpha=alpha,
                                          edgecolor=edgecolor,
                                          facecolor=facecolor, **kwargs)
 
@@ -2736,15 +2734,14 @@ class Mesh:
                 ax.set_zlim(mid_z - max_range, mid_z + max_range)
                 ax.set_xlim(mid_x - max_range, mid_x + max_range)
                 ax.set_ylim(mid_y - max_range, mid_y + max_range)
-                print('axis equal')
 
-    def AnimatedPlot(self, U, coef=1, n=None, timeAnim=5,
+    def AnimatedPlot(self, U, s=1, n=None, timeAnim=5,
                      color=('k', 'b', 'r', 'g', 'c')):
         """
         Animated plot with funcAnimation
         Inputs:
             -U: displacement field, stored in column for each time step
-            -coef: amplification coefficient
+            -s: amplification coefficient
             -n: nodes coordinates
             -timeAnim: time of the animation
         """
@@ -2759,7 +2756,7 @@ class Mesh:
         pc = dict()
         nn = dict()
         for jj, u in enumerate(U):
-            pc[jj], nn[jj], _ = self.PreparePlot(u[:, 0], coef,
+            pc[jj], nn[jj], _ = self.PreparePlot(u[:, 0], s,
                                                  n, edgecolor=color[jj])
             if self.dim == 2:
                 ax.add_collection(pc[jj])
@@ -2789,7 +2786,7 @@ class Mesh:
             Function to update the matplotlib collections
             """
             for jj, u in enumerate(U):
-                titi, nn, _ = self.PreparePlot(u[:, ii], coef, n)
+                titi, nn, _ = self.PreparePlot(u[:, ii], s, n)
                 # pc[jj].set_paths(nn)
                 pc[jj].set_verts(nn)
             return pc.values()
@@ -3347,8 +3344,7 @@ class Mesh:
         """
         inside = self.ElemsInsideRoi(roi, cam=cam)
         for je in self.e.keys():
-            outside = np.setdiff1d(np.arange(len(self.e[je])), inside[je])
-            self.e[je] = self.e[je][outside, :]
+            self.e[je] = self.e[je][np.invert(inside[je]), :]
 
     def RemoveDoubleNodes(self, eps=None):
         """
@@ -3359,6 +3355,7 @@ class Mesh:
             m.RemoveDoubleNodes()
 
         """
+        nn_init = len(self.n)
         if eps is None:
             eps = 1e-5 * self.GetApproxElementSize()
         scale = 10 ** np.floor(np.log10(eps))  # tolerance between two nodes
@@ -3368,10 +3365,11 @@ class Mesh:
         self.n = self.n[ind]  # keep the initial precision of remaining nodes
         for k in self.e.keys():
             self.e[k] = inv[self.e[k]]
+        print('%3d nodes removed' % (nn_init-len(self.n)))
 
     def MeshIntersection(self, m2, eps=None):
         """
-        Performs the intersection between the boundaries of m and 
+        Performs the intersection between the boundaries of self and 
         all the nodes of m2
 
         Usage :
@@ -3392,26 +3390,33 @@ class Mesh:
     def RemoveDoubleElems(self, difference=False):
         """
         Removes elements that appear more than once
-        if DIFFERENCE IS TRUE (DEFAULT) keep one occurence of each
-        if DIFFERENCE IS FALSE remove all multiple elements
+        if DIFFERENCE IS FALSE (DEFAULT) keep one occurence of each
+        if DIFFERENCE IS TRUE remove all multiple elements
 
         Warning: self.e is modified!
         Usage :
             m.RemoveDoubleElems()
 
         """
+        nel_init = 0
+        nel_new = 0
         if difference:
             for k in self.e.keys():
+                nel_init += len(self.e[k])
                 e_sort = np.sort(self.e[k], axis=1)
                 _, ind, cts = np.unique(e_sort, axis=0,
                                         return_index=True, return_counts=True)
                 keep, = np.where(cts < 2)
                 self.e[k] = self.e[k][ind[keep], :]
+                nel_new += len(self.e[k])
         else:
             for k in self.e.keys():
+                nel_init += len(self.e[k])
                 e_sort = np.sort(self.e[k], axis=1)
                 _, ind = np.unique(e_sort, axis=0, return_index=True)
                 self.e[k] = self.e[k][ind, :]
+                nel_new += len(self.e[k])
+        print('%3d elements removed' % (nel_init-nel_new))
 
     def KeepElemsConnectedToThisNode(self, node_id=0):
         """
@@ -3456,6 +3461,7 @@ class Mesh:
         None.
 
         """
+        nn_init = len(self.n)
         used_nodes = np.zeros(0, dtype=int)
         for ie in self.e.keys():
             used_nodes = np.hstack((used_nodes, self.e[ie].ravel()))
@@ -3465,12 +3471,22 @@ class Mesh:
         self.n = self.n[used_nodes, :]
         for ie in self.e.keys():
             self.e[ie] = table[self.e[ie]]
+        print('%3d nodes removed' % (nn_init-len(self.n)))
 
     def BuildBoundaryMesh(self):
         """
         Builds edge elements corresponding to the edges of 2d Mesh m
         and Tet in 3d.
         """
+        def AddChildElem(child_list, new_child, sorted_child_list):
+            sorted_new_child = tuple(np.sort(new_child))
+            if sorted_new_child in child_list.keys():
+                child_list[sorted_new_child] += 1
+            else:
+                child_list[sorted_new_child] = 1
+                sorted_child_list[sorted_new_child] = new_child
+            return child_list, sorted_child_list
+        
         edgel = {}  # edge lin
         edgeq = {}  # edge qua
         tril = {}  # tri face lin
@@ -3507,18 +3523,18 @@ class Mesh:
             elif je in [4, 11]:  # tet4
                 for ie in range(len(self.e[je])):
                     ei = self.e[je][ie, :4]
-                    tril, tril_sort = AddChildElem(tril, ei[[0, 1, 2]],
+                    tril, tril_sort = AddChildElem(tril, ei[[1, 0, 2]],
                                                    tril_sort)
                     tril, tril_sort = AddChildElem(tril, ei[[0, 1, 3]],
                                                    tril_sort)
-                    tril, tril_sort = AddChildElem(tril, ei[[0, 2, 3]],
+                    tril, tril_sort = AddChildElem(tril, ei[[2, 0, 3]],
                                                    tril_sort)
                     tril, tril_sort = AddChildElem(tril, ei[[1, 2, 3]],
                                                    tril_sort)
             elif je in [5, 17]:  # hex8
                 for ie in range(len(self.e[je])):
                     ei = self.e[je][ie][:8]
-                    qual, qual_sort = AddChildElem(qual, ei[[0, 1, 2, 3]],
+                    qual, qual_sort = AddChildElem(qual, ei[[1, 0, 3, 2]],
                                                    qual_sort)
                     qual, qual_sort = AddChildElem(qual, ei[[4, 5, 6, 7]],
                                                    qual_sort)
@@ -3528,7 +3544,7 @@ class Mesh:
                                                    qual_sort)
                     qual, qual_sort = AddChildElem(qual, ei[[2, 3, 7, 6]],
                                                    qual_sort)
-                    qual, qual_sort = AddChildElem(qual, ei[[0, 3, 7, 4]],
+                    qual, qual_sort = AddChildElem(qual, ei[[3, 0, 4, 7]],
                                                    qual_sort)
         elems = dict()
         # linear edges
@@ -3658,7 +3674,8 @@ class Mesh:
 
     def SelectEndLine(self, edge='left', eps=1e-8, plot=True):
         """
-        Return nodes on the left, right, top or bottom end
+        Return nodes on the 'left', 'right', 'top' or 'bottom' end
+        if SELF.dim = 3, 'front' and 'rear' also possible
         """
         used_nodes = np.zeros(0, dtype=int)
         for je in self.e.keys():
@@ -3668,6 +3685,9 @@ class Mesh:
         x_rig = np.max(n[:, 0])
         y_bot = np.min(n[:, 1])
         y_top = np.max(n[:, 1])
+        if self.dim == 3:
+            z_fro = np.max(n[:, 2])
+            z_rea = np.min(n[:, 2])
         if edge == 'left':
             # pts1 = np.array([[x_lef, y_bot], [x_lef, y_top]])
             nset, = np.where(abs(n[:, 0] - x_lef) < eps)
@@ -3680,6 +3700,12 @@ class Mesh:
         elif edge == 'bottom':
             # pts1 = np.array([[x_lef, y_bot], [x_rig, y_bot]])
             nset, = np.where(abs(n[:, 1] - y_bot) < eps)
+        elif edge == 'front':
+            # pts1 = np.array([[x_lef, y_bot], [x_rig, y_bot]])
+            nset, = np.where(abs(n[:, 2] - z_fro) < eps)
+        elif edge == 'rear':
+            # pts1 = np.array([[x_lef, y_bot], [x_rig, y_bot]])
+            nset, = np.where(abs(n[:, 2] - z_rea) < eps)
         # n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
         # n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
         # v = np.diff(self.n[[n1, n2]], axis=0)[0]
@@ -3697,7 +3723,10 @@ class Mesh:
         nset = used_nodes[nset]
         if plot:
             self.Plot()
-            plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
+            if self.dim == 2:
+                plt.plot(self.n[nset, 0], self.n[nset, 1], "ro")
+            else:
+                plt.plot(self.n[nset, 0], self.n[nset, 1], self.n[nset, 2], "ro")
         return nset
 
     def SelectCircle(self):
@@ -3954,59 +3983,100 @@ class Mesh:
         else:
             return MeshUnion(list_meshes, False)
 
-    def SolveElastic(self, K, BC, LOAD, distributed=True):
+    def SolveElastic(self, K, BC, LOAD, LAG=None, Kfact=None, get_fact=False, distributed=True):
         """
         Solving elasticity pb
         
         Parameters
         ----------
         m : PYXEL MESH
-        K : NUMPY ARRAY : PYXEL STIFNESS MATRIX
+        K : NUMPY ARRAY : PYXEL STIFFNESS MATRIX
         BC : LIST
             [ [node_array, [ [dof, value], [dof, value] ] ] , ]
+            if multiple entry > average
         LOAD : LIST or NUMPY.ARRAY
             first option
             [ [node_array, [ [dof, value], [dof, value] ] ] , ]
+            if multiple entry > summation
             second option
             F as the generalized force vector of size m.ndof
+        LAG : LIST
+            Defaut is None > use BC argument
+            otherwise (BC ignored) LAG should be equal to [C, ud]
+            where C is a condition matrix used to prescribe Dirichlet BC
+                C u = ud
         distributed : BOOL, optional
             DESCRIPTION. The default is TRUE : Force value is divided by the
             number of nodes in the node_array.
             otherwise the value is applied to all nodes.
             
         """
-        U = np.zeros(self.ndof)
-        # Dirichlet
-        rmdof = []
-        for bci in BC:
-            nodes = bci[0]
-            for j in range(len(bci[1])):
-                U[self.conn[nodes, bci[1][j][0]]] = bci[1][j][1]
-                rmdof += list(self.conn[nodes, bci[1][j][0]])
-        keepdof = np.setdiff1d(np.arange(self.ndof), rmdof)
-    
         #Neumann
         if type(LOAD) is list:
             F = np.zeros(self.ndof)
             for ldi in LOAD:
                 nodes = ldi[0]
                 for j in range(len(ldi[1])):
-                    F[self.conn[nodes, ldi[1][j][0]]] = ldi[1][j][1]
+                    F[self.conn[nodes, ldi[1][j][0]]] += ldi[1][j][1]
                     if distributed:
                         F[self.conn[nodes, ldi[1][j][0]]] /= len(nodes)
         else:
             F = LOAD.copy()
-    
-        Fbc = F - K@U
-        Fr = Fbc[keepdof]
-        Kr = K[np.ix_(keepdof, keepdof)]
-    
-        if Kr.shape[0] < 1e5:
-            U[keepdof] = splgl.spsolve(Kr, Fr)
+
+        # if more than one Dirichlet BC for a single dof > average.
+        # bcnodes = np.hstack([bci[0] for bci in BC])
+        # _, idx, counts = np.unique(bcnodes, return_counts=True, return_inverse=True)
+        # counts = counts[idx]
+        # numb = []
+        # c = 0
+        # for bci in BC:
+        #     numb += [counts[c:(c+len(bci[0]))]]
+        #     c += len(bci[0])
+
+        # Dirichlet
+        if LAG is None:
+            U = np.zeros(self.ndof)
+            rmdof = []
+            for bci in BC:
+                nodes = bci[0]
+                for j in range(len(bci[1])):
+                    U[self.conn[nodes, bci[1][j][0]]] = bci[1][j][1]
+                    rmdof += list(self.conn[nodes, bci[1][j][0]])
+            # for bci, numi in zip(BC, numb):
+            #     nodes = bci[0]
+            #     for j in range(len(bci[1])):
+            #         U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
+            #         # U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
+            #         rmdof += list(self.conn[nodes, bci[1][j][0]])
+            keepdof = np.setdiff1d(np.arange(self.ndof), rmdof)
+            Fbc = F - K@U
+            Fr = Fbc[keepdof]
+            Kr = K[np.ix_(keepdof, keepdof)]
         else:
+            C = LAG[0]
+            ud = LAG[1]
+            if not issparse(C):
+                C = coo_array(C)
+            Kr = bmat([[K, C.T], [C, None]])
+            Fr = np.hstack((F, ud))
+
+        if Kr.shape[0] > 5e5 and Kfact is None:
             eps_zero = 1e-5 * np.min(Kr)
             Mr = diags(1/(Kr.diagonal() + eps_zero))
-            U[keepdof], info = splgl.cg(Kr, Fr, rtol=1e-5, M=Mr)
-        R = K@U - F
-        return U, R
+            Ur, info = splgl.cg(Kr, Fr, rtol=1e-5, M=Mr)
+        else:
+            if Kfact is None:
+                Kfact = splgl.splu(Kr)
+            Ur = Kfact.solve(Fr)
 
+        if LAG:
+            R = Ur[-len(ud):]
+            U = Ur[:-len(ud)]
+        else:
+            U[keepdof] = Ur
+            R = K@U - F
+        if get_fact:
+            return U, R, Kfact
+        else:
+            return U, R
+            

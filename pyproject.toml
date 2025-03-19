@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyxel-dic"
-version = "2024.11.26"
+version = "2025.02.17"
 authors = [
   { name="JC Passieux", email="jc.passieux@gmail.com" },
 ]

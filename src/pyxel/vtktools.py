@@ -373,7 +373,7 @@ class VTIWriter():
         print("VTI: "+ fileName +" written")
         outFile.close()
 
-def PVDFile(fileName,ext,npart,nstep):
+def PVDFile(fileName, ext, npart, nstep):
     """
     Write PVD file
     Usage: writePVD("toto","vtu",npart,nstep) 
@@ -403,7 +403,7 @@ def PVDFile(fileName,ext,npart,nstep):
     pvd_root.setAttribute("byte_order", "LittleEndian")
     pvd.appendChild(pvd_root)
     collection = pvd.createElementNS("VTK", "Collection")
-    pvd_root.appendChild(collection)    
+    pvd_root.appendChild(collection)
     for jp in range(npart):
         for js in range(nstep):
             dataSet = pvd.createElementNS("VTK", "DataSet")
@@ -412,9 +412,12 @@ def PVDFile(fileName,ext,npart,nstep):
             dataSet.setAttribute("part", str(jp))
             dataSet.setAttribute("file", fname+"_"+str(jp)+"_"+str(js)+"."+ext)
             collection.appendChild(dataSet)
-    outFile = open(fileName+".pvd", 'w')
+    if not os.path.isdir(os.path.join("vtk", rep)):
+        os.makedirs(os.path.join("vtk", rep))
+    fname = os.path.join("vtk", rep, fileName) + ".pvd"
+    outFile = open(fname, 'w')
     pvd.writexml(outFile, newl='\n')
-    print("VTK: "+ fileName +".pvd written")
+    print("VTK: " + fname + " written")
     outFile.close()
 
 

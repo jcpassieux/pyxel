@@ -97,20 +97,22 @@ class LSCalibrator:
         dmax = np.argmax(dm)
         vm = ptsm[dmax] - cm
         vM = ptsM[dmax] - cM
+        vm /= np.linalg.norm(vm)
+        vM /= np.linalg.norm(vM)
         # signed angle between vM and vm
         angl = np.arctan2(vm[1],vm[0]) - np.arctan2(vM[1],vM[0])
         self.cam.T = np.array([[0, 0, scale * self.cam.K[0, 0]]]).T
         self.cam.R = np.array([[0, 0, angl]]).T
         cM2x, cM2y = self.cam.P(cM[0], -cM[1])
-        self.cam.T[0, 0] = (cm[0] - cM2x) * self.cam.T[2, 0]
-        self.cam.T[1, 0] = (cm[1] - cM2y) * self.cam.T[2, 0]
+        self.cam.T[0, 0] = (cm[0] - cM2x[0]) * self.cam.T[2, 0] / self.cam.K[0, 0]
+        self.cam.T[1, 0] = (cm[1] - cM2y[0]) * self.cam.T[2, 0] / self.cam.K[0, 0]
         # print(self.cam.R)
         # print(self.cam.T)
         ptsM[:, 1] *= -1
         #
         # m.Plot()
         # plt.plot(ptsM[:, 0], ptsM[:, 1], 'ko')
-        # #
+        # # #
         # f.Plot()
         # plt.plot(ptsm[:, 0], ptsm[:, 1], 'ro')
         # up, vp = self.cam.P(ptsM[:, 0], ptsM[:, 1])

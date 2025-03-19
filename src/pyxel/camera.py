@@ -110,8 +110,10 @@ class Camera:
             return pint
         elif p == 'distortion':
             return dist
-        else:  # deriv wrt all params
+        elif p == 'all':
             return np.hstack((pext, pint, dist))
+        else:
+            raise Exception('Unknown type. Choose among: extrinsic, intrinsic, distortion, all')
 
     def P(self, X, Y, Z=None):
         """

@@ -26,26 +26,14 @@ beam_prop = px.BeamProperties([200e9, 0.3, np.pi*r**2, np.pi*d**4/64, None, np.p
 K = m.StiffnessBeam(beam_prop)
 
 # Apply BCs
-m.Plot()
-repu, = np.where(m.n[:, 0] < 1e-5)
-plt.plot(m.n[repu, 0], m.n[repu, 1], m.n[repu, 2], 'ro')
-repu = m.conn[repu, :]
+repu = m.SelectEndLine('left')
+BC = [[repu, [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0]]], ]
 
-repf, = np.where(m.n[:, 0] > 0.1-1e-5)
-plt.plot(m.n[repf, 0], m.n[repf, 1], m.n[repf, 2], 'go')
-repf = m.conn[repf, 1]
-
-U = np.zeros(m.ndof)
-F = np.zeros(m.ndof)
-F[repf] = 30
-
-rep = np.setdiff1d(np.arange(m.ndof), repu)
-repk = np.ix_(rep, rep)
-F -= K@U
+repf = m.SelectEndLine('right')
+LOAD = [[repf, [[1, 30], ]], ]
 
 # Solve
-KLU = splalg.splu(K[repk])
-U[rep] = KLU.solve(F[rep])
+U, RF = m.SolveElastic(K, BC, LOAD, distributed=False)
 
 # Plot solution
 m.Plot(U, 1000)
@@ -71,24 +59,14 @@ d = 2*r
 beam_prop = px.BeamProperties([200e9, 0.3, np.pi*r**2, np.pi*d**4/64, None, np.pi*d**4/64, np.pi*d**4/32])
 K = m.StiffnessBeam(beam_prop)
 
-m.Plot()
-repu, = np.where(m.n[:, 1] < -0.03499)
-plt.plot(m.n[repu, 0], m.n[repu, 1], m.n[repu, 2], 'ro')
-repu = m.conn[repu, :]
+repu = m.SelectEndLine('bottom')
+BC = [[repu, [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0]]], ]
 
-repfn, = np.where(m.n[:, 1] > 0.03499)
-plt.plot(m.n[repfn, 0], m.n[repfn, 1], m.n[repfn, 2], 'go')
+repfn = m.SelectEndLine('top')
 repf = m.conn[repfn, 2]
-
-U = np.zeros(m.ndof)
 F = np.zeros(m.ndof)
 F[repf] = 3000 * m.n[repfn, 0] + 10
 
-rep = np.setdiff1d(np.arange(m.ndof), repu)
-repk = np.ix_(rep, rep)
-F -= K@U
-
-KLU = splalg.splu(K[repk])
-U[rep] = KLU.solve(F[rep])
+U, RF = m.SolveElastic(K, BC, F)
 
 m.Plot(U, 1000)

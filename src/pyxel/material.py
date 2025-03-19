@@ -125,10 +125,11 @@ def BeamProperties(p):
     k = p[4]
     if k is None:
         # EULER BERNOULLI
-        bp['phi'] = 0
+        bp['phil2'] = 0
     else:
         # TIMOSHENKO
-        bp['phi'] = 12 * bp['E'] * bp['Iz']/(bp['G']*bp['S']*k*bp['L']**2)
+        # phi = 12 * E * I / (G * S * ky * L²) but L not known at this stage
+        bp['phil2'] = 12 * bp['E'] * bp['Iz']/(bp['G']*bp['S']*k)
     return bp
 
 

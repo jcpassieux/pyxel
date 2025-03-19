@@ -12,6 +12,7 @@ class Timer():
         print('Elapsed: %f' % dt)
         return dt
 
+
 #@njit(cache=True)
 def isInBox(b, x, y, z=None):
     """Find whether set of points of coords x, y
@@ -36,6 +37,16 @@ def isInBox(b, x, y, z=None):
             * (y < (b[1, 1] + e))
             * (z < (b[1, 2] + e))
         )
+
+def PointCloud2Box(xp):
+    """
+    Returns the outer surrounding box of a point cloud defined by :
+        xp = [[x1, (y1, z1)]
+                 ...
+              [xN, (yN, zN)]]
+    """
+    return np.vstack((np.min(xp, axis=0), np.max(xp, axis=0)))
+        
 
 def PointCloudIntersection(n1, n2, eps=None):
     if eps is None:
@@ -75,13 +86,14 @@ def PlotMeshImage(f, m, cam, U=None, plot='mesh', newfig=True):
         'strain': plot contour strain field
 
     """
+    dim = m.dim
     n = m.n.copy()
     if U is not None:
         n += U[m.conn]
     if newfig:
         plt.figure()
     f.Plot()
-    if m.dim == 3:
+    if dim == 3:
         u, v = cam.P(n[:, 0], n[:, 1], n[:, 2])
         m.dim = 2
     else:
@@ -93,6 +105,7 @@ def PlotMeshImage(f, m, cam, U=None, plot='mesh', newfig=True):
     elif plot == 'displ':
         m.PlotContourDispl(U, n=np.c_[u, v], alpha=0.8, stype='mag', newfig=False)
         print('Unknown plot type in PlotMeshImage')
+    m.dim = dim
     # plt.xlim([0,f.pix.shape[1]])
     # plt.ylim([f.pix.shape[0],0])
     # plt.axis("on")
