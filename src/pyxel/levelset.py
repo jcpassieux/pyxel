@@ -228,7 +228,7 @@ class LSCalibrator:
                 self.ptsi[i][j, :] += np.array([umin, vmin])
                 plt.close()
 
-    def Calibration(self, init3pts=True):
+    def Calibration(self, init3pts=True, niter=40):
         """Performs the calibration provided that sufficient features have been
         selected using NewPoint(), NewLine() or NewCircle().
 
@@ -271,7 +271,7 @@ class LSCalibrator:
         # C = np.diag(p)
         # if p[-1] == 0:
         #     C[-1, -1] = 1
-        for i in range(40):
+        for i in range(niter):
             M = np.zeros((len(p), len(p)))
             b = np.zeros(len(p))
             for j in self.feat.keys():

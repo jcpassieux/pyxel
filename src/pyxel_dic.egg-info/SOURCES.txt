@@ -5,6 +5,7 @@ setup.cfg
 src/pyxel/__init__.py
 src/pyxel/bspline_patch.py
 src/pyxel/bspline_routines.py
+src/pyxel/calibration.py
 src/pyxel/camera.py
 src/pyxel/dic.py
 src/pyxel/exportpixmap.py
@@ -13,7 +14,6 @@ src/pyxel/levelset.py
 src/pyxel/material.py
 src/pyxel/mesh.py
 src/pyxel/mesher.py
-src/pyxel/meshparser.py
 src/pyxel/utils.py
 src/pyxel/vtktools.py
 src/pyxel_dic.egg-info/PKG-INFO

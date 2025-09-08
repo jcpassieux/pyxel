@@ -12,20 +12,40 @@ PYthon library for eXperimental mechanics using Finite ELements
 
 import numpy as np
 import cv2
+from .calibration import Camera as calib_cam
 
 class Camera:
-    def __init__(self, dim=3):
-        self.K = np.eye(3)
-        self.D = np.zeros((1, 5))
+    def __init__(self, dim=3, calib=False):
+        if calib:
+            self.LoadIntrinsic(calib)
+        else:
+            self.K = np.eye(3)
+            self.D = np.zeros((1, 5))
         self.R = np.zeros((3, 1))
         self.T = np.zeros((3, 1))
         self.T[2, 0] = 1.
         self.dim = dim  # 2 for 2D-DIC and 3 for Stereo-DIC
 
-    def LoadIntrinsic(self, filename):
-        params = dict(np.load(filename))
-        self.K = params['Intrinsic']
-        self.D = params['Distortion']
+    def LoadIntrinsic(self, calib):
+        """
+        Load calibration parameters from submodule calibration
+    
+        Parameters
+        ----------
+        calib : STRING or PYXEL.CALIBRATION.CAMERA
+             (1) npz file generated from calibration.Camera.SaveParams().
+             (2) directly a calibartion.camera
+    
+        """
+        if type(calib) == calib_cam:
+            self.K = calib.params['Intrinsic']
+            self.D = calib.params['Distortion']
+        elif type(calib) == str:
+            params = dict(np.load(calib))
+            self.K = params['Intrinsic']
+            self.D = params['Distortion']
+        else:
+            raise Exception('Unknown calibration type: '+str(type(calib)))
 
     def Get_pix2m(self):
         return self.T[-1, 0]/(0.5*(self.K[0,0] + self.K[1,1]))
@@ -98,7 +118,7 @@ class Camera:
             'distortion' > get distortion only
              otherwise > get all parameters
         """
-        if self.dim == 2:
+        if self.dim == 2: 
             pext = np.append(self.R[2], self.T)
         else:
             pext = np.append(self.R, self.T)
@@ -380,6 +400,8 @@ class Camera:
             if self.dim == 2:
                 jac_x = jac[0::2, [2, 3, 4, 5]]
                 jac_y = jac[1::2, [2, 3, 4, 5]]
+                # jac_x = jac[0::2, :6]
+                # jac_y = jac[1::2, :6]
             else:
                 jac_x = jac[0::2, :6]
                 jac_y = jac[1::2, :6]

@@ -256,7 +256,7 @@ def StructuredMeshQ8(box, dx):
             p2 = 2 * ix * (2 * NE[1] + 1) + 2 * iy + 2 * (2 * NE[1] + 1)
             p6 = p2 + 1
             p3 = p2 + 2
-            n[p5 + 1, :] = n[0, :] * np.nan
+            # n[p5 + 1, :] = n[0, :] * np.nan
             e[ix * NE[1] + iy] = np.array([p1, p2, p3, p4, p5, p6, p7, p8])
     el = {16: e}
     m = Mesh(el, n)
@@ -557,7 +557,7 @@ def MeshFrom1DClosedMesh(m, lc=None, order=1, recombine=False):
         gmsh.model.geo.addPoint(m.n[i, 0], m.n[i, 1], 0, lc[i], tag=i)
     for ie in range(len(m.e[1])):
         gmsh.model.geo.addLine(m.e[1][ie, 0], m.e[1][ie, 1], tag=i+ie)
-    gmsh.model.geo.addCurveLoop(np.arange(len(m.e[1]))+i, 1)
+    gmsh.model.geo.addCurveLoop(np.arange(len(m.e[1]))+i, 1, reorient=True)
     gmsh.model.geo.addPlaneSurface([1], 1)
     if recombine:
         # gmsh.model.geo.mesh.setTransfiniteSurface(1, "Left", [])

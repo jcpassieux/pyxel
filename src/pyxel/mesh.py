@@ -76,9 +76,9 @@ def MeshUnion(mlist, difference=False):
     ekeys = np.unique([list(mi.e.keys()) for mi in mlist])
     nnode = np.cumsum([0,] + [len(mi.n) for mi in mlist])
     eg = {}
-    ng = []
     for i in ekeys:
-        eg[i] = []
+        eg[int(i)] = []
+    ng = []
     for i in range(len(mlist)):
         ng += [mlist[i].n, ]
         for et in mlist[i].e.keys():
@@ -593,8 +593,8 @@ def ShapeFunctions(eltype):
                 (x - 1, -1 - x, 1 + x, 1 - x)).reshape((4, len(x))).T
 
         
-        # deg = 1  # reduced integration 1 gp
-        deg = 2  # full integration 4 gp
+        deg = 1  # reduced integration 1 gp
+        # deg = 2  # full integration 4 gp
         xg, wg = leggauss(deg)
         xg, yg = np.meshgrid(xg, xg)
         xg = xg.ravel()
@@ -1610,6 +1610,8 @@ class Mesh:
                     rep = np.arange(4)
                 elif et in [1]:
                     rep = np.arange(2)
+                else:
+                    rep = np.arange(len(self.e[et][0]))
                 um = u[self.e[et][:, rep]] - np.mean(u[self.e[et][:, rep]], axis=1)[:, np.newaxis]
                 vm = v[self.e[et][:, rep]] - np.mean(v[self.e[et][:, rep]], axis=1)[:, np.newaxis]
                 if method == 'max':
@@ -2520,7 +2522,7 @@ class Mesh:
         if gp_field has size 1 x npg, then the DOF vector is on the first comp.
         otherwize, gp_field must be of size: dim x npg
         """
-        if self.phix is None:
+        if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
@@ -2925,7 +2927,7 @@ class Mesh:
                 self.Plot(n=n, alpha=0.1)
             plt.axis('equal')
             plt.axis("off")
-            plt.title("Magnitude")
+            # plt.title("Magnitude")
         else:
             plt.figure()
             plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 0]],
@@ -3038,7 +3040,7 @@ class Mesh:
                 plt.figure()
             plot_scalar_field(E1)
             self.Plot(n=n, alpha=0.1)
-            plt.title(r"$"+field_name+"_{max}$")
+            # plt.title(r"$"+field_name+"_{max}$")
         elif stype == 'mag':
             if cmap == 'RdBu':
                 cmap = 'rainbow'
@@ -3330,9 +3332,15 @@ class Mesh:
 
         where  roi = f.SelectROI()
         """
+
         inside = self.ElemsInsideRoi(roi, cam=cam)
         for je in self.e.keys():
             self.e[je] = self.e[je][inside[je], :]
+            rm, = np.where(~inside[je])
+            for js in self.cell_sets.keys():
+                self.cell_sets[js][je] = np.setdiff1d(self.cell_sets[js][je], rm)
+            for jd in self.cell_data.keys():
+                self.cell_data[jd][je] = np.setdiff1d(self.cell_data[jd][je], rm)
 
     def RemoveElemsInsideRoi(self, roi, cam=None):
         """

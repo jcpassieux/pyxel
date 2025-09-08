@@ -57,7 +57,7 @@ m.Plot(U, 30)
 m.PlotContourDispl(U, s=30)
 
 # Visualization: strain fields
-m.PlotContourStrain(U, clim=[-0.02, 0.02], cmap='RdBu')
+m.PlotContourStrain(U, clim=1, cmap='RdBu')
 
 # Plot deformed Mesh on deformed state image
 px.PlotMeshImage(g, m, cam, U)

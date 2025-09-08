@@ -19,9 +19,10 @@ m = px.ReadMesh('abaqus_mesh_Q4.inp')
 m.Connectivity()
 m.Plot()
 
+
+# %% Manual instanciation
 cam = px.Camera(dim=2)
 
-# pre calibrated intrinsic params:
 fx = 16372.27086046
 fy = 16384.56096313
 cx = 1792.01771429
@@ -31,10 +32,14 @@ k2 = 8.21579404e+00
 k3 = -3.80725303e+02
 p1 = -6.10518731e-03
 p2 = 1.44932395e-02
+
 cam.set_p(np.array([fx, fy, cx, cy]), 'intrinsic')
 cam.set_p(np.array([k1, k2, p1, p2, k3]), 'distortion')
+# %% or from a file generated from pyxel.calibration.Camera.SaveParams()
+cam = px.Camera(dim=2)
+cam.LoadIntrinsic('cam_params.npz')
 
-# Calibration of the extrinsics
+# %% Calibration of the extrinsics
 calib_ext = False
 if calib_ext:
     ls = px.LSCalibrator(f, m, cam)
@@ -66,3 +71,9 @@ m.Plot(n=n)
 cam.set_p(np.array([0., 0, 0, 0, 0]), 'distortion')
 n = np.array(cam.P(m.n[:, 0], m.n[:, 1])).T
 m.Plot(n=n, edgecolor='r')
+
+# %%
+# mtx = cam0.params['Intrinsic']
+# dist = cam0.params['Distortion']
+# cam.set_p(mtx[[0, 1, 0, 1], [0, 1, 2, 2]], 'intrinsic')
+# cam.set_p(dist, 'distortion')
