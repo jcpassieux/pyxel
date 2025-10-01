@@ -55,6 +55,7 @@ def OpenHolePlate(box, r, cpos, t, Nr, Nl):
     rotation = False
     if np.diff(np.diff(box, axis=0)) > 0:
         box = box[:, ::-1]
+        cpos = cpos[::-1]
         rotation = True        
     
     x0 = box[0, 0]

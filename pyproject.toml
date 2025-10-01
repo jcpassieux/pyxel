@@ -28,6 +28,7 @@ dependencies = [
     "scikit-image",
     "interpylate",
     "cgal",
+    "svg.py",
 ]
 license = {file = "LICENSE"}
 
