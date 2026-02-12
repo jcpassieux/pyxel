@@ -8,8 +8,8 @@
 
 """
 
-import numpy as np
 import pyxel as px
+import matplotlib.pyplot as plt
 
 # %% IMAGES
 f = px.Image('zoom-0053_1.tif').Load()
@@ -45,8 +45,8 @@ m.Connectivity()
 m.DICIntegration(cam)
 
 # %% Do Correlation
-U = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
-U, res = px.Correlate(f, g, m, cam, U0=U)
+U0 = px.MultiscaleInit(f, g, m, cam, scales=[3, 2, 1])
+U, res = px.Correlate(f, g, m, cam, U0=U0)
 
 # %%  Post-processing
 # Visualization: Scaled deformation of the mesh

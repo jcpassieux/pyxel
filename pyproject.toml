@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyxel-dic"
-version = "2025.09.08"
+version = "2026.02.12"
 authors = [
   { name="JC Passieux", email="jc.passieux@gmail.com" },
 ]
@@ -27,7 +27,6 @@ dependencies = [
     "gmsh",
     "scikit-image",
     "interpylate",
-    "cgal",
     "svg.py",
 ]
 license = {file = "LICENSE"}

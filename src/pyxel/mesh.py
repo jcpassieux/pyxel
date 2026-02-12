@@ -593,8 +593,8 @@ def ShapeFunctions(eltype):
                 (x - 1, -1 - x, 1 + x, 1 - x)).reshape((4, len(x))).T
 
         
-        deg = 1  # reduced integration 1 gp
-        # deg = 2  # full integration 4 gp
+        # deg = 1  # reduced integration 1 gp
+        deg = 2  # full integration 4 gp
         xg, wg = leggauss(deg)
         xg, yg = np.meshgrid(xg, xg)
         xg = xg.ravel()
@@ -1276,6 +1276,7 @@ class Mesh:
                             + (dxdr / detJ)[:, np.newaxis] * dN_eta
                         valxj[rangephi] = dphidx.ravel()
                         valyj[rangephi] = dphidy.ravel()
+                        wdetJj[repg] = abs(detJ) * 4./len(detJ)
                     if EB:
                         rangeone = npg + np.arange(len(repg))
                         rowej[rangeone] = repg
@@ -1355,6 +1356,7 @@ class Mesh:
                             + (dxdr / detJ)[:, np.newaxis] * dN_eta
                         valxj[rangephi] = dphidx.ravel()
                         valyj[rangephi] = dphidy.ravel()
+                        wdetJj[repg] = abs(detJ) * 0.5/len(detJ)
                     if EB:
                         rangeone = npg + np.arange(len(repg))
                         rowej[rangeone] = repg
@@ -2259,6 +2261,27 @@ class Mesh:
                 m.dphiydx.T @ wdetJ @ m.dphiydx
         return L
 
+    def EquilibriumGap(self, C, nodes_no_regul=None):
+        """
+        Equilibrium Gap elastic regularisation
+
+        Parameters
+        ----------
+        C : PYXEL.HOOKE
+            Hooke operator.
+        nodes_no_regul : List of Numpy array
+            DESCRIPTION. List of nodes not regularized (Neumann BC)
+
+        """
+        K = self.Stiffness(C)
+        dof_no_regul = self.conn[nodes_no_regul].ravel()
+        D = np.ones(self.ndof)
+        if nodes_no_regul is not None:
+            D[dof_no_regul] = 0
+            # m.PlotContourDispl(D, s=0, stype='mag')
+        Ddiag = sp.sparse.diags(D)
+        return K @ Ddiag @ K
+
     def TikoSprings(self, liste, l0=None, dim=2):
         """
         Builds a Laplacian like operator from bar elements.
@@ -2636,16 +2659,13 @@ class Mesh:
         for ie in self.e.keys():
             if ie in [3, 16, 10]:   # quadrangles
                 qua = np.vstack((qua, self.e[ie][:, :4]))
-                if ie in [16, 10]:
-                    pn = np.append(pn, self.e[ie].ravel())
+                pn = np.append(pn, self.e[ie].ravel())
             elif ie in [2, 9]:  # triangles
                 tri = np.vstack((tri, self.e[ie][:, :3]))
-                if ie == 9:
-                    pn = np.append(pn, self.e[ie].ravel())
+                pn = np.append(pn, self.e[ie].ravel())
             elif ie in [1, 8]:  # lin and quad bars
                 bar = np.vstack((bar, self.e[ie][:, :2]))
-                if ie == 8:
-                    pn = np.append(pn, self.e[ie].ravel())
+                pn = np.append(pn, self.e[ie].ravel())
         # Join the 2 lists of vertices
         nn = tuple(n[qua]) + tuple(n[tri]) + tuple(n[bar])
         # Create the collection
@@ -2663,7 +2683,7 @@ class Mesh:
         # Return the matplotlib collection and the list of vertices
         return pc, nn, n
 
-    def Plot(self, U=None, s=1, n=None, plotnodes=True, **kwargs):
+    def Plot(self, U=None, s=1, n=None, plotnodes=False, **kwargs):
         """
         Plots the (possibly warped) mesh using Matplotlib Library.
         Inputs:
@@ -2712,6 +2732,7 @@ class Mesh:
             if self.dim == 2:
                 plt.axis('equal')
                 if plotnodes:
+                    print(n)
                     plt.plot(
                         n[:, 0],
                         n[:, 1],
@@ -2988,13 +3009,13 @@ class Mesh:
             vmax = vals[np.where(np.cumsum(hist)<clim*np.sum(hist))[0][-1]]
             # vmax = vals[np.where(hist > 5)[0][-1]]
             if symmetric:
-                levels = np.linspace(-vmax, vmax, 20)
+                levels = np.linspace(-vmax, vmax, 21)
             else:
-                levels = np.linspace(0, vmax, 20)
+                levels = np.linspace(0, vmax, 21)
             plt.tricontourf(triangulation, EVM, list(levels), alpha=alpha, cmap=cmap)
             plt.axis("off")
             plt.axis("equal")
-            plt.colorbar()
+            plt.colorbar() #location='bottom')
         
         if n is None:
             n = self.n.copy()
@@ -3339,8 +3360,9 @@ class Mesh:
             rm, = np.where(~inside[je])
             for js in self.cell_sets.keys():
                 self.cell_sets[js][je] = np.setdiff1d(self.cell_sets[js][je], rm)
-            for jd in self.cell_data.keys():
-                self.cell_data[jd][je] = np.setdiff1d(self.cell_data[jd][je], rm)
+            if hasattr(self, 'cell_data'):
+                for jd in self.cell_data.keys():
+                    self.cell_data[jd][je] = np.setdiff1d(self.cell_data[jd][je], rm)
 
     def RemoveElemsInsideRoi(self, roi, cam=None):
         """
@@ -4060,6 +4082,7 @@ class Mesh:
             Fbc = F - K@U
             Fr = Fbc[keepdof]
             Kr = K[np.ix_(keepdof, keepdof)]
+            print(rmdof)
         else:
             C = LAG[0]
             ud = LAG[1]

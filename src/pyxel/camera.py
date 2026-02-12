@@ -66,10 +66,12 @@ class Camera:
             same image but with a bining of NSCALE. 
         """
         cam = Camera(self.dim)
-        cam.K = self.K / 2 ** nscale
-        cam.D = self.D
-        cam.R = self.R
-        cam.T = self.T
+        cam.K = self.K.copy()
+        cam.K[0, 0] /= 2 ** nscale
+        cam.K[1, 1] /= 2 ** nscale
+        cam.D = self.D.copy()
+        cam.R = self.R.copy()
+        cam.T = self.T.copy()
         return cam
 
     def set_p(self, pvec, p='extrinsic'):

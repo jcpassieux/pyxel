@@ -18,8 +18,15 @@ f.GaussianFilter(0.8)
 
 f.Plot()
 
-m, cam = px.MeshFromImage(f, 128, 5, appls=0.5, typel='tri')
+m, cam = px.MeshFromImage(f, 128, 8, appls=0.5, typel='tri')
 
 m.Plot()
 
 px.PlotMeshImage(f, m, cam)
+
+plt.subplot(1, 2, 1)
+f.Plot()
+plt.axis('off')
+plt.subplot(1, 2, 2)
+m.Plot()
+plt.axis('off')

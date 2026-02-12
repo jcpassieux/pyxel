@@ -271,6 +271,9 @@ class Image:
         plt.show()
         return rs
 
+    def Crop(self, roi):
+        self.pix = self.pix[roi[0, 1]:roi[1, 1], roi[0, 0]:roi[1, 0]]
+
 #%%
 
 class Volume:

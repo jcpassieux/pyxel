@@ -14,12 +14,12 @@ from .camera import Camera, CameraVol
 from .mesh import Mesh
 from skimage import measure
 
-from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
-# from CGAL.CGAL_Mesh_3 import Mesh_3_Complex_3_in_triangulation_3
-from CGAL.CGAL_Mesh_3 import Polyhedral_mesh_domain_3
-from CGAL.CGAL_Mesh_3 import Mesh_3_parameters
-from CGAL.CGAL_Mesh_3 import Default_mesh_criteria
-from CGAL import CGAL_Mesh_3
+# from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
+# # from CGAL.CGAL_Mesh_3 import Mesh_3_Complex_3_in_triangulation_3
+# from CGAL.CGAL_Mesh_3 import Polyhedral_mesh_domain_3
+# from CGAL.CGAL_Mesh_3 import Mesh_3_parameters
+# from CGAL.CGAL_Mesh_3 import Default_mesh_criteria
+# from CGAL import CGAL_Mesh_3
 
 import meshio
 import os
@@ -131,7 +131,7 @@ def OpenHolePlate(box, r, cpos, t, Nr, Nl):
         m.n = m.n[:, ::-1]
     return m
 
-def OpenHolePlateUnstructured(box, r, cpos, lc, lf):
+def OpenHolePlateUnstructured(box, r, cpos, lc, lf, quad=False):
     """
     Builds an unstructured mesh for an openhole plate
     
@@ -172,6 +172,8 @@ def OpenHolePlateUnstructured(box, r, cpos, lc, lf):
     gmsh.model.geo.addCurveLoop([1, 2, 3, 4, 5, 6], 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
     gmsh.model.geo.synchronize()
+    if quad:
+        gmsh.option.setNumber('Mesh.ElementOrder', 2)
     gmsh.model.mesh.generate(2)
     gmsh.write("mesh.msh")
     gmsh.finalize()
@@ -908,85 +910,86 @@ Author: Ali Rouwane
 # https://pypi.org/project/cgal/
 
 
-def SurfaceToOffFile(verts, faces, filename):
-    """
-    Surface (vertices and faces) to offset file
-    """
-    with open(filename+".off", "w") as f:
-        f.write('OFF\n')
-        f.write(str(verts.shape[0])+' '+str(faces.shape[0])+' '+str(0)+'\n\n')
-        # loop over nodes
-        for i in range(verts.shape[0]):
-            f.write(str(verts[i,0])+' '+str(verts[i,1])+' '+str(verts[i,2])+'\n')
-        # loop over triangles
-        for i in range(faces.shape[0]):
-            f.write('3  '+str(faces[i,0])+' '+str(faces[i,1])+' '+str(faces[i,2])+'\n')
-        f.write(' ')
+# def SurfaceToOffFile(verts, faces, filename):
+#     """
+#     Surface (vertices and faces) to offset file
+#     """
+#     with open(filename+".off", "w") as f:
+#         f.write('OFF\n')
+#         f.write(str(verts.shape[0])+' '+str(faces.shape[0])+' '+str(0)+'\n\n')
+#         # loop over nodes
+#         for i in range(verts.shape[0]):
+#             f.write(str(verts[i,0])+' '+str(verts[i,1])+' '+str(verts[i,2])+'\n')
+#         # loop over triangles
+#         for i in range(faces.shape[0]):
+#             f.write('3  '+str(faces[i,0])+' '+str(faces[i,1])+' '+str(faces[i,2])+'\n')
+#         f.write(' ')
 
 
-def MeshFromSurface(verts, faces, facet_size, cell_size, facet_angle=30):
-    """
-    Returns a meshio object mesh
-    """
-    offSurfFile = 'temp-off-file'
+# def MeshFromSurface(verts, faces, facet_size, cell_size, facet_angle=30):
+#     """
+#     Returns a meshio object mesh
+#     """
+#     offSurfFile = 'temp-off-file'
 
-    SurfaceToOffFile(verts, faces, offSurfFile)
+#     SurfaceToOffFile(verts, faces, offSurfFile)
 
-    # Create input polyhedron as an offset file
-    polyhedron = Polyhedron_3(offSurfFile+'.off')
-    os.remove(offSurfFile + '.off')
+#     # Create input polyhedron as an offset file
+#     polyhedron = Polyhedron_3(offSurfFile+'.off')
+#     os.remove(offSurfFile + '.off')
 
-    # Create domain
-    domain = Polyhedral_mesh_domain_3(polyhedron)
-    params = Mesh_3_parameters()
+#     # Create domain
+#     domain = Polyhedral_mesh_domain_3(polyhedron)
+#     params = Mesh_3_parameters()
 
-    # // Mesh criteria
-    # Mesh_criteria criteria(facet_angle=30, facet_size=0.1,
-    #                        facet_distance=0.025,
-    #                        cell_radius_edge_ratio=2, cell_size=0.1)
-    # Mesh criteria (no cell_size set)
-    criteria = Default_mesh_criteria()
-    criteria.facet_angle(facet_angle).facet_size(facet_size).cell_size(cell_size) 
-    # Mesh generation
-    c3t3 = CGAL_Mesh_3.make_mesh_3(domain, criteria, params)
+#     # // Mesh criteria
+#     # Mesh_criteria criteria(facet_angle=30, facet_size=0.1,
+#     #                        facet_distance=0.025,
+#     #                        cell_radius_edge_ratio=2, cell_size=0.1)
+#     # Mesh criteria (no cell_size set)
+#     criteria = Default_mesh_criteria()
+#     criteria.facet_angle(facet_angle).facet_size(facet_size).cell_size(cell_size) 
+#     # Mesh generation
+#     c3t3 = CGAL_Mesh_3.make_mesh_3(domain, criteria, params)
 
-    c3t3.output_to_medit(offSurfFile+'.mesh')
+#     c3t3.output_to_medit(offSurfFile+'.mesh')
 
-    feMesh = meshio.read(offSurfFile+'.mesh')
-    os.remove(offSurfFile+'.mesh')
-    return feMesh
+#     feMesh = meshio.read(offSurfFile+'.mesh')
+#     os.remove(offSurfFile+'.mesh')
+#     return feMesh
 
 
 def MeshFromImage3D(f, thrs=128, facet_size=8, cell_size=8):
-    """
-    Builds a mesh from a graylevel volume.
+    return None
+#     """
+#     Builds a mesh from a graylevel volume.
 
-    Parameters
-    ----------
-    f : NUMPY ARRAY (0 255 graylevel pixel map)
-        255: inside, 0: outside the domain to mesh
-    facet_size : FLOAT
-    cell_size : FLOAT
+#     Parameters
+#     ----------
+#     f : NUMPY ARRAY (0 255 graylevel pixel map)
+#         255: inside, 0: outside the domain to mesh
+#     facet_size : FLOAT
+#     cell_size : FLOAT
 
-    Returns
-    -------
-    m : PYXEL.MESH
-        mesh of the domain where f equals to 0
-    cam : PYXEL.CAMERAVOL
+#     Returns
+#     -------
+#     m : PYXEL.MESH
+#         mesh of the domain where f equals to 0
+#     cam : PYXEL.CAMERAVOL
 
-    """
-    pix = f.pix
-    pix[:, :, 0] = 0
-    pix[:, :, -1] = 0
-    pix[:, 0, :] = 0
-    pix[:, -1, :] = 0
-    pix[0, :, :] = 0
-    pix[-1, :, :] = 0
-    verts, faces, _ , _ = measure.marching_cubes(pix, level=thrs, spacing=(1,1,1), allow_degenerate=False) 
-    mesh = MeshFromSurface(verts, faces, facet_size=facet_size, cell_size=facet_size)
-    output_mesh = 'tmp.vtk'
-    mesh.write(output_mesh)
-    m = ReadMesh('tmp.vtk', 3)
-    os.remove('tmp.vtk')
-    cam = CameraVol([1, 0, 0, 0, 0, 0, 0])
-    return m, cam
+#     """
+#     pix = f.pix
+#     pix[:, :, 0] = 0
+#     pix[:, :, -1] = 0
+#     pix[:, 0, :] = 0
+#     pix[:, -1, :] = 0
+#     pix[0, :, :] = 0
+#     pix[-1, :, :] = 0
+#     verts, faces, _ , _ = measure.marching_cubes(pix, level=thrs, spacing=(1,1,1), allow_degenerate=False) 
+#     mesh = MeshFromSurface(verts, faces, facet_size=facet_size, cell_size=facet_size)
+#     output_mesh = 'tmp.vtk'
+#     mesh.write(output_mesh)
+#     m = ReadMesh('tmp.vtk', 3)
+#     os.remove('tmp.vtk')
+#     cam = CameraVol([1, 0, 0, 0, 0, 0, 0])
+#     return m, cam

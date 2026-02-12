@@ -32,8 +32,8 @@ fy = 0.0
 right_box = px.PointCloud2Box(m.n[m.SelectEndLine('right', plot=True)])
 mb = m.BuildBoundaryMesh()
 mb.RemoveElemsOutsideRoi(right_box)
-# m.Plot()
-# mb.Plot(edgecolor='r')
+m.Plot()
+mb.Plot(edgecolor='r')
 mb.GaussIntegration()
 F = mb.wdetJ @ mb.phix * fx + mb.wdetJ @ mb.phiy * fy
 
