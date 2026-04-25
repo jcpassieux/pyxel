@@ -46,8 +46,8 @@ U, RF = m.SolveElastic(K, BC, LOAD=[])
 m.Plot(alpha=0.1)
 m.Plot(U, 10)
 m.PlotContourDispl(U, s=10, plotmesh=False)
-m.PlotContourStrain(U, s=10, clim=[-0.02, 0.02], cmap='RdBu', plotmesh=False)
-m.PlotContourStress(U, C, clim=[-0.02, 0.02], cmap='RdBu', plotmesh=False)
+m.PlotContourStrain(U, s=10, cmap='RdBu', plotmesh=False)
+m.PlotContourStress(U, C, cmap='RdBu', plotmesh=False)
 
 # %% Post-processing > Paraview
 

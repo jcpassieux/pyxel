@@ -37,7 +37,8 @@ mb.Plot(edgecolor='r')
 mb.GaussIntegration()
 F = mb.wdetJ @ mb.phix * fx + mb.wdetJ @ mb.phiy * fy
 
-U, RF = m.SolveElastic(K, BC, F)
+Kd, Fd, Ud = m.ApplyDirichlet(K, BC)
+U = m.LinearSolver(Kd, F, Fd)
 
 m.Plot(U, 1)
 m.PlotContourDispl(U)

@@ -1878,24 +1878,64 @@ class Mesh:
             # repdof = self.conn[e, 0]
             xn = self.n[e, 0]
             yn = self.n[e, 1]
-            for i in range(len(xg)):
-                dxdr = xn @ dN_xi[i, :]
-                dydr = yn @ dN_xi[i, :]
-                dxds = xn @ dN_eta[i, :]
-                dyds = yn @ dN_eta[i, :]
-                detJ = dxdr * dyds - dxds * dydr
-                wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
-                dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi[i, :]\
-                         + (-dydr / detJ)[:, np.newaxis] * dN_eta[i, :]
-                dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi[i, :]\
-                         + (dxdr / detJ)[:, np.newaxis] * dN_eta[i, :]
-                repnzv = np.arange(ne * nfun) + i * ne * nfun
-                col[repnzv] = e.ravel()  # repdof.ravel()
-                row[repnzv] = np.tile(np.arange(ne)+i*ne, [nfun, 1]).T.ravel()
-                val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
-                valx[repnzv] = dphidx.ravel()
-                valy[repnzv] = dphidy.ravel()
-            return col, row, val, valx, valy, wdetJ
+            if self.n.shape[1] == 3:
+                zn = self.n[e, 2]
+                valz = np.zeros(nzv)
+                for i in range(len(xg)):
+                    dxdr = xn @ dN_xi[i, :]
+                    dydr = yn @ dN_xi[i, :]
+                    dzdr = zn @ dN_xi[i, :]
+                    dxds = xn @ dN_eta[i, :]
+                    dyds = yn @ dN_eta[i, :]
+                    dzds = zn @ dN_eta[i, :]
+                    cx = dydr * dzds - dzdr * dyds
+                    cy = dzdr * dxds - dxdr * dzds
+                    cz = dxdr * dyds - dydr * dxds
+                    detJ = np.sqrt(cx**2 + cy**2 + cz**2)
+                    wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
+                    # produits scalaires
+                    a11 = dxdr*dxdr + dydr*dydr + dzdr*dzdr   # a.a
+                    a12 = dxdr*dxds + dydr*dyds + dzdr*dzds   # a.b
+                    a22 = dxds*dxds + dyds*dyds + dzds*dzds   # b.b
+                    # determinant de JTJ (2x2)
+                    detJTJ = a11 * a22 - a12 * a12
+                    # inverse de JTJ
+                    inv11 = a22 / detJTJ
+                    inv12 = -a12 / detJTJ
+                    inv22 = a11 / detJTJ
+                    # coefficients pour combinaison linéaire
+                    c1 = inv11[:, None] * dN_xi[i, :] + inv12[:, None] * dN_eta[i, :]
+                    c2 = inv12[:, None] * dN_xi[i, :] + inv22[:, None] * dN_eta[i, :]
+                    dphidx = dxdr[:, None] * c1 + dxds[:, None] * c2
+                    dphidy = dydr[:, None] * c1 + dyds[:, None] * c2
+                    dphidz = dzdr[:, None] * c1 + dzds[:, None] * c2
+                    repnzv = np.arange(ne * nfun) + i * ne * nfun
+                    col[repnzv] = e.ravel()
+                    row[repnzv] = np.tile(np.arange(ne)+i*ne, [nfun, 1]).T.ravel()
+                    val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
+                    valx[repnzv] = dphidx.ravel()
+                    valy[repnzv] = dphidy.ravel()
+                    valz[repnzv] = dphidz.ravel()
+                    return col, row, val, valx, valy, valz, wdetJ
+            else:
+                for i in range(len(xg)):
+                    dxdr = xn @ dN_xi[i, :]
+                    dydr = yn @ dN_xi[i, :]
+                    dxds = xn @ dN_eta[i, :]
+                    dyds = yn @ dN_eta[i, :]
+                    detJ = dxdr * dyds - dxds * dydr
+                    wdetJ[np.arange(ne) + i * ne] = abs(detJ) * wg[i]
+                    dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi[i, :]\
+                             + (-dydr / detJ)[:, np.newaxis] * dN_eta[i, :]
+                    dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi[i, :]\
+                             + (dxdr / detJ)[:, np.newaxis] * dN_eta[i, :]
+                    repnzv = np.arange(ne * nfun) + i * ne * nfun
+                    col[repnzv] = e.ravel()  # repdof.ravel()
+                    row[repnzv] = np.tile(np.arange(ne)+i*ne, [nfun, 1]).T.ravel()
+                    val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
+                    valx[repnzv] = dphidx.ravel()
+                    valy[repnzv] = dphidy.ravel()
+                    return col, row, val, valx, valy, wdetJ
         else:   # 3D elements
             xg, yg, zg, wg, N, Ndx, Ndy, Ndz = ShapeFunctions(et)
             phi = N(xg, yg, zg)
@@ -2104,6 +2144,33 @@ class Mesh:
                  + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 0]) @ m.dphixdx
                  )
         return K
+
+    def ComputeInternalForce(self, Sn, Ss):
+        """
+        Compute Internal force vector from Stress at Gauss Points
+
+        Parameters
+        ----------
+        Sn, Ss : NUMPY.NDARRAY
+            Normal and Shear Stress matrices.
+
+        """
+        if self.dim == 3:
+            Bxy = self.dphixdy + self.dphiydx
+            Bxz = self.dphixdz + self.dphizdx
+            Byz = self.dphiydz + self.dphizdy
+            Fint = (self.dphixdx.T @ (self.wdetJ * Sn[:, 0])
+                    + self.dphiydy.T @ (self.wdetJ * Sn[:, 1])
+                    + self.dphizdz.T @ (self.wdetJ * Sn[:, 2])
+                    + Bxy.T @ (self.wdetJ * Ss[:, 0])
+                    + Bxz.T @ (self.wdetJ * Ss[:, 1])
+                    + Byz.T @ (self.wdetJ * Ss[:, 2]))
+        else:
+            Bxy = self.dphixdy + self.dphiydx
+            Fint = (self.dphixdx.T @ (self.wdetJ * Sn[:, 0])
+                    + self.dphiydy.T @ (self.wdetJ * Sn[:, 1])
+                    + Bxy.T @ (self.wdetJ * Ss[:, 0]))
+        return Fint
 
     def StiffnessAxi(self, hooke):
         """Assembles Stiffness Operator"""
@@ -2885,8 +2952,8 @@ class Mesh:
         plt.colorbar()
         plt.show()
 
-    def PlotContourDispl(self, U=None, n=None, s=1.0, stype='comp',
-                         newfig=True, plotmesh=True, cmap='RdBu', **kwargs):
+    def PlotContourDispl(self, V=None, n=None, s=1.0, stype='comp',
+                         newfig=True, plotmesh=True, cmap='RdBu', clim=1., **kwargs):
         """
         Plots the displacement field using Matplotlib Library.
 
@@ -2905,6 +2972,8 @@ class Mesh:
              The default is 'comp'.
         newfig : BOOL
             if TRUE plot in a new figure (default)
+        clim : Float
+            fraction of the maximum value
         **kwargs : TYPE
             DESCRIPTION.
 
@@ -2914,15 +2983,17 @@ class Mesh:
 
         """
         plot_y = True
-        if self.ndof % len(U):
-            raise Exception('Problem: number of dofs in U ='
-                            + ' %d and number of dof in the mesh = %d'
-                            % (len(U), self.ndof))
-        else:
-            V = np.zeros(self.ndof)
-            V[:len(U)] = U
-            if self.ndof != len(U):
-                plot_y = False
+        if self.conn.shape[1] == 1:
+            plot_y = False
+        # if self.ndof % len(U):
+        #     raise Exception('Problem: number of dofs in U ='
+        #                     + ' %d and number of dof in the mesh = %d'
+        #                     % (len(U), self.ndof))
+        # else:
+        #     V = np.zeros(self.ndof)
+        #     V[:len(U)] = U
+        #     if self.ndof != len(U):
+        #         plot_y = False
         if n is None:
             n = self.n.copy()
             n += V[self.conn] * s  # s: amplification scale factor
@@ -2938,11 +3009,18 @@ class Mesh:
                 triangles = np.vstack((triangles, self.e[ie][:, :3]))
         alpha = kwargs.pop("alpha", 1)
         if stype == 'mag':
-            Vmag = np.sqrt(V[self.conn[:, 0]]**2 + V[self.conn[:, 1]]**2)
+            if plot_y:
+                Vmag = np.sqrt(V[self.conn[:, 0]]**2 + V[self.conn[:, 1]]**2)
+            else:
+                Vmag = abs(V[self.conn[:, 0]])
             if newfig:
                 plt.figure()
+            vmax = np.max(abs(Vmag)) * clim
+            if vmax == 0:
+                vmax = 1e-8
+            levels = np.linspace(-vmax, vmax, 21)
             plt.tricontourf(n[:, 0], n[:, 1], triangles, Vmag, 20,
-                            alpha=alpha, cmap=cmap)
+                            alpha=alpha, cmap=cmap, levels=levels)
             plt.colorbar()
             if plotmesh:
                 self.Plot(n=n, alpha=0.1)
@@ -2951,8 +3029,13 @@ class Mesh:
             # plt.title("Magnitude")
         else:
             plt.figure()
+            vmax = np.max(abs(V[self.conn[:, 0]])) * clim
+            if vmax == 0:
+                vmax = 1e-8
+            levels = np.linspace(-vmax, vmax, 21)
+            print(vmax)
             plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 0]],
-                            20, alpha=alpha, cmap=cmap)
+                            20, alpha=alpha, cmap=cmap, levels=levels)
             if plotmesh:
                 self.Plot(n=n, alpha=0.1)
             plt.axis('equal')
@@ -2961,8 +3044,12 @@ class Mesh:
             plt.colorbar()
             if plot_y:
                 plt.figure()
+                vmax = np.max(abs(V[self.conn[:, 1]])) * clim
+                if vmax == 0:
+                    vmax = 1e-8 
+                levels = np.linspace(-vmax, vmax, 21)
                 plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 1]],
-                                20, alpha=alpha, cmap=cmap)
+                                20, alpha=alpha, cmap=cmap, levels=levels)
                 plt.colorbar()
                 if plotmesh:
                     self.Plot(n=n, alpha=0.1)
@@ -2996,6 +3083,8 @@ class Mesh:
             The default is 'comp'.
         newfigure : BOOL
             if TRUE plot in a new figure (default)
+        clim : Float
+            Fraction of the maximum value of the field
         **kwargs : TYPE
             DESCRIPTION.
 
@@ -3004,6 +3093,15 @@ class Mesh:
         None.
 
         """
+        
+        if len(Fn) == self.npg:
+            print('TOTO')
+            # is the field is given at Gauss points
+            Fn = self.GP2DOF(Fn)
+            Fn = self.DOF2Nodes(Fn)
+            Fs = self.GP2DOF(Fs)
+            Fs = self.DOF2Nodes(Fs)
+        
         def plot_scalar_field(EVM, symmetric=True):
             hist, vals = np.histogram(abs(EVM), 100)
             vmax = vals[np.where(np.cumsum(hist)<clim*np.sum(hist))[0][-1]]
@@ -3759,40 +3857,47 @@ class Mesh:
                 plt.plot(self.n[nset, 0], self.n[nset, 1], self.n[nset, 2], "ro")
         return nset
 
-    def SelectCircle(self):
+    def SelectCircle(self, xc=None, r=None):
         """
         Selection of the nodes around a circle defined by 3 nodes.
         """
-        plt.figure()
-        self.Plot()
-        full_screen()
-        plt.title("Select 3 points on a circle... and press enter")
-        pts1 = np.array(plt.ginput(3, timeout=0))
-        plt.close()
-        n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
-        n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
-        n3 = np.argmin(np.linalg.norm(self.n - pts1[2, :], axis=1))
-        pts1 = self.n[[n1, n2, n3], :]
-        meanu = np.mean(pts1, axis=0)
-        pts = pts1 - meanu
-        pts2 = pts ** 2
-        A = pts.T.dot(pts)
-        b = 0.5 * np.sum(pts.T.dot(pts2), axis=1)
-        cpos = np.linalg.solve(A, b)
-        R = np.sqrt(np.linalg.norm(cpos) ** 2 + np.sum(pts2) / pts.shape[0])
-        cpos += meanu
-        (nset,) = np.where(
-            np.sqrt(
-                abs(
-                    (self.n[:, 0] - cpos[0]) ** 2
-                    + (self.n[:, 1] - cpos[1]) ** 2
-                    - R ** 2
+        if xc is None:
+            # Manual selection
+            plt.figure()
+            self.Plot()
+            full_screen()
+            plt.title("Select 3 points on a circle... and press enter")
+            pts1 = np.array(plt.ginput(3, timeout=0))
+            plt.close()
+            n1 = np.argmin(np.linalg.norm(self.n - pts1[0, :], axis=1))
+            n2 = np.argmin(np.linalg.norm(self.n - pts1[1, :], axis=1))
+            n3 = np.argmin(np.linalg.norm(self.n - pts1[2, :], axis=1))
+            pts1 = self.n[[n1, n2, n3], :]
+            meanu = np.mean(pts1, axis=0)
+            pts = pts1 - meanu
+            pts2 = pts ** 2
+            A = pts.T.dot(pts)
+            b = 0.5 * np.sum(pts.T.dot(pts2), axis=1)
+            cpos = np.linalg.solve(A, b)
+            R = np.sqrt(np.linalg.norm(cpos) ** 2 + np.sum(pts2) / pts.shape[0])
+            cpos += meanu
+            (nset,) = np.where(
+                np.sqrt(
+                    abs(
+                        (self.n[:, 0] - cpos[0]) ** 2
+                        + (self.n[:, 1] - cpos[1]) ** 2
+                        - R ** 2
+                    )
                 )
+                < (R * 1e-2)
             )
-            < (R * 1e-2)
-        )
-        # self.Plot()
-        # plt.plot(self.n[nset,0],self.n[nset,1],'ro')
+            # self.Plot()
+            # plt.plot(self.n[nset,0],self.n[nset,1],'ro')
+        else:
+            # Automatic given center position and radius
+            if type(xc) == list:
+                xc = np.array(xc)
+            nset, = np.where(abs(np.linalg.norm(self.n - xc[np.newaxis], axis=1) - r) < r*1e-5 )
         return nset  # ,R
 
     def PlaneWave(self, T):
@@ -4013,13 +4118,190 @@ class Mesh:
         else:
             return MeshUnion(list_meshes, False)
 
-    def SolveElastic(self, K, BC, LOAD, LAG=None, Kfact=None, get_fact=False, distributed=True):
+    def ApplyNeumann(self, LOAD, distributed=True):
+        """
+        Assembles right hand side (generalised external force vector)
+
+        Parameters
+        ----------
+        LOAD : LIST or NUMPY.ARRAY
+            first option
+            [ [node_array, [ [dof, value], [dof, value] ] ] , ]
+            if multiple entry > summation
+            second option
+            F as the generalized force vector of size m.ndof
+        distributed : BOOL, optional
+            DESCRIPTION. 
+            TRUE (default) : apply specified surface traction to the 
+            edge elements (computation of a quadrature of surface forces)
+            FALSE : apply specified concentrated force to all nodes.
+        
+        Returns
+        -------
+        Fext : NUMPY.ARRAY vector of size number of dofs
+            generalised external force vector
+
+        """
+        F = np.zeros(self.ndof)
+        if distributed:
+            mb = self.BuildBoundaryMesh()
+            for ldi in LOAD:  # loop on the neumann BCs
+                nodes = ldi[0]
+                ddof_bool = np.zeros(len(self.n), dtype=int)
+                ddof_bool[nodes] = 1
+                for etype in mb.e.keys():
+                    keepel = np.where(np.sum(ddof_bool[mb.e[etype]], axis=1) == mb.e[etype].shape[1])
+                    mb.e[etype] = mb.e[etype][keepel]
+                mb.GaussIntegration()
+                for ldij in ldi[1]:  # loop on the space dims
+                    fv = ldij[1]
+                    if ldij[0] == 0:
+                        F += fv * mb.phix.T @ mb.wdetJ
+                    if ldij[0] == 1:
+                        F += fv * mb.phiy.T @ mb.wdetJ
+                    if ldij[0] == 2:
+                        F += fv * mb.phiz.T @ mb.wdetJ
+        else:
+            for ldi in LOAD:
+                nodes = ldi[0]
+                for j in range(len(ldi[1])):
+                    F[self.conn[nodes, ldi[1][j][0]]] += ldi[1][j][1]
+        return F
+
+    def ApplyDirichlet(self, K, BC, meth='penalty'):
+        """
+        Applying Dirichlet BC to stiffness matrix
+
+        Parameters
+        ----------
+        K : NUMPY ARRAY : PYXEL STIFFNESS MATRIX
+        BC : LIST
+            [ [node_array, [ [dof, value], [dof, value] ] ] , ]
+            if multiple entry > average
+        LAG : STRING
+            'penalty', 'lagrange', 'subs'
+
+        Returns
+        -------
+        Kr : SPARSE MATRIX
+            modified stiffness matrix
+
+        """
+        if BC is None:
+            return K, np.zeros(self.ndof), np.zeros(self.ndof)
+        
+        if meth == 'subs':
+            Ud = np.zeros(self.ndof)
+            rmdof = []
+            for bci in BC:
+                nodes = bci[0]
+                for j in range(len(bci[1])):
+                    Ud[self.conn[nodes, bci[1][j][0]]] = bci[1][j][1]
+                    rmdof += list(self.conn[nodes, bci[1][j][0]])
+            # for bci, numi in zip(BC, numb):
+            #     nodes = bci[0]
+            #     for j in range(len(bci[1])):
+            #         U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
+            #         # U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
+            #         rmdof += list(self.conn[nodes, bci[1][j][0]])
+            rep = np.setdiff1d(np.arange(self.ndof), rmdof)
+            Fd = np.zeros(self.ndof)
+            Fd[rep] = -(K@Ud)[rep]
+            val = np.ones(len(rmdof)) * np.mean(K.diagonal())
+            Kd = csr_matrix((val, (rmdof, rmdof)), shape=(self.ndof, self.ndof)).tolil()
+            Kd[np.ix_(rep, rep)] = K[np.ix_(rep, rep)]
+            Kd = Kd.tocsc()
+        else:
+            nrows = 0
+            row = []
+            col = []
+            val = []
+            Ud = np.zeros(self.ndof)
+            for bci in BC:
+                nodes = bci[0]
+                for j in range(len(bci[1])):
+                    row += list(np.arange(len(nodes)) + nrows)
+                    col += list(self.conn[nodes, bci[1][j][0]])
+                    val += [1., ] * len(nodes)
+                    Ud[self.conn[nodes, bci[1][j][0]]] = bci[1][j][1]
+                    nrows += len(nodes)
+            C = csr_matrix((val, (row, col)), shape=(nrows, self.ndof))
+            if meth == 'penalty':
+                k = np.max(K) * 1e5
+                Kd = K + k * C.T @ C
+                Fd = k * C.T @ C @ Ud
+            elif meth == 'lagrange':
+                Kd = bmat([[K, C.T], [C, None]]).tocsc()
+                Fd = np.hstack((np.zeros(self.ndof), C @ Ud))
+            else:
+                raise Exception('Unknown Dirichlet application method (penalty, lagrange or subs): ' + meth)
+        return Kd, Fd, Ud
+    
+    def LinearSolver(self, K, F_Neumann=None, F_Dirichlet=None, Kfact=None, get_fact=False, meth=None):
+        """
+        Linear solver
+
+        Parameters
+        ----------
+        K : TYPE
+            DESCRIPTION.
+        F_Neumann : TYPE, optional
+            DESCRIPTION. The default is None which corresponds to zeros
+        F_Dirichlet : TYPE, optional
+            DESCRIPTION. The default is None only F_neumann is used
+        Kfact : TYPE, optional
+            provide a LU factorisation
+        get_fact : BOOL, optional default False
+            set True to get the lu factorisation
+        meth : STRING
+            'lu' or 'cg' default depending on the number of dofs
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+
+        """
+        if F_Neumann is None:
+            F_Neumann = np.zeros(K.shape[0])
+        
+        if F_Dirichlet is not None:
+            if len(F_Neumann) == len(F_Dirichlet):
+                F = F_Neumann + F_Dirichlet
+            else:
+                # Lagrange multiplier method was used
+                F = F_Dirichlet.copy()
+                F[np.arange(len(F_Neumann))] += F_Neumann
+
+        else:
+            F = F_Neumann.copy()
+        
+        if meth is None:
+            if K.shape[0] > 5e5 and Kfact is None:
+                meth = 'cg'
+            else:
+                meth='lu'
+
+        if meth == 'cg':
+            eps_zero = 1e-5 * np.min(Kr.diagonal())
+            Mr = diags(1/(K.diagonal() + eps_zero))
+            U, info = splgl.cg(K, F, rtol=1e-5, M=Mr)
+        else:
+            if Kfact is None:
+                Kfact = splgl.splu(K)
+            U = Kfact.solve(F)
+
+        if get_fact:
+            return U, Kfact
+        else:
+            return U
+
+
+    def SolveElastic(self, K, BC, LOAD, meth='penalty', distributed=True):
         """
         Solving elasticity pb
         
         Parameters
         ----------
-        m : PYXEL MESH
         K : NUMPY ARRAY : PYXEL STIFFNESS MATRIX
         BC : LIST
             [ [node_array, [ [dof, value], [dof, value] ] ] , ]
@@ -4042,72 +4324,23 @@ class Mesh:
             
         """
         #Neumann
-        if type(LOAD) is list:
-            F = np.zeros(self.ndof)
-            for ldi in LOAD:
-                nodes = ldi[0]
-                for j in range(len(ldi[1])):
-                    F[self.conn[nodes, ldi[1][j][0]]] += ldi[1][j][1]
-                    if distributed:
-                        F[self.conn[nodes, ldi[1][j][0]]] /= len(nodes)
-        else:
-            F = LOAD.copy()
-
-        # if more than one Dirichlet BC for a single dof > average.
-        # bcnodes = np.hstack([bci[0] for bci in BC])
-        # _, idx, counts = np.unique(bcnodes, return_counts=True, return_inverse=True)
-        # counts = counts[idx]
-        # numb = []
-        # c = 0
-        # for bci in BC:
-        #     numb += [counts[c:(c+len(bci[0]))]]
-        #     c += len(bci[0])
+        Fext = self.ApplyNeumann(LOAD, distributed=distributed)
 
         # Dirichlet
-        if LAG is None:
-            U = np.zeros(self.ndof)
-            rmdof = []
-            for bci in BC:
-                nodes = bci[0]
-                for j in range(len(bci[1])):
-                    U[self.conn[nodes, bci[1][j][0]]] = bci[1][j][1]
-                    rmdof += list(self.conn[nodes, bci[1][j][0]])
-            # for bci, numi in zip(BC, numb):
-            #     nodes = bci[0]
-            #     for j in range(len(bci[1])):
-            #         U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
-            #         # U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
-            #         rmdof += list(self.conn[nodes, bci[1][j][0]])
-            keepdof = np.setdiff1d(np.arange(self.ndof), rmdof)
-            Fbc = F - K@U
-            Fr = Fbc[keepdof]
-            Kr = K[np.ix_(keepdof, keepdof)]
-            print(rmdof)
-        else:
-            C = LAG[0]
-            ud = LAG[1]
-            if not issparse(C):
-                C = coo_array(C)
-            Kr = bmat([[K, C.T], [C, None]])
-            Fr = np.hstack((F, ud))
+        Kd, Fd, Ud = self.ApplyDirichlet(K, BC, meth=meth)
 
-        if Kr.shape[0] > 5e5 and Kfact is None:
-            eps_zero = 1e-5 * np.min(Kr)
-            Mr = diags(1/(Kr.diagonal() + eps_zero))
-            Ur, info = splgl.cg(Kr, Fr, rtol=1e-5, M=Mr)
+        U = self.LinearSolver(Kd, Fext, Fd)
+        
+        if meth == 'lagrange':
+            U = U[:self.ndof]
+            R = U[-self.ndof]
+        elif meth == 'subs':
+            U += Ud
+            R = K@U - Fext
+        elif meth == 'penalty':
+            R = K@U - Fext
         else:
-            if Kfact is None:
-                Kfact = splgl.splu(Kr)
-            Ur = Kfact.solve(Fr)
-
-        if LAG:
-            R = Ur[-len(ud):]
-            U = Ur[:-len(ud)]
-        else:
-            U[keepdof] = Ur
-            R = K@U - F
-        if get_fact:
-            return U, R, Kfact
-        else:
-            return U, R
+                raise Exception('Unknown Dirichlet application method (penalty, lagrange or subs): ' + meth)
+            
+        return U, R
             

@@ -36,11 +36,11 @@ K = m.Stiffness(C)
 repu = m.SelectEndLine('bottom')
 BC = [[repu, [[0, 0], [1, 0], [2, 0]]]]
 
-# Dirichlet BC at y = 0.035 second dof only
+# Neumann BC at y = 0.035 second dof only
 repf = m.SelectEndLine('top')
-BC += [[repf, [[2, -0.001]]]]
+LOAD = [[repf, [[2, -1e-5]]]]
 
-U, RF = m.SolveElastic(K, BC, [])
+U, RF = m.SolveElastic(K, BC, LOAD)
 
 m.VTKSol('Sol3D_'+eltype, U)
 

@@ -15,6 +15,7 @@ import scipy.interpolate as spi
 import matplotlib.pyplot as plt
 from .utils import PlotMeshImage, full_screen
 from .vtktools import VTIWriter, PVDFile
+from .mesh import Mesh
 import cv2
 from skimage import io
 from warnings import warn
@@ -116,6 +117,25 @@ class Image:
         """Compute image dynamic"""
         g = self.pix.ravel()
         return max(g) - min(g)
+    
+    def Otsu(self, rg=256):
+        """
+        Compute Otsu threshold from an image
+
+        Args:
+            self.pix : image in pixels
+            rg: number of graylevel values (ex: 256 in 8 bits or 4096 in 16 bits)
+        Returns:
+            int: optimal Otsu threshold
+        """
+        hist, bins = np.histogram(self.pix.ravel(), bins=rg, range=(0, rg))
+        hist = hist.astype(float) / hist.sum()  # Normalisation
+        wf = np.cumsum(hist)
+        af = np.cumsum(hist * np.arange(len(hist))) / (wf + 1e-10)
+        ag = np.sum(hist * np.arange(len(hist)))
+        variance = (ag * wf - af) ** 2 / (wf * (1 - wf) + 1e-10)
+        variance[~np.isfinite(variance)] = 0  # avoid NaN/inf
+        return np.argmax(variance)
 
     def GaussianFilter(self, sigma=0.7):
         """Performs a Gaussian filter on image data.
@@ -385,22 +405,22 @@ class Volume:
         # df_dP = self.interp.grad(self.pix, P_coords)
         # return df_dP[0], df_dP[1], df_dP[2]
 
-    def Plot(self):
+    def Plot(self, **kwargs):
         """Plot Image"""
         nx, ny, nz = self.pix.shape
         plt.subplot(221)
         plt.imshow(self.pix[nx//2, :, :], cmap="gray",
-                   interpolation="none", origin="upper")
+                   interpolation="none", origin="upper", **kwargs)
         plt.xlabel('3')
         plt.ylabel('2')
         plt.subplot(223)
         plt.imshow(self.pix[:, ny//2, :], cmap="gray",
-                   interpolation="none", origin="upper")
+                   interpolation="none", origin="upper", **kwargs)
         plt.xlabel('3')
         plt.ylabel('1')
         plt.subplot(224)
         plt.imshow(self.pix[:, :, nz//2], cmap="gray",
-                   interpolation="none", origin="upper")
+                   interpolation="none", origin="upper", **kwargs)
         plt.xlabel('2')
         plt.ylabel('1')
         # plt.axis('off')
@@ -410,6 +430,19 @@ class Volume:
         """Compute image dynamic"""
         g = self.pix.ravel()
         return max(g) - min(g)
+
+    def Otsu(self, rg=256):
+        """
+        Compute Otsu threshold from an image
+
+        Args:
+            self.pix : image in pixels
+            rg: number of graylevel values (ex: 256 in 8 bits or 4096 in 16 bits)
+        Returns:
+            int: optimal Otsu threshold
+        """
+        from skimage.filters import threshold_otsu
+        return threshold_otsu(self.pix)
 
     def GaussianFilter(self, sigma=0.7):
         """Performs a Gaussian filter on image data. 
@@ -421,9 +454,9 @@ class Volume:
         from scipy.ndimage import gaussian_filter
         self.pix = gaussian_filter(self.pix, sigma)
 
-    def PlotHistogram(self):
+    def PlotHistogram(self, rg=255):
         """Plot Histogram of graylevels"""
-        plt.hist(self.pix.ravel(), bins=125, range=(0.0, 255), fc="k", ec="k")
+        plt.hist(self.pix.ravel(), bins=rg, range=(0.0, rg), fc="k", ec="k")
         plt.show()
 
     def SubSample(self, n):
@@ -433,20 +466,25 @@ class Volume:
         self.pix = downscale_local_mean(self.pix, (scale, scale, scale))
         self.SetOrigin(self.x0/scale, self.y0/scale, self.z0/scale)
 
-    def marching_cubes_stl(self, fname, thrsh=None, eps=0):
-        # CF Ali Rouwane's GitHub :
-        # https://github.com/arouwane/Image-based-Meshing-Tools
+    def MarchingCubes(self, thrsh=None, bg=0):
+        """
+        Build a STL file of the isosurface with given threshold
+        
+        inputs: 
+            thrsh (OPTIONAL): threshold (default Otsu)
+            bg (OPTIONAL): backgound color (default 0)
+        """
         if thrsh is None:
-            a, b = self.pix.min().astype('float'), self.pix.max().astype('float')
-            thrsh = a + 0.5*(a + b)
+            thrsh = self.Otsu()
+            print('Threshold = %d' % thrsh)
         # We extend the external boundary of the voxel domain
         # in order to get a closed watertight surface
         saved_x = self.pix[::(self.pix.shape[0] - 1), :, :]
         saved_y = self.pix[:, ::(self.pix.shape[0] - 1), :]
         saved_z = self.pix[:, :, ::(self.pix.shape[0] - 1)]
-        self.pix[::(self.pix.shape[0] - 1), :, :] = eps
-        self.pix[:, ::(self.pix.shape[1] - 1), :] = eps
-        self.pix[:, :, ::(self.pix.shape[2] - 1)] = eps
+        self.pix[::(self.pix.shape[0] - 1), :, :] = bg
+        self.pix[:, ::(self.pix.shape[1] - 1), :] = bg
+        self.pix[:, :, ::(self.pix.shape[2] - 1)] = bg
         # Extracting the surface using the Marching cubes algorithm
         from skimage.measure import marching_cubes
         verts, faces, _, _ = marching_cubes(
@@ -455,10 +493,5 @@ class Volume:
         self.pix[::(self.pix.shape[0] - 1), :, :] = saved_x
         self.pix[:, ::(self.pix.shape[1] - 1), :] = saved_y
         self.pix[:, :, ::(self.pix.shape[2] - 1)] = saved_z
-        # Export as .stl
-        from stl import mesh
-        data = np.empty(faces.shape[0], dtype=mesh.Mesh.dtype)
-        data['vectors'] = verts[faces]
-        m = mesh.Mesh(data, remove_empty_areas=True)
-        m.save(fname)
-        return m
+        e = {2: faces}
+        return Mesh(e, verts, 3)

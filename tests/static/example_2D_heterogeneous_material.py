@@ -74,7 +74,7 @@ rept = m.SelectEndLine('top', 1e-5)
 BC = [[repb, [[0, 0], [1, 0]]],   # setting all dof to zero on bottom line
       [rept, [[1, 0.1], ]]]       # setting y-dof of top line to 0.1
 
-u, r = m.SolveElastic(K, BC)
+u, r = m.SolveElastic(K, BC, [])
 m.Plot(u, 50)
 
 # %% Post-processing
@@ -89,7 +89,9 @@ m.PlotContourStress(u, hooke)
 
 # possibility to plot directly as gauss points
 EN, ES = m.StrainAtGP(u)
-plt.scatter(m.pgx, m.pgy, c=EN[:, 1], cmap="RdBu", s=1)
+gpfield = EN[:, 0]
+vmax = np.max(abs(gpfield))
+plt.scatter(m.pgx, m.pgy, c=gpfield, cmap="RdBu", s=1, vmin=-vmax, vmax=vmax)
 plt.colorbar()
 plt.axis('off')
 plt.axis('equal')

@@ -13,19 +13,12 @@ from .camera import Camera, CameraVol
 # from .image import Image
 from .mesh import Mesh
 from skimage import measure
-
-# from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
-# # from CGAL.CGAL_Mesh_3 import Mesh_3_Complex_3_in_triangulation_3
-# from CGAL.CGAL_Mesh_3 import Polyhedral_mesh_domain_3
-# from CGAL.CGAL_Mesh_3 import Mesh_3_parameters
-# from CGAL.CGAL_Mesh_3 import Default_mesh_criteria
-# from CGAL import CGAL_Mesh_3
-
 import meshio
 import os
-# from skimage.filters import gaussian
-# from skimage.io import imread
-# from skimage import measure
+
+from skimage.filters import gaussian
+from skimage.io import imread
+from skimage import measure
 
 #%%
 
@@ -910,86 +903,118 @@ Author: Ali Rouwane
 # https://pypi.org/project/cgal/
 
 
-# def SurfaceToOffFile(verts, faces, filename):
-#     """
-#     Surface (vertices and faces) to offset file
-#     """
-#     with open(filename+".off", "w") as f:
-#         f.write('OFF\n')
-#         f.write(str(verts.shape[0])+' '+str(faces.shape[0])+' '+str(0)+'\n\n')
-#         # loop over nodes
-#         for i in range(verts.shape[0]):
-#             f.write(str(verts[i,0])+' '+str(verts[i,1])+' '+str(verts[i,2])+'\n')
-#         # loop over triangles
-#         for i in range(faces.shape[0]):
-#             f.write('3  '+str(faces[i,0])+' '+str(faces[i,1])+' '+str(faces[i,2])+'\n')
-#         f.write(' ')
+def SurfaceToOffFile(verts, faces, filename):
+    """
+    Surface (vertices and faces) to offset file
+    """
+    with open(filename+".off", "w") as f:
+        f.write('OFF\n')
+        f.write(str(verts.shape[0])+' '+str(faces.shape[0])+' '+str(0)+'\n\n')
+        # loop over nodes
+        for i in range(verts.shape[0]):
+            f.write(str(verts[i,0])+' '+str(verts[i,1])+' '+str(verts[i,2])+'\n')
+        # loop over triangles
+        for i in range(faces.shape[0]):
+            f.write('3  '+str(faces[i,0])+' '+str(faces[i,1])+' '+str(faces[i,2])+'\n')
+        f.write(' ')
 
 
-# def MeshFromSurface(verts, faces, facet_size, cell_size, facet_angle=30):
-#     """
-#     Returns a meshio object mesh
-#     """
-#     offSurfFile = 'temp-off-file'
+def MeshFromSurfaceCGAL(m, facet_size, cell_size, facet_angle=30):
+    """
+    Build a volume mesh from closed T3 surface using CGAL
+    """
+    from CGAL.CGAL_Polyhedron_3 import Polyhedron_3
+    # from CGAL.CGAL_Mesh_3 import Mesh_3_Complex_3_in_triangulation_3
+    from CGAL.CGAL_Mesh_3 import Polyhedral_mesh_domain_3
+    from CGAL.CGAL_Mesh_3 import Mesh_3_parameters
+    from CGAL.CGAL_Mesh_3 import Default_mesh_criteria
+    from CGAL import CGAL_Mesh_3
+    offSurfFile = 'temp-off-file'
 
-#     SurfaceToOffFile(verts, faces, offSurfFile)
+    verts = m.n.copy()
+    faces = m.e[2].copy()
+    SurfaceToOffFile(verts, faces, offSurfFile)
 
-#     # Create input polyhedron as an offset file
-#     polyhedron = Polyhedron_3(offSurfFile+'.off')
-#     os.remove(offSurfFile + '.off')
+    # Create input polyhedron as an offset file
+    polyhedron = Polyhedron_3(offSurfFile+'.off')
+    os.remove(offSurfFile + '.off')
 
-#     # Create domain
-#     domain = Polyhedral_mesh_domain_3(polyhedron)
-#     params = Mesh_3_parameters()
+    # Create domain
+    domain = Polyhedral_mesh_domain_3(polyhedron)
+    params = Mesh_3_parameters()
 
-#     # // Mesh criteria
-#     # Mesh_criteria criteria(facet_angle=30, facet_size=0.1,
-#     #                        facet_distance=0.025,
-#     #                        cell_radius_edge_ratio=2, cell_size=0.1)
-#     # Mesh criteria (no cell_size set)
-#     criteria = Default_mesh_criteria()
-#     criteria.facet_angle(facet_angle).facet_size(facet_size).cell_size(cell_size) 
-#     # Mesh generation
-#     c3t3 = CGAL_Mesh_3.make_mesh_3(domain, criteria, params)
+    # // Mesh criteria
+    # Mesh_criteria criteria(facet_angle=30, facet_size=0.1,
+    #                        facet_distance=0.025,
+    #                        cell_radius_edge_ratio=2, cell_size=0.1)
+    # Mesh criteria (no cell_size set)
+    criteria = Default_mesh_criteria()
+    criteria.facet_angle(facet_angle).facet_size(facet_size).cell_size(cell_size) 
+    # Mesh generation
+    c3t3 = CGAL_Mesh_3.make_mesh_3(domain, criteria, params)
 
-#     c3t3.output_to_medit(offSurfFile+'.mesh')
+    c3t3.output_to_medit(offSurfFile+'.mesh')
+    m3 = ReadMesh(offSurfFile+'.mesh', 3)
+    return m3
 
-#     feMesh = meshio.read(offSurfFile+'.mesh')
-#     os.remove(offSurfFile+'.mesh')
-#     return feMesh
+def MeshFromSurfaceGMSH(ms, facet_size=8, cell_size=8, facet_angle=40):
+    """
+    Build a volume mesh from closed surface using GMSH    
 
+    Parameters
+    ----------
+    ms : PYXEL.MESH
+        DESCRIPTION.
+    facet_size : TYPE
+    cell_size : TYPE
+    facet_angle : threshold to detect sharp edges
 
-def MeshFromImage3D(f, thrs=128, facet_size=8, cell_size=8):
-    return None
-#     """
-#     Builds a mesh from a graylevel volume.
+    Returns
+    -------
+    m : TYPE
+        DESCRIPTION.
 
-#     Parameters
-#     ----------
-#     f : NUMPY ARRAY (0 255 graylevel pixel map)
-#         255: inside, 0: outside the domain to mesh
-#     facet_size : FLOAT
-#     cell_size : FLOAT
-
-#     Returns
-#     -------
-#     m : PYXEL.MESH
-#         mesh of the domain where f equals to 0
-#     cam : PYXEL.CAMERAVOL
-
-#     """
-#     pix = f.pix
-#     pix[:, :, 0] = 0
-#     pix[:, :, -1] = 0
-#     pix[:, 0, :] = 0
-#     pix[:, -1, :] = 0
-#     pix[0, :, :] = 0
-#     pix[-1, :, :] = 0
-#     verts, faces, _ , _ = measure.marching_cubes(pix, level=thrs, spacing=(1,1,1), allow_degenerate=False) 
-#     mesh = MeshFromSurface(verts, faces, facet_size=facet_size, cell_size=facet_size)
-#     output_mesh = 'tmp.vtk'
-#     mesh.write(output_mesh)
-#     m = ReadMesh('tmp.vtk', 3)
-#     os.remove('tmp.vtk')
-#     cam = CameraVol([1, 0, 0, 0, 0, 0, 0])
-#     return m, cam
+    """
+    stl_file = "tmp.stl"
+    ms.Write(stl_file)
+    gmsh.initialize()
+    gmsh.option.setNumber("General.Terminal", 1)
+    gmsh.merge(stl_file)
+    forceParametrizablePatches = True
+    includeBoundary = True
+    curveAngle = 180
+    gmsh.model.mesh.classifySurfaces(
+        facet_angle * 3.14159 / 180.,
+        includeBoundary,
+        forceParametrizablePatches,
+        curveAngle * 3.14159 / 180.
+    )
+    gmsh.model.mesh.createGeometry()
+    surfaces = gmsh.model.getEntities(dim=2)
+    surface_tags = [s[1] for s in surfaces]
+    sl = gmsh.model.geo.addSurfaceLoop(surface_tags)
+    gmsh.model.geo.addVolume([sl])
+    gmsh.model.geo.synchronize()
+    # if facet_size == cell_size:
+    #     gmsh.option.setNumber("Mesh.CharacteristicLengthMin", facet_size)
+    #     gmsh.option.setNumber("Mesh.CharacteristicLengthMax", facet_size)
+    # else:
+    gmsh.model.mesh.field.add("Distance", 1)
+    gmsh.model.mesh.field.setNumbers(1, "FacesList", surface_tags)
+    gmsh.model.mesh.field.add("Threshold", 2)
+    gmsh.model.mesh.field.setNumber(2, "InField", 1)
+    gmsh.model.mesh.field.setNumber(2, "SizeMin", facet_size)
+    gmsh.model.mesh.field.setNumber(2, "SizeMax", cell_size)
+    gmsh.model.mesh.field.setNumber(2, "DistMin", 0)
+    gmsh.model.mesh.field.setNumber(2, "DistMax", cell_size)
+    gmsh.model.mesh.field.setAsBackgroundMesh(2)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthExtendFromBoundary", 0)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthFromPoints", 0)
+    # gmsh.option.setNumber("Mesh.CharacteristicLengthFromCurvature", 0)
+    gmsh.model.mesh.generate(3)
+    gmsh.write("output.msh")
+    gmsh.finalize()
+    m = ReadMesh('output.msh', 3)
+    os.remove('output.msh')
+    os.remove('tmp.stl')
+    return m
