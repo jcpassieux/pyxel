@@ -46,7 +46,7 @@ def NonLinearHooke(p, En, Es):
 
 
 box = np.array([[0, 0], [1, 1]])
-m = px.OpenHolePlateUnstructured(box, 0.2, [0.5, 0.5], 0.05, 0.03)
+m = px.OpenHolePlateUnstructured(box, 0.2, [0.5, 0.5], 0.05, 0.03, quad=True)
 m.Connectivity()
 m.GaussIntegration()
 

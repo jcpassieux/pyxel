@@ -510,7 +510,7 @@ def SubTriGmsh(n):
 
 
 # %%  Shape functions
-def ShapeFunctions(eltype):
+def ShapeFunctions(eltype, subint=False):
     """For any type of 2D elements, gives the quadrature rule and
     the shape functions and their derivative"""
     if eltype == 1:
@@ -592,9 +592,10 @@ def ShapeFunctions(eltype):
             return 0.25 * np.concatenate(
                 (x - 1, -1 - x, 1 + x, 1 - x)).reshape((4, len(x))).T
 
-        
-        # deg = 1  # reduced integration 1 gp
-        deg = 2  # full integration 4 gp
+        if subint:
+            deg = 1  # reduced integration 1 gp            
+        else:
+            deg = 2  # full integration 4 gp
         xg, wg = leggauss(deg)
         xg, yg = np.meshgrid(xg, xg)
         xg = xg.ravel()
@@ -782,7 +783,10 @@ def ShapeFunctions(eltype):
                                            (1-x)*(1-y),  (1+x)*(1-y),
                                            (1+x)*(1+y),  (1-x)*(1+y))
                                           ).reshape((8, len(x))).T
-        deg = 2
+        if subint:
+            deg = 1
+        else:
+            deg = 2
         xg, wg = leggauss(deg)
         xg, yg, zg = np.meshgrid(xg, xg, xg)
         xg = xg.ravel()
@@ -1821,10 +1825,10 @@ class Mesh:
         self.pgy = self.phiy.dot(qx)
         self.pgz = self.phiz.dot(qx)
 
-    def __GaussIntegElem(self, e, et):
+    def __GaussIntegElem(self, e, et, subint=False):
         # parent element
         if et in (1, 8):  # bar element
-            xg, wg, N, Ndx = ShapeFunctions(et)
+            xg, wg, N, Ndx = ShapeFunctions(et, subint=subint)
             phi = N(xg)
             dN_xi = Ndx(xg)
             # elements
@@ -1860,7 +1864,7 @@ class Mesh:
                 valy[repnzv] = dphidy.ravel()
             return col, row, val, valx, valy, wdetJ
         elif et in (2, 3, 9, 10, 16):   # 2D elements
-            xg, yg, wg, N, Ndx, Ndy = ShapeFunctions(et)
+            xg, yg, wg, N, Ndx, Ndy = ShapeFunctions(et, subint=subint)
             phi = N(xg, yg)
             dN_xi = Ndx(xg, yg)
             dN_eta = Ndy(xg, yg)
@@ -1916,7 +1920,7 @@ class Mesh:
                     valx[repnzv] = dphidx.ravel()
                     valy[repnzv] = dphidy.ravel()
                     valz[repnzv] = dphidz.ravel()
-                    return col, row, val, valx, valy, valz, wdetJ
+                return col, row, val, valx, valy, valz, wdetJ
             else:
                 for i in range(len(xg)):
                     dxdr = xn @ dN_xi[i, :]
@@ -1935,9 +1939,9 @@ class Mesh:
                     val[repnzv] = np.tile(phi[i, :], [ne, 1]).ravel()
                     valx[repnzv] = dphidx.ravel()
                     valy[repnzv] = dphidy.ravel()
-                    return col, row, val, valx, valy, wdetJ
+                return col, row, val, valx, valy, wdetJ
         else:   # 3D elements
-            xg, yg, zg, wg, N, Ndx, Ndy, Ndz = ShapeFunctions(et)
+            xg, yg, zg, wg, N, Ndx, Ndy, Ndz = ShapeFunctions(et, subint=subint)
             phi = N(xg, yg, zg)
             dN_xi = Ndx(xg, yg, zg)
             dN_eta = Ndy(xg, yg, zg)
@@ -1990,8 +1994,17 @@ class Mesh:
                 valz[repnzv] = dphidz.ravel()
             return col, row, val, valx, valy, valz, wdetJ
 
-    def GaussIntegration(self):
-        """Builds a Gauss integration scheme"""
+    def GaussIntegration(self, subint=False):
+        """
+        Builds a Gauss integration scheme
+
+        Parameters
+        ----------
+        subint : BOOL (default False)
+            for QUA4 and HEX8 element types
+            use 1 GP if True full integration otherwise
+        
+        """
         print('Gauss Integration.')
         if self.dim == 3:
             self.wdetJ = np.array([])
@@ -2004,7 +2017,7 @@ class Mesh:
             npg = 0
             for je in self.e.keys():
                 colj, rowj, valj, valxj, valyj, valzj, wdetJj = self.__GaussIntegElem(
-                    self.e[je], je)
+                    self.e[je], je, subint=subint)
                 col = np.append(col, colj)
                 row = np.append(row, rowj + npg)
                 val = np.append(val, valj)
@@ -2062,7 +2075,7 @@ class Mesh:
             npg = 0
             for je in self.e.keys():
                 colj, rowj, valj, valxj, valyj, wdetJj = self.__GaussIntegElem(
-                    self.e[je], je)
+                    self.e[je], je, subint=subint)
                 col = np.append(col, colj)
                 row = np.append(row, rowj + npg)
                 val = np.append(val, valj)
