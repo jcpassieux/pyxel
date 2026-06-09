@@ -89,3 +89,42 @@ m.Plot(alpha=0.1)
 m.Plot(U1, 1)
 m.Plot(U2, 1)
 m.Plot(U3, 1)
+
+# %%
+"""
+Beam with linear Neumann BC
+
+"""
+
+box = np.array([[0, -5], [100, 5]])
+m = px.StructuredMeshQ4(box, 1)
+m.KeepSurfElems()
+m.Connectivity()
+
+C = px.Hooke([200, 0.3], 'isotropic_2D_ps')  # Plane stress
+
+m.GaussIntegration()
+K = m.Stiffness(C)
+
+repg = m.SelectEndLine('left', 1e-5, plot=False)
+repd = m.SelectEndLine('right', 1e-5, plot=False)
+
+BC = [[repg,    [[0, 0], ], ],
+      [repg[[0]], [[1, 0], ], ],]   # setting all dof to zero on bottom line
+
+
+right_box = px.PointCloud2Box(m.n[repd])
+mb = m.BuildBoundaryMesh()
+mb.RemoveElemsOutsideRoi(right_box)
+mb.GaussIntegration()
+
+fx = - mb.pgy * 0.1
+F = (mb.wdetJ * fx) @ mb.phix
+
+Kd, Fd, Ud = m.ApplyDirichlet(K, BC)
+U = m.LinearSolver(Kd, F, Fd)
+
+m.Plot(alpha=0.1)
+m.Plot(U, 1)
+
+m.PlotContourStress(U, C)

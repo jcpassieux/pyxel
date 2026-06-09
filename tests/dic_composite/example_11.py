@@ -79,8 +79,8 @@ H_LU = splalg.splu(H)
 # averaging the interface dofs
 scale = np.zeros(mall.ndof)
 for i in range(len(roi)):
-    scale[mall.conn[np.unique(m[i].e[3].ravel())].ravel()] += 1
-# mall.PlotContourDispl(scale)
+    scale[mall.conn[np.unique(m[i].e[3].ravel()), :].ravel()] += 1
+# mall.PlotContourDispl(scale, s=0)
 
 U0 = np.zeros(mall.ndof)
 for i in range(len(roi)):

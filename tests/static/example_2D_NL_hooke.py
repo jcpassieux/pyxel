@@ -44,19 +44,19 @@ def NonLinearHooke(p, En, Es):
 
 # %%  MESH AND BC
 
-
 box = np.array([[0, 0], [1, 1]])
 m = px.OpenHolePlateUnstructured(box, 0.2, [0.5, 0.5], 0.05, 0.03, quad=True)
+m.RemoveUnusedNodes()
 m.Connectivity()
 m.GaussIntegration()
 
 # Dirichlet BC at y = -0.035
-repu = m.SelectEndLine('bottom', plot=False)
+repu = m.SelectEndLine('bottom', plot=True)
 BC = [[repu,      [[1, 0], ], ],
       [repu[[0]], [[0, 0], ], ], ]
 
 # Neumann BC : distributed compression at the top
-repf = m.SelectEndLine('top', plot=False)
+repf = m.SelectEndLine('top', plot=True)
 LOAD = [[repf, [[1, -0.1], ], ], ]
 Fext = m.ApplyNeumann(LOAD)
 
@@ -70,7 +70,6 @@ c11 = E / (1 - v**2)
 p = [c00, c01, c11, c22, 0.9, 0.9]
 
 # %%  NEWTON
-
 
 U = np.zeros(m.ndof)
 dirichlet_dof = m.conn[repu, :].ravel()

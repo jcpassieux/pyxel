@@ -542,7 +542,7 @@ def ShapeFunctions(eltype, subint=False):
 
         def dN_xi(x):
             return np.concatenate(
-                (x - 0.5, -2 * x, x + 1)).reshape((3, len(x))).T
+                (x - 0.5, -2 * x, x + 0.5)).reshape((3, len(x))).T
 
         xg, wg = leggauss(2)
         return xg, wg, N, dN_xi
@@ -2341,6 +2341,36 @@ class Mesh:
                 m.dphiydx.T @ wdetJ @ m.dphiydx
         return L
 
+    def GetConductionOperator(self, k):
+        """
+        Get the Conductivity Matrix for the heat transfer (1 dof per node)
+
+        Parameters
+        ----------
+        k : FLOAT
+            THERMAL CONDUCTIVITY W/(mK)
+
+        """
+        K = k * self.Laplacian()
+        rep = np.arange(self.ndof // self.dim)
+        return K[np.ix_(rep, rep)]
+
+    def GetConvectionOperator(self, h):
+        """
+        Get the Convection Operator as Mixed Robin BC (1 dof per node)
+
+        Parameters
+        ----------
+        h : FLOAT
+            Heat transfer coefficient in W/(m²K)
+
+        """
+        mb = self.BuildBoundaryMesh()
+        mb.GaussIntegration()
+        M = mb.Mass(1)
+        rep = np.arange(self.ndof // self.dim)
+        return h * M[np.ix_(rep, rep)]
+
     def EquilibriumGap(self, C, nodes_no_regul=None):
         """
         Equilibrium Gap elastic regularisation
@@ -2351,6 +2381,8 @@ class Mesh:
             Hooke operator.
         nodes_no_regul : List of Numpy array
             DESCRIPTION. List of nodes not regularized (Neumann BC)
+        
+        Returns: Kt D K
 
         """
         K = self.Stiffness(C)
@@ -2595,6 +2627,20 @@ class Mesh:
               + '.vtu' + " written.")
 
     def StrainAtGP(self, U, axisym=False):
+        """
+        Compute Linearised Strain Tensor from displacement field
+
+        Parameters
+        ----------
+        U : displacement DOF vector
+        axisym : BOOL, optional for axisymmetric problems
+
+        Returns
+        -------
+        eps_normal : normal components of strain (Ex, Ey, Ez)
+        eps_shear : shear compoments of strain (Exy, Exz, Eyz)
+
+        """
         if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
@@ -2618,6 +2664,175 @@ class Mesh:
                               0.5 * m.dphixdz @ U + 0.5 * m.dphizdx @ U,
                               0.5 * m.dphiydz @ U + 0.5 * m.dphizdy @ U]
         return eps_normal, eps_shear
+
+    def CauchyGreenRightAtGP(self, U):
+        """
+        Compute Cauchy Green Right Strain Tensor from displacement field
+
+        C = Ft F   with F the gradient of the transformation = I + Grad u
+
+        Parameters
+        ----------
+        U : displacement DOF vector
+
+        Returns
+        -------
+        eps_normal : normal components of strain (Ex, Ey, Ez)
+        eps_shear : shear compoments of strain (Exy, Exz, Eyz)
+
+        """
+        if self.dphixdx is None:
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
+        if self.dim == 2:
+            dudx = m.dphixdx @ U
+            dudy = m.dphixdy @ U
+            dvdx = m.dphiydx @ U
+            dvdy = m.dphiydy @ U
+            C11 = (1+dudx)**2 + dvdx**2
+            C22 = dudy**2 + (1+dvdy)**2
+            # C33 = 1
+            C12 = (1+dudx)*dudy + dvdx*(1+dvdy)
+            # C13=C23=0
+            C_normal = np.vstack((C11, C22)).T
+            C_shear = np.vstack((C12, 0*C12)).T
+        else:   # dim 3
+            dudx = m.dphixdx @ U
+            dudy = m.dphixdy @ U
+            dudz = m.dphixdz @ U
+            dvdx = m.dphiydx @ U
+            dvdy = m.dphiydy @ U
+            dvdz = m.dphiydz @ U
+            dwdx = m.dphizdx @ U
+            dwdy = m.dphizdy @ U
+            dwdz = m.dphizdz @ U
+            C11 = (1+dudx)**2 + dvdx**2 + dwdx**2
+            C22 = dudy**2 + (1+dvdy)**2 + dwdy**2
+            C33 = dudz**2 + dvdz**2 + (1+dwdz)**2
+            C12 = (1+dudx)*dudy + dvdx*(1+dvdy) + dwdx*dwdy
+            C13 = (1+dudx)*dudz + dvdx*dvdz + dwdx*(1+dwdz)
+            C23 = dudy*dudz + (1+dvdy)*dvdz + dwdy*(1+dwdz)
+            C_normal = np.vstack((C11, C22, C33)).T
+            C_shear = np.vstack((C12, C13, C23)).T
+        return C_normal, C_shear
+
+    def CauchyGreenLeftAtGP(self, U):
+        """
+        Compute Cauchy Green Left Strain Tensor from displacement field
+
+        B = F Ft   with F the gradient of the transformation = I + Grad u
+
+        Parameters
+        ----------
+        U : displacement DOF vector
+
+        Returns
+        -------
+        eps_normal : normal components of strain (Ex, Ey, Ez)
+        eps_shear : shear compoments of strain (Exy, Exz, Eyz)
+
+        """
+        if self.dphixdx is None:
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
+        if self.dim == 2:
+            dudx = m.dphixdx @ U
+            dudy = m.dphixdy @ U
+            dvdx = m.dphiydx @ U
+            dvdy = m.dphiydy @ U
+            B11 = (1+dudx)**2 + dudy**2
+            B22 = dvdx**2 + (1+dvdy)**2
+            B12 = (1+dudx)*dvdx + dudy*(1+dvdy)
+            B_normal = np.vstack((B11, B22)).T
+            B_shear = np.vstack((B12, 0*B12)).T
+        else:   # dim 3
+            dudx = m.dphixdx @ U
+            dudy = m.dphixdy @ U
+            dudz = m.dphixdz @ U
+            dvdx = m.dphiydx @ U
+            dvdy = m.dphiydy @ U
+            dvdz = m.dphiydz @ U
+            dwdx = m.dphizdx @ U
+            dwdy = m.dphizdy @ U
+            dwdz = m.dphizdz @ U
+            B11 = (1+dudx)**2 + dudy**2 + dudz**2
+            B22 = dvdx**2 + (1+dvdy)**2 + dvdz**2
+            B33 = dwdx**2 + dwdy**2 + (1+dwdz)**2
+            B12 = (1+dudx)*dvdx + dudy*(1+dvdy) + dudz*dvdz
+            B13 = (1+dudx)*dwdx + dudy*dwdy + dudz*(1+dwdz)
+            B23 = dvdx*dwdx + (1+dvdy)*dwdy + dvdz*(1+dwdz)
+            B_normal = np.vstack((B11, B22, B33)).T
+            B_shear = np.vstack((B12, B13, B23)).T
+        return B_normal, B_shear
+
+    def JAtGP(self, U):
+        """
+        Compute J the Jacobian of the transformation gradient F
+
+        J = det(F)   with F the gradient of the transformation = I + Grad u
+
+        Parameters
+        ----------
+        U : displacement DOF vector
+
+        Returns
+        ------- 
+        J
+
+        """
+        if self.dphixdx is None:
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
+        if self.dim == 2:
+            # for plane strain only.
+            dudx = m.dphixdx @ U
+            dudy = m.dphixdy @ U
+            dvdx = m.dphiydx @ U
+            dvdy = m.dphiydy @ U
+            J = (1 + dudx) * (1 + dvdy) - dudy * dvdx
+        else:   # dim 3
+            dudx = m.dphixdx @ U
+            dudy = m.dphixdy @ U
+            dudz = m.dphixdz @ U
+            dvdx = m.dphiydx @ U
+            dvdy = m.dphiydy @ U
+            dvdz = m.dphiydz @ U
+            dwdx = m.dphizdx @ U
+            dwdy = m.dphizdy @ U
+            dwdz = m.dphizdz @ U
+            J = (
+                (1 + dudx) * ((1 + dvdy) * (1 + dwdz) - dvdz * dwdy)
+                - dudy * (dvdx * (1 + dwdz) - dvdz * dwdx)
+                + dudz * (dvdx * dwdy - (1 + dvdy) * dwdx)
+            )
+        return J[np.newaxis].T
+
+    def GreenLagrangeAtGP(self, U):
+        """
+        Compute Green Lagrange Right Strain Tensor from displacement field
+
+        E = 0.5 (Ft F - I)  with F the gradient of the transfo = I + Grad u
+
+        Parameters
+        ----------
+        U : displacement DOF vector
+
+        Returns
+        -------
+        eps_normal : normal components of strain (Ex, Ey, Ez)
+        eps_shear : shear compoments of strain (Exy, Exz, Eyz)
+
+        """
+        Cn, Cs = self.CauchyGreenRightAtGP(U)
+        C_normal = 0.5 * (Cn - 1)
+        C_shear = 0.5 * Cs
+        return C_normal, C_shear
     
     def GP2DOF(self, gp_field):
         """
@@ -2648,6 +2863,25 @@ class Mesh:
             wx = np.sum(m.phix, axis=0).A[0] + eps
             dof_field = diags(1/wx) @ m.phix.T @ gp_field
         return dof_field
+
+    def DOF2GP(self, dof_field):
+        """
+        dof_field : ND.ARRAY
+        if dof_field has size dim x ndof, then the GP field is a dim x ngp array.
+        """
+        if self.dphixdx is None:
+            m = self.Copy()
+            m.GaussIntegration()
+        else:
+            m = self
+        if self.dim == 2:
+            gp_field = np.vstack((m.phix @ dof_field, m.phiy @ dof_field)).T
+        else:  # dim 3
+            gp_field = np.vstack((m.phix @ dof_field,
+                                  m.phiy @ dof_field,
+                                  m.phiz @ dof_field)).T
+        return gp_field
+
 
     def StrainAtNodes(self, U):
         eps_normal, eps_shear = self.StrainAtGP(U)
@@ -2965,7 +3199,7 @@ class Mesh:
         plt.colorbar()
         plt.show()
 
-    def PlotContourDispl(self, V=None, n=None, s=1.0, stype='comp',
+    def PlotContourDispl(self, U=None, n=None, s=1.0, stype='comp',
                          newfig=True, plotmesh=True, cmap='RdBu', clim=1., **kwargs):
         """
         Plots the displacement field using Matplotlib Library.
@@ -2998,15 +3232,15 @@ class Mesh:
         plot_y = True
         if self.conn.shape[1] == 1:
             plot_y = False
-        # if self.ndof % len(U):
-        #     raise Exception('Problem: number of dofs in U ='
-        #                     + ' %d and number of dof in the mesh = %d'
-        #                     % (len(U), self.ndof))
-        # else:
-        #     V = np.zeros(self.ndof)
-        #     V[:len(U)] = U
-        #     if self.ndof != len(U):
-        #         plot_y = False
+        if self.ndof % len(U):
+            raise Exception('Problem: number of dofs in U ='
+                            + ' %d and number of dof in the mesh = %d'
+                            % (len(U), self.ndof))
+        else:
+            V = np.zeros(self.ndof)
+            V[:len(U)] = U
+            if self.ndof != len(U):
+                plot_y = False
         if n is None:
             n = self.n.copy()
             n += V[self.conn] * s  # s: amplification scale factor
@@ -3059,7 +3293,7 @@ class Mesh:
                 plt.figure()
                 vmax = np.max(abs(V[self.conn[:, 1]])) * clim
                 if vmax == 0:
-                    vmax = 1e-8 
+                    vmax = 1e-8
                 levels = np.linspace(-vmax, vmax, 21)
                 plt.tricontourf(n[:, 0], n[:, 1], triangles, V[self.conn[:, 1]],
                                 20, alpha=alpha, cmap=cmap, levels=levels)
@@ -3073,7 +3307,7 @@ class Mesh:
 
     def PlotContourTensorField(self, U, Fn, Fs, n=None, s=1.0, stype='comp',
                           newfig=True, cmap='RdBu', field_name='Field',
-                          clim=1., **kwargs):
+                          clim=1., plotmesh=True, **kwargs):
         """
         Plots the STRESS/STRAIN field using Matplotlib Library.
 
@@ -3108,7 +3342,6 @@ class Mesh:
         """
         
         if len(Fn) == self.npg:
-            print('TOTO')
             # is the field is given at Gauss points
             Fn = self.GP2DOF(Fn)
             Fn = self.DOF2Nodes(Fn)
@@ -3117,8 +3350,10 @@ class Mesh:
         
         def plot_scalar_field(EVM, symmetric=True):
             hist, vals = np.histogram(abs(EVM), 100)
-            vmax = vals[np.where(np.cumsum(hist)<clim*np.sum(hist))[0][-1]]
+            vmax = abs(vals[np.where(np.cumsum(hist)<clim*np.sum(hist))[0][-1]])
             # vmax = vals[np.where(hist > 5)[0][-1]]
+            if vmax == 0:
+                vmax = 1e-12
             if symmetric:
                 levels = np.linspace(-vmax, vmax, 21)
             else:
@@ -3152,13 +3387,15 @@ class Mesh:
             - 0.5*np.sqrt(EX**2 - 2*EX*EY + EY**2 + 4*EXY**2)
             plt.figure()
             plot_scalar_field(E1)
-#            plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
+            # plt.tricontourf(n[:, 0], n[:, 1], triangles, E1[self.conn[:, 0]], 20, alpha=alpha)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             plt.title(r"$"+field_name+"_1$")
             plt.figure()
             plot_scalar_field(E2)
-#            plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]], 20, alpha=alpha)
-            self.Plot(n=n, alpha=0.1)
+            # plt.tricontourf(n[:, 0], n[:, 1], triangles, E2[self.conn[:, 0]], 20, alpha=alpha)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             plt.title(r"$"+field_name+"_2$")
             plt.show()
         elif stype == 'maxpcp':
@@ -3171,37 +3408,40 @@ class Mesh:
             if newfig:
                 plt.figure()
             plot_scalar_field(E1)
-            self.Plot(n=n, alpha=0.1)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             # plt.title(r"$"+field_name+"_{max}$")
         elif stype == 'mag':
-            if cmap == 'RdBu':
-                cmap = 'rainbow'
             EVM = np.sqrt(EX**2 + EY**2 + EX * EY + 3 * EXY**2)
             if newfig:
                 plt.figure()
             plot_scalar_field(EVM, symmetric=False)
-            self.Plot(n=n, alpha=0.1)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             plt.title(r"$"+field_name+"_{VM}$")
         else:
             """ Plot mesh and field contour """
             plt.figure()
             plot_scalar_field(EX)
-            self.Plot(n=n, alpha=0.1)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             plt.title(r"$"+field_name+"_X$")
             #
             plt.figure()
             plot_scalar_field(EY)
-            self.Plot(n=n, alpha=0.1)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             plt.title(r"$"+field_name+"_Y$")
             #
             plt.figure()
             plot_scalar_field(EXY)
-            self.Plot(n=n, alpha=0.1)
+            if plotmesh:
+                self.Plot(n=n, alpha=0.1)
             plt.title(r"$"+field_name+"_{XY}$")
             #plt.show()
 
     def PlotContourStrain(self, U, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='RdBu', clim=1.0, **kwargs):
+                          newfig=True, cmap='RdBu', plotmesh=True, clim=1.0, **kwargs):
         """
         Plots the strain field using Matplotlib Library.
 
@@ -3235,11 +3475,11 @@ class Mesh:
         EN, ES = self.StrainAtNodes(U)
         self.PlotContourTensorField(U, EN, ES, n=n, s=s, stype=stype,
                           newfig=newfig, cmap=cmap, field_name='\\epsilon',
-                          clim=clim, **kwargs)
+                          clim=clim, plotmesh=plotmesh, **kwargs)
 
 
     def PlotContourStress(self, U, hooke, n=None, s=1.0, stype='comp',
-                          newfig=True, cmap='RdBu', clim=1.0, **kwargs):
+                          newfig=True, cmap='RdBu', clim=1.0, plotmesh=True, **kwargs):
         """
         Plots the stress field using Matplotlib Library.
 
@@ -3283,8 +3523,8 @@ class Mesh:
         SN = self.DOF2Nodes(SN)
         SS = self.GP2DOF(SS)
         SS = self.DOF2Nodes(SS)
-        self.PlotContourTensorField(U, SN, SS, n=n,
-                        s=s, stype=stype, newfig=newfig, cmap=cmap,
+        self.PlotContourTensorField(U, SN, SS, n=n, s=s, stype=stype, 
+                        newfig=newfig, cmap=cmap, plotmesh=plotmesh,
                         clim=clim, field_name='\\sigma', **kwargs)
 
     def PlotNodeLabels(self, d=[0, 0], **kwargs):
@@ -4167,13 +4407,13 @@ class Mesh:
                     mb.e[etype] = mb.e[etype][keepel]
                 mb.GaussIntegration()
                 for ldij in ldi[1]:  # loop on the space dims
-                    fv = ldij[1]
+                    fs = ldij[1]
                     if ldij[0] == 0:
-                        F += fv * mb.phix.T @ mb.wdetJ
+                        F += fs * mb.phix.T @ mb.wdetJ
                     if ldij[0] == 1:
-                        F += fv * mb.phiy.T @ mb.wdetJ
+                        F += fs * mb.phiy.T @ mb.wdetJ
                     if ldij[0] == 2:
-                        F += fv * mb.phiz.T @ mb.wdetJ
+                        F += fs * mb.phiz.T @ mb.wdetJ
         else:
             for ldi in LOAD:
                 nodes = ldi[0]
@@ -4200,11 +4440,10 @@ class Mesh:
             modified stiffness matrix
 
         """
-        if BC is None:
-            return K, np.zeros(self.ndof), np.zeros(self.ndof)
+        ndof = K.shape[0]
         
         if meth == 'subs':
-            Ud = np.zeros(self.ndof)
+            Ud = np.zeros(ndof)
             rmdof = []
             for bci in BC:
                 nodes = bci[0]
@@ -4217,11 +4456,11 @@ class Mesh:
             #         U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
             #         # U[self.conn[nodes, bci[1][j][0]]] += bci[1][j][1]/numi
             #         rmdof += list(self.conn[nodes, bci[1][j][0]])
-            rep = np.setdiff1d(np.arange(self.ndof), rmdof)
-            Fd = np.zeros(self.ndof)
+            rep = np.setdiff1d(np.arange(ndof), rmdof)
+            Fd = np.zeros(ndof)
             Fd[rep] = -(K@Ud)[rep]
             val = np.ones(len(rmdof)) * np.mean(K.diagonal())
-            Kd = csr_matrix((val, (rmdof, rmdof)), shape=(self.ndof, self.ndof)).tolil()
+            Kd = csr_matrix((val, (rmdof, rmdof)), shape=(ndof, ndof)).tolil()
             Kd[np.ix_(rep, rep)] = K[np.ix_(rep, rep)]
             Kd = Kd.tocsc()
         else:
@@ -4229,7 +4468,7 @@ class Mesh:
             row = []
             col = []
             val = []
-            Ud = np.zeros(self.ndof)
+            Ud = np.zeros(ndof)
             for bci in BC:
                 nodes = bci[0]
                 for j in range(len(bci[1])):
@@ -4238,14 +4477,14 @@ class Mesh:
                     val += [1., ] * len(nodes)
                     Ud[self.conn[nodes, bci[1][j][0]]] = bci[1][j][1]
                     nrows += len(nodes)
-            C = csr_matrix((val, (row, col)), shape=(nrows, self.ndof))
+            C = csr_matrix((val, (row, col)), shape=(nrows, ndof))
             if meth == 'penalty':
                 k = np.max(K) * 1e5
                 Kd = K + k * C.T @ C
                 Fd = k * C.T @ C @ Ud
             elif meth == 'lagrange':
                 Kd = bmat([[K, C.T], [C, None]]).tocsc()
-                Fd = np.hstack((np.zeros(self.ndof), C @ Ud))
+                Fd = np.hstack((np.zeros(ndof), C @ Ud))
             else:
                 raise Exception('Unknown Dirichlet application method (penalty, lagrange or subs): ' + meth)
         return Kd, Fd, Ud
