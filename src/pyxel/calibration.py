@@ -9,7 +9,6 @@ import cv2  # pip install opencv-python
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import svg  # pip install svg.py
 from matplotlib.patches import Rectangle
 from datetime import datetime
 import imageio
@@ -199,7 +198,11 @@ class Board():
             DESCRIPTION. The default is 'calibration_pattern.svg'.
         paper_size : LIST or NUMPY.ARRAY, optional
             DESCRIPTION. The default is [210, 297] equiv. to A4 paper format
+            
+        Install SVG library using 
+        >>> pip install svg.py
         """
+        import svg
         if self.type == 'chess':
             board_dim = (np.array(self.size)+1) * self.step
             start = np.array(paper_size)/2 - board_dim/2

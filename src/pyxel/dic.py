@@ -16,6 +16,7 @@ import scipy.sparse as sps
 from .image import Image
 from .camera import Camera, CameraVol
 from .mesher import StructuredMesh, TetraMeshBox
+from skimage.registration import phase_cross_correlation
 #import matplotlib.pyplot as plt
 
 #import pdb
@@ -611,7 +612,6 @@ def FourierRBT(f, g, m=None, cam=None, upsample_factor=100):
         The default is 100 which means 1/100 px precision.
 
     """
-    from skimage.registration import phase_cross_correlation
     shift, error, phasediff = phase_cross_correlation(
         g.pix, f.pix, upsample_factor=upsample_factor)
     if m is None or cam is None:
