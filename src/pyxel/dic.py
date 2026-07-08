@@ -589,6 +589,43 @@ def Correlate(f, g, m, cam, dic=None, H=None, U0=None, l0=None, Basis=None,
         stdr_old = stdr
     return U, res
 
+
+def FourierRBT(f, g, m=None, cam=None, upsample_factor=100):
+    """
+    Estimate the rigid body translations using Fourier transform
+
+    Parameters
+    ----------
+    f : PYXEL.IMAGE
+        Reference Image.
+    g : PYXEL.IMAGE
+        Deformed Image.
+    m : PYXEL.MESH, optional
+        Default None.
+    cam : PYXEL.CAMERA, optional
+        Default None.
+        If m of cam is None > expresses the displacement in pixels from f & g
+        in the coord sys. of the image index.
+    upsample_factor : INT, optional
+        estimation resolution see phase_cross_correlation.
+        The default is 100 which means 1/100 px precision.
+
+    """
+    from skimage.registration import phase_cross_correlation
+    shift, error, phasediff = phase_cross_correlation(
+        g.pix, f.pix, upsample_factor=upsample_factor)
+    if m is None or cam is None:
+        return shift[0], shift[1]
+    else:
+        u0, v0 = cam.P(m.n[6][0], m.n[6][1])
+        # f.Plot()
+        # plt.plot(u0, v0, 'yo')
+        # plt.plot(u0-shift[1], v0-shift[0], 'ro')
+        du, dv = np.array(cam.Pinv(u0+shift[1], v0+shift[0])).T[0] - m.n[6]
+        tx, ty, _ = m.RBM()
+        return du * tx + dv * ty
+
+
 def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
                    Basis=None, eps=None, disp=True, direct=True):
     """Perform Multigrid initialization for FE-Digital Image Correlation.

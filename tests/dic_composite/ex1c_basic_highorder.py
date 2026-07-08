@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method
     JC Passieux, INSA Toulouse, 2021
 
-    Example 5:
+    Example 1(c):
         Other element types.
 
      """

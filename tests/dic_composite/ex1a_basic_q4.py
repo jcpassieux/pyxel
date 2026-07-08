@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method
     JC Passieux, INSA Toulouse, 2021
 
-    Example 1 : BASIC
+    Example 1(a) : BASIC qua4 mesh
     Analyse only one image with a INP Qua4 mesh in m.
 
 """

@@ -26,6 +26,8 @@ class Image:
         self.fname = fname
         self.u0 = 0
         self.v0 = 0
+        self.bias = 0.
+        self.gain = 1.
 
     def LoadPIL(self):
         import PIL.Image as image

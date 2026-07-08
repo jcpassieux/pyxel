@@ -273,7 +273,7 @@ def SubQuaIso(nx, ny):
     xi = np.linspace(px - 1, 1 - px, int(nx))
     py = 1.0 / ny
     yi = np.linspace(py - 1, 1 - py, int(ny))
-    xg, yg = meshgrid(xi, yi)
+    xg, yg = np.meshgrid(xi, yi)
     wg = 4.0 / (nx * ny)
     return xg.ravel(), yg.ravel(), wg
 
@@ -1224,25 +1224,21 @@ class Mesh:
         un, vn = cam.P(self.n[:, 0], self.n[:, 1])
         ne = 0
         for et in self.e.keys():
-            ne += len(self.e[et])
-            repdof = self.e[et]
-            u = un[self.e[et]]
-            v = vn[self.e[et]]
-            if G:
-                xn = self.n[self.e[et], 0]
-                yn = self.n[self.e[et], 1]
-                _, _, _, N, Ndx, Ndy = ShapeFunctions(et)
-            else:
-                    _, _, _, N, _, _ = ShapeFunctions(et)
+            nodese = self.e[et]
+            ne += len(nodese)
+            u = un[nodese]
+            v = vn[nodese]
+            xn = self.n[nodese, 0]
+            yn = self.n[nodese, 1]
+            _, _, _, N, Ndx, Ndy = ShapeFunctions(et)
             nfun = N(np.zeros(1), np.zeros(1)).shape[1]
             if et in (3, 10, 16):  # qua4 or qua9 or qua8
                 dist = np.floor(
                     np.sqrt((u[:, :2] - u[:, 1:3]) ** 2
                             + (v[:, :2] - v[:, 1:3]) ** 2)
                 ).astype(int)
-                a, b = np.where(dist < 1)
-                if len(a):  # at least one integration point in each element
-                    dist[a, b] = 1
+                # at least one integration point in each element
+                dist = np.maximum(dist, 1)
                 npg = np.sum(np.prod(dist, axis=1))
                 wdetJj = np.ones(npg)
                 rowj = np.zeros(npg * nfun, dtype=int)
@@ -1260,27 +1256,28 @@ class Mesh:
                     xg, yg, wg = SubQuaIso(dist[je, 0], dist[je, 1])
                     phi = N(xg, yg)
                     repg = npg + np.arange(len(xg))
-                    [repcol, reprow] = np.meshgrid(repdof[je, :], repg +
-                                                   len(self.wdetJ))
+                    # adding self.wdetJ for hybrid meshes with tri and quad
+                    [repcol, reprow] = np.meshgrid(nodese[je, :],
+                                                   repg + len(self.wdetJ))
                     rangephi = nfun * npg + np.arange(np.prod(phi.shape))
                     rowj[rangephi] = reprow.ravel()
                     colj[rangephi] = repcol.ravel()
                     valj[rangephi] = phi.ravel()
+                    dN_xi = Ndx(xg, yg)
+                    dN_eta = Ndy(xg, yg)
+                    dxdr = dN_xi @ xn[je, :]
+                    dydr = dN_xi @ yn[je, :]
+                    dxds = dN_eta @ xn[je, :]
+                    dyds = dN_eta @ yn[je, :]
+                    detJ = dxdr * dyds - dydr * dxds
+                    wdetJj[repg] = abs(detJ) * wg
                     if G:
-                        dN_xi = Ndx(xg, yg)
-                        dN_eta = Ndy(xg, yg)
-                        dxdr = dN_xi @ xn[je, :]
-                        dydr = dN_xi @ yn[je, :]
-                        dxds = dN_eta @ xn[je, :]
-                        dyds = dN_eta @ yn[je, :]
-                        detJ = dxdr * dyds - dydr * dxds
                         dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi\
                             + (-dydr / detJ)[:, np.newaxis] * dN_eta
                         dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi\
                             + (dxdr / detJ)[:, np.newaxis] * dN_eta
                         valxj[rangephi] = dphidx.ravel()
                         valyj[rangephi] = dphidy.ravel()
-                        wdetJj[repg] = abs(detJ) * 4./len(detJ)
                     if EB:
                         rangeone = npg + np.arange(len(repg))
                         rowej[rangeone] = repg
@@ -1330,6 +1327,7 @@ class Mesh:
                         xg, yg = SubTriIso2(nn[je])
                     else:
                         xg, yg = SubTriIso(nx[je], ny[je])
+                    wg = 0.5/len(xg)
                     if a[je] == 0:
                         pp = N(xg, yg) @ n0
                         xg = pp[:, 0]
@@ -1340,27 +1338,27 @@ class Mesh:
                         yg = pp[:, 1]
                     phi = N(xg, yg)
                     repg = npg + np.arange(len(xg))
-                    [repcol, reprow] = meshgrid(repdof[je, :],
+                    [repcol, reprow] = np.meshgrid(nodese[je, :],
                                                 repg + len(self.wdetJ))
                     rangephi = nfun * npg + np.arange(np.prod(phi.shape))
                     rowj[rangephi] = reprow.ravel()
                     colj[rangephi] = repcol.ravel()
                     valj[rangephi] = phi.ravel()
+                    dN_xi = Ndx(xg, yg)
+                    dN_eta = Ndy(xg, yg)
+                    dxdr = dN_xi @ xn[je, :]
+                    dydr = dN_xi @ yn[je, :]
+                    dxds = dN_eta @ xn[je, :]
+                    dyds = dN_eta @ yn[je, :]
+                    detJ = dxdr * dyds - dydr * dxds
+                    wdetJj[repg] = abs(detJ) * wg
                     if G:
-                        dN_xi = Ndx(xg, yg)
-                        dN_eta = Ndy(xg, yg)
-                        dxdr = dN_xi @ xn[je, :]
-                        dydr = dN_xi @ yn[je, :]
-                        dxds = dN_eta @ xn[je, :]
-                        dyds = dN_eta @ yn[je, :]
-                        detJ = dxdr * dyds - dydr * dxds
                         dphidx = (dyds / detJ)[:, np.newaxis] * dN_xi\
                             + (-dydr / detJ)[:, np.newaxis] * dN_eta
                         dphidy = (-dxds / detJ)[:, np.newaxis] * dN_xi\
                             + (dxdr / detJ)[:, np.newaxis] * dN_eta
                         valxj[rangephi] = dphidx.ravel()
                         valyj[rangephi] = dphidy.ravel()
-                        wdetJj[repg] = abs(detJ) * 0.5/len(detJ)
                     if EB:
                         rangeone = npg + np.arange(len(repg))
                         rowej[rangeone] = repg
@@ -3046,7 +3044,6 @@ class Mesh:
             if self.dim == 2:
                 plt.axis('equal')
                 if plotnodes:
-                    print(n)
                     plt.plot(
                         n[:, 0],
                         n[:, 1],

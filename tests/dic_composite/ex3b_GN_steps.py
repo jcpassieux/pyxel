@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method
     JC Passieux, INSA Toulouse, 2021
 
-    Example 6 : ADVANCED
+    Example 3(b) : ADVANCED
     Implement the different Exact GN solver.
 
     """

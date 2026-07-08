@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method
     JC Passieux, INSA Toulouse, 2021
 
-    Example 7 : ADVANCED
+    Example 6 : ADVANCED
     Implement the different with element brightness and contrast correction.
 
     """

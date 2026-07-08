@@ -114,14 +114,15 @@ def OpenHolePlate(box, r, cpos, t, Nr, Nl):
     gmsh.option.setNumber('Mesh.Recombine3DLevel', 2)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(2)
-    gmsh.write("mesh.msh")
+    gmsh.write("tmp.msh")
     # if '-nopopup' not in sys.argv:
     #     gmsh.fltk.run()
     gmsh.finalize()
-    m = ReadMesh("mesh.msh", 2)
+    m = ReadMesh("tmp.msh", 2)
     m.KeepSurfElems()
     if rotation:
         m.n = m.n[:, ::-1]
+    os.remove("tmp.msh")
     return m
 
 def OpenHolePlateUnstructured(box, r, cpos, lc, lf, quad=False):
@@ -168,11 +169,27 @@ def OpenHolePlateUnstructured(box, r, cpos, lc, lf, quad=False):
     if quad:
         gmsh.option.setNumber('Mesh.ElementOrder', 2)
     gmsh.model.mesh.generate(2)
-    gmsh.write("mesh.msh")
+    gmsh.write("tmp.msh")
     gmsh.finalize()
-    m = ReadMesh("mesh.msh", 2)
+    m = ReadMesh("tmp.msh", 2)
     m.KeepSurfElems()
+    os.remove("tmp.msh")
     return m
+
+def SphereMeshT3(radius, element_size):
+    gmsh.initialize()
+    gmsh.model.add("sphere")
+    sphere = gmsh.model.occ.addSphere(0, 0, 0, radius, tag=1)
+    gmsh.model.occ.synchronize()
+    gmsh.model.add_physical_group(dim=2, tags=[sphere], tag=1)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", element_size)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", element_size)
+    gmsh.model.mesh.generate(dim=2)
+    gmsh.write("tmp.msh")
+    gmsh.finalize()
+    mesh = ReadMesh("tmp.msh", 3)
+    os.remove("tmp.msh")
+    return mesh
 
 def StructuredMeshQ4(box, dx):
     """Build a structured linear Q4 mesh from two points coordinates (box)
@@ -433,12 +450,13 @@ def StructuredMeshTet4(box, lc):
     gmsh.option.setNumber('Mesh.Algorithm', 1)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
-    gmsh.write("lug.msh")
+    gmsh.write("tmp.msh")
     # if '-nopopup' not in sys.argv:
     #     gmsh.fltk.run()
     gmsh.finalize()
-    m = ReadMesh("lug.msh", 3)
+    m = ReadMesh("tmp.msh", 3)
     m.KeepVolElems()
+    os.remove("tmp.msh")
     # m.Plot()
     return m
 
@@ -495,12 +513,13 @@ def StructuredMeshHex20(box, lc):
     gmsh.option.setNumber('General.Verbosity', 1)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
-    gmsh.write("lug.msh")
+    gmsh.write("tmp.msh")
     # if '-nopopup' not in sys.argv:
     #     gmsh.fltk.run()
     gmsh.finalize()
-    m = ReadMesh("lug.msh", 3)
+    m = ReadMesh("tmp.msh", 3)
     m.KeepVolElems()
+    os.remove("tmp.msh")
     # m.Plot()
     return m
 
@@ -565,12 +584,12 @@ def MeshFrom1DClosedMesh(m, lc=None, order=1, recombine=False):
     gmsh.option.setNumber('General.Verbosity', 1)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(2)
-    gmsh.write("lug.msh")
+    gmsh.write("tmp.msh")
     # if '-nopopup' not in sys.argv:
     #     gmsh.fltk.run()
     gmsh.finalize()
-    m2d = ReadMesh("lug.msh", 2)
-    m2d.Plot()
+    m2d = ReadMesh("tmp.msh", 2)
+    os.remove("tmp.msh")
     return m2d
 
 
@@ -667,6 +686,7 @@ def TetraMeshBox(box, dx):
     e = {4: els.astype(int)}
     m = Mesh(e, nodes, 3)
     return m
+
 
 #%%
 

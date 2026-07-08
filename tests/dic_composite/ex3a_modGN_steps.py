@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method 
     JC Passieux, INSA Toulouse, 2021
 
-    Example 3 : ADVANCED
+    Example 3(a) : ADVANCED
     Implement the different steps of the Modified Gauss-Newton solver.
 
     """

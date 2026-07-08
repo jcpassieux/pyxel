@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method
     JC Passieux, INSA Toulouse, 2021
 
-    Example 10 : BASIC
+    Example 5(a) : BASIC
     Initialize with DIS OPtical Flow
 
 """

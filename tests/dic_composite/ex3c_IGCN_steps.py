@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method 
     JC Passieux, INSA Toulouse, 2021
 
-    Example 8 : ADVANCED
+    Example 3(c) : ADVANCED
     Implement the inverse compositional Gauss Newton
 
     [REF] JC. Passieux and R. Bouclier. Classic and Inverse Compositional 

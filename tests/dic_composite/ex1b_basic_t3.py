@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method
     JC Passieux, INSA Toulouse, 2021
 
-    Example 1bis : BASIC
+    Example 1(b) : BASIC
     Analyse only one image with a GMSH Tri3 mesh in mm.
 
         """

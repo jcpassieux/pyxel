@@ -3,7 +3,7 @@
 """ Finite Element Digital Image Correlation method
     JC Passieux, INSA Toulouse, 2026
 
-    Example 11 : Solving DIC in parallel on subdomains
+    Example 7 : Solving DIC in parallel on subdomains
 
 """
 
