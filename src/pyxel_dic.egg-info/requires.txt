@@ -6,4 +6,3 @@ opencv-python
 gmsh
 scikit-image
 interpylate
-svg.py

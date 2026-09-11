@@ -3758,7 +3758,9 @@ class Mesh:
             eps = 1e-5 * self.GetApproxElementSize()
         # interface nodes of self mesh
         mb1 = self.BuildBoundaryMesh()
-        interface_nodes = np.unique(mb1.e[1].ravel())
+        interface_nodes = np.array([], dtype=int)
+        for et in mb1.e.keys():
+            interface_nodes = np.append(interface_nodes, np.unique(mb1.e[et].ravel()))
         # full list of nodes of mesh 2
         m2n = m2.Copy()
         m2n.RemoveUnusedNodes()
