@@ -4370,6 +4370,103 @@ class Mesh:
         else:
             return MeshUnion(list_meshes, False)
 
+    def GetPBCPairs(self):
+        """
+        Builds the non-cyclic pairs of master/slave nodes for prescribing PBC.
+        The mesh must be periodic (strictly corresponding nodes).
+
+        Returns
+        --------
+        edges, corners : np.ndarray, shape (K, 2) each
+            Each line = (master_node, slave_node)
+        """
+
+        dx = np.max(self.n[:, 0]) - np.min(self.n[:, 0])
+        dy = np.max(self.n[:, 1]) - np.min(self.n[:, 1])
+        m2 = self.Copy()
+        m3 = self.Copy()
+        s = self.GetApproxElementSize()
+        if self.dim == 2:
+            m2.n += np.array([[dx, 0]])
+            m3.n += np.array([[0, dy]])
+            connx = np.array(self.MeshIntersection(m2, 1e-5))
+            conny = np.array(self.MeshIntersection(m3, 1e-5))
+        else:
+            m4 = self.Copy()
+            dz = np.max(self.n[:, 2]) - np.min(self.n[:, 2])
+            m2.n += np.array([[dx, 0, 0]])
+            m3.n += np.array([[0, dy, 0]])
+            m4.n += np.array([[0, 0, dz]])
+            connx = np.array(self.MeshIntersection(m2, s*1e-5))
+            conny = np.array(self.MeshIntersection(m3, s*1e-5))
+            connz = np.array(self.MeshIntersection(m4, s*1e-5))
+        if self.dim == 2:
+            tag_list = [np.full(c.shape[1], t, dtype=int)
+                    for t, c in enumerate((connx, conny))]
+            all_conn = np.concatenate([connx, conny], axis=1)   # (2, M)
+        else:
+            tag_list = [np.full(c.shape[1], t, dtype=int)
+                        for t, c in enumerate((connx, conny, connz))]
+            all_conn = np.concatenate([connx, conny, connz], axis=1)   # (2, M)
+        edge_tag = np.concatenate(tag_list)                        # (M,)
+        dep0, mst0 = all_conn[0], all_conn[1]
+        M = dep0.shape[0]
+        nodes = np.unique(all_conn)
+        n_nodes = nodes.shape[0]
+        dep_idx = np.searchsorted(nodes, dep0)
+        mst_idx = np.searchsorted(nodes, mst0)
+        master_count = np.bincount(mst_idx, minlength=n_nodes)
+        full_u = np.concatenate([dep_idx, mst_idx])
+        full_v = np.concatenate([mst_idx, dep_idx])
+        order = np.argsort(full_u, kind='stable')
+        full_u_sorted = full_u[order]
+        full_v_sorted = full_v[order]
+        indptr = np.searchsorted(full_u_sorted, np.arange(n_nodes + 1))
+        def neighbors(i):
+            return full_v_sorted[indptr[i]:indptr[i + 1]]
+        root_priority = np.lexsort((nodes, -master_count))
+        comp_id = np.full(n_nodes, -1, dtype=int)
+        comp_root = []
+        n_comp = 0
+        for start in root_priority:
+            if comp_id[start] != -1:
+                continue
+            comp_id[start] = n_comp
+            comp_root.append(start)
+            queue = [start]
+            qi = 0
+            while qi < len(queue):
+                cur = queue[qi]; qi += 1
+                for nb in neighbors(cur):
+                    if comp_id[nb] == -1:
+                        comp_id[nb] = n_comp
+                        queue.append(nb)
+            n_comp += 1
+        comp_root = np.array(comp_root)
+        comp_of_edge = comp_id[dep_idx]
+        comp_mask = np.zeros(n_comp, dtype=int)
+        np.bitwise_or.at(comp_mask, comp_of_edge, (1 << edge_tag))
+        n_dirs = np.array([bin(m).count("1") for m in comp_mask])
+        all_idx = np.arange(n_nodes)
+        is_root = np.zeros(n_nodes, dtype=bool)
+        is_root[comp_root] = True
+        slave_idx = all_idx[~is_root]
+        slave_comp = comp_id[slave_idx]
+        slave_master_idx = comp_root[slave_comp]
+        slave_dirs = n_dirs[slave_comp]
+        slave_real = nodes[slave_idx]
+        master_real = nodes[slave_master_idx]
+        if self.dim == 3:
+            faces  = np.column_stack([slave_real[slave_dirs == 1], master_real[slave_dirs == 1]])
+            edges = np.column_stack([slave_real[slave_dirs == 2], master_real[slave_dirs == 2]])
+            corners  = np.column_stack([slave_real[slave_dirs == 3], master_real[slave_dirs == 3]])
+            return faces, edges, corners
+        else:
+            edges  = np.column_stack([slave_real[slave_dirs == 1], master_real[slave_dirs == 1]])
+            corners = np.column_stack([slave_real[slave_dirs == 2], master_real[slave_dirs == 2]])
+            return edges, corners
+
+
     def ApplyNeumann(self, LOAD, distributed=True):
         """
         Assembles right hand side (generalised external force vector)
@@ -4420,6 +4517,72 @@ class Mesh:
                     F[self.conn[nodes, ldi[1][j][0]]] += ldi[1][j][1]
         return F
 
+    def ApplyPeriodicBC(self, K, eps, pairs):
+        """
+        Applying Periodic Boundary Conditions (PBC) using penalty.
+        
+        Parameters
+        ----------
+        K: SCIPY.SPARSE
+            PYXEL STIFFNESS MATRIX
+        eps: NUMPY ARRAY
+            prescribed strain (symmetric matrix)
+        pairs: NUMPY ARRAY
+            list of non-redondant pairs of corresponding nodes.
+
+        Returns
+        -------
+        Kr : SPARSE MATRIX
+            modified stiffness matrix
+        Fd : NUMPY.ARRAY
+            Right hand side vector
+
+        """
+        row = []
+        col = []
+        val = []
+        CUd = []
+        if self.dim == 2:
+            for i in range(len(pairs)):
+                dofx = self.conn[pairs[i], 0]
+                dofy = self.conn[pairs[i], 1]
+                row += 2*[2*i] + 2*[2*i+1]
+                col += list(dofx) + list(dofy)
+                val += [-1, 1, -1, 1]
+                v = np.diff(self.n[pairs[i], :], axis=0)[0]
+                CUd += list(eps @ v)
+
+            nrows = len(pairs)*2
+            row += [nrows, nrows+1]
+            col += list(self.conn[0, :])
+            val += [1, 1]
+            CUd += [0, 0]
+            nrows += 2
+        else:
+            for i in range(len(pairs)):
+                dofx = self.conn[pairs[i], 0]
+                dofy = self.conn[pairs[i], 1]
+                dofz = self.conn[pairs[i], 2]
+                row += 2*[3*i] + 2*[3*i+1] + 2*[3*i+2]
+                col += list(dofx) + list(dofy) + list(dofz)
+                val += [-1, 1, -1, 1, -1, 1]
+                v = np.diff(self.n[pairs[i], :], axis=0)[0]
+                CUd += list(eps @ v)
+
+            nrows = len(pairs)*3
+            row += [nrows, nrows+1, nrows+2]
+            col += list(self.conn[0, :])
+            val += [1, 1, 1]
+            CUd += [0, 0, 0]
+            nrows += 3
+
+        CUd = np.array(CUd)
+        C = csr_matrix((val, (row, col)), shape=(nrows, self.ndof))
+        k = np.max(K) * 1e5
+        Kd = K + k * C.T @ C
+        Fd = k * C.T @ CUd
+        return Kd, Fd
+
     def ApplyDirichlet(self, K, BC, meth='penalty'):
         """
         Applying Dirichlet BC to stiffness matrix
@@ -4437,6 +4600,10 @@ class Mesh:
         -------
         Kr : SPARSE MATRIX
             modified stiffness matrix
+        Fd : NUMPY.ARRAY
+            Right hand side vector
+        Ud : NUMPY.ARRAY
+            Dof vector with Dirichlet BC
 
         """
         ndof = K.shape[0]
