@@ -93,8 +93,41 @@ def ComposeTransformation(r1, t1, r2, t2):
 # otherwise https://github.com/opencv/opencv/blob/4.x/doc/pattern_tools/gen_pattern.py
 
 
+def BoardMask(gray):
+    """
+    Isolate the bright substrate of a calibration board (assumed to stand
+    out as the largest bright connected region in the image) to restrict
+    dot/marker detection to the board itself and reject background
+    clutter (walls, fixed fiducials, hands, ...).
+
+    Parameters
+    ----------
+    gray : NUMPY.ARRAY
+        grayscale image
+
+    Returns
+    -------
+    NUMPY.ARRAY (uint8)
+        binary mask, same size as gray, 255 inside the board region
+
+    """
+    gray[0:100, :]=0
+    gray[:,gray.shape[1]-100:-1]=0
+    gray[gray.shape[0]-100:-1,:]=0
+    gray[:,0:100]=0
+    _, th = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+    th = cv2.morphologyEx(th, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    contours, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return np.full_like(gray, 255)
+    c = max(contours, key=cv2.contourArea)
+    mask = np.zeros_like(gray)
+    cv2.drawContours(mask, [c], -1, 255, -1)
+    return cv2.erode(mask, np.ones((15, 15), np.uint8))
+
+
 class Board():
-    def __init__(self, board_size, board_type='chess', board_step=1, ratio=0.25):
+    def __init__(self, board_size, board_type='chess', board_step=1, ratio=0.25, innerparams=([3, 3], [4, 7])):
         """
         Parameters
         ----------
@@ -116,7 +149,9 @@ class Board():
         self.ratio = ratio
         if self.type == 'circles_vic':
             self.rmin = 10
-            self.rmax = 100
+            self.rmax = 300
+            self.inner = [innerparams[0], [innerparams[0][0]+innerparams[1][0], innerparams[0][1]],
+                           [innerparams[0][0],innerparams[0][1]+innerparams[1][1]]]
 
     def GetObjPoints(self):
         """
@@ -432,95 +467,161 @@ class Camera:
                     img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, mor_ex)
         return img
 
+
+    def IdentifyMarkers(W):
+        """A partir des 3 points blancs detectes (ordre quelconque), retrouve
+        lequel est le sommet de l'angle droit (Xb) et lesquels sont sur l'axe
+        des lignes / des colonnes (le plus grand cote du triangle est
+        l'hypotenuse, opposee au sommet de l'angle droit)."""
+        d = [np.linalg.norm(W[i] - W[j]) for i, j in [(0, 1), (0, 2), (1, 2)]]
+        pairs = [(0, 1), (0, 2), (1, 2)]
+        hyp_pair = pairs[int(np.argmax(d))]
+        origin_idx = ({0, 1, 2} - set(hyp_pair)).pop()
+        leg_a, leg_b = hyp_pair
+        Xb = W[origin_idx]
+        va, vb = W[leg_a] - Xb, W[leg_b] - Xb
+        if np.linalg.norm(va) > np.linalg.norm(vb):
+            row_pt, col_pt = W[leg_a], W[leg_b]
+        else:
+            row_pt, col_pt = W[leg_b], W[leg_a]
+        return Xb, row_pt, col_pt
+
     def findChessboardCornersVIC(self, board, imnum, opt):
+        """
+        Detect a 'circles_vic' style dot grid (Correlated-Solutions-like
+        board): a regular grid of dark circular dots plus exactly 3
+        lighter/white dots used as orientation markers, assumed to sit at
+        the extreme corners of the grid (the markers define the origin and
+        the two axes, and the corner-to-corner distances are used to infer
+        the grid pitch in pixels).
+        """
         d_min = board.rmin*2
         d_max = board.rmax*2
-        rad = int(board.rmin)
+        gray = self.GetImage(imnum, opt)
+        gray_raw = self.GetImage(imnum, dict())
+
+        mask = BoardMask(gray_raw)
+        masked = np.where(mask > 0, gray, 128).astype('uint8')
+        masked_raw = np.where(mask > 0, gray_raw, 128).astype('uint8')
+
         params = cv2.SimpleBlobDetector_Params()
         params.minArea = 3.14*d_min**2/4
         params.maxArea = 3.14*d_max**2/4
-        params.filterByColor = False
-        params.filterByConvexity = False
-        params.minCircularity = 0.2
-        params.filterByInertia = True
+        params.filterByColor = True
+        params.blobColor = 0
+        params.filterByConvexity = True
+        params.minCircularity = 0.5
+        params.filterByInertia = False
         params.minInertiaRatio = 0.1
         detector = cv2.SimpleBlobDetector_create(params)
-        gray = self.GetImage(imnum, opt)
-        keypoints = detector.detect(gray)
-        gray = self.GetImage(imnum, dict())
-        x, y = np.meshgrid(np.arange(-rad, rad).astype(int),
-                           np.arange(-rad, rad).astype(int))
-        x = x.ravel()
-        y = y.ravel()
-        rep, = np.where(x**2+y**2 < (rad*0.8)**2)
-        x = x[rep]
-        y = y[rep]
-        stds = np.zeros(len(keypoints))
-        i = 0
-        for kpt in keypoints:
-            xx = x + int(kpt.pt[0])
-            yy = y + int(kpt.pt[1])
-            coul = gray[yy, xx]
-            stds[i] = np.std(coul)
-            i += 1
-        X = np.array([list(kpt.pt) for kpt in keypoints])
-        rep = np.argsort(stds)[-3:]
-        X3 = X[rep[[0, 1, 2, 0]]]
-        v3 = np.diff(X3, axis=0)  # 3 vectors of the triangle
-        l3 = np.linalg.norm(v3, axis=1)  # 3 triangle edge size
-        lsort = np.argsort(l3)  # sort by edge size
-        if lsort[-1] == 0:
-            # if the larger size is 0, the right angle is 2
-            Xb = X3[2]
-            Vb = np.array([X3[0] - Xb, X3[1] - Xb])
-        elif lsort[-1] == 1:
-            # if the larger size is 1, the right angle is 0
-            Xb = X3[0]
-            Vb = np.array([X3[1] - Xb, X3[2] - Xb])
-        else:
-            # if the larger size is 2, the right angle is 1
-            Xb = X3[1]
-            Vb = np.array([X3[0] - Xb, X3[2] - Xb])
-        if np.diff(np.linalg.norm(Vb, axis=1))[0] < 1:
-            Vb = Vb[::-1]
-        Vb = Vb/np.linalg.norm(Vb, axis=1)[np.newaxis].T
-        # the first dimension is along the smaller size.
-        if np.diff(board.size)[0] < 0:
-            inner_size = board.size[::-1].tolist()
-        else:
-            inner_size = board.size.tolist()
+        keypoints = detector.detect(masked)
 
-        def ClosestPoint(X, x):
-            rep = np.argsort((X[:, 0] - x[0])**2 + (X[:, 1] - x[1])**2)[0]
-            # dist = (X[rep, 0] - x[0])**2 + (X[rep, 1] - x[1])**2
-            return X[rep]
-        detected_points = np.zeros([2, ] + inner_size)
-        step_y = l3[lsort[1]] / (inner_size[1]-1)
-        step_x = l3[lsort[0]] / (inner_size[0]-1)
-        yold = Xb.copy()
-        vec_y = step_y * Vb[1]
-        for iy in range(inner_size[1]):
-            if iy > 0:
-                xnew = yold + vec_y
-                xnew = ClosestPoint(X, xnew)
-                detected_points[:, 0, iy] = xnew
-                vec_y = xnew - yold
-                yold = xnew.copy()
-                xold = yold.copy()
+        if len(keypoints) < 3:
+            return False, None
+        
+        X = np.array([list(kpt.pt) for kpt in keypoints])
+        # the 3 orientation markers are the lighter/white dots among the
+        # (generally dark) grid dots: detect them directly by color rather
+        # than by local contrast ranking, which is fragile in the presence
+        # of background clutter.
+        wparams = cv2.SimpleBlobDetector_Params()
+        wparams.minArea = 3.14*d_min**2/4
+        wparams.maxArea = 3.14*d_max**2/4
+        wparams.filterByColor = True
+        wparams.blobColor = 255
+        wparams.filterByConvexity = True
+        wparams.minCircularity = 0.5
+        wparams.filterByInertia = False
+        wparams.minInertiaRatio = 0.1
+        wdetector = cv2.SimpleBlobDetector_create(wparams)
+        wkeypoints = wdetector.detect(masked_raw)
+
+        if len(wkeypoints) != 3:
+            return False, None
+        X3 = np.array([list(kpt.pt) for kpt in wkeypoints])
+
+        def IdentifyMarkers(W):
+            """A partir des 3 points blancs detectes (ordre quelconque), retrouve
+            lequel est le sommet de l'angle droit (Xb) et lesquels sont sur l'axe
+            des lignes / des colonnes (le plus grand cote du triangle est
+            l'hypotenuse, opposee au sommet de l'angle droit)."""
+            d = [np.linalg.norm(W[i] - W[j]) for i, j in [(0, 1), (0, 2), (1, 2)]]
+            pairs = [(0, 1), (0, 2), (1, 2)]
+            hyp_pair = pairs[int(np.argmax(d))]
+            origin_idx = ({0, 1, 2} - set(hyp_pair)).pop()
+            leg_a, leg_b = hyp_pair
+            Xb = W[origin_idx]
+            va, vb = W[leg_a] - Xb, W[leg_b] - Xb
+            if np.linalg.norm(va) > np.linalg.norm(vb):
+                row_pt, col_pt = W[leg_a], W[leg_b]
             else:
-                xold = yold.copy()
-                detected_points[:, 0, 0] = xold
-            vec_x = step_x * Vb[0]
-            for ix in range(1, inner_size[0]):
-                xnew = xold + vec_x
-                xnew = ClosestPoint(X, xnew)
-                vec_x = xnew - xold
-                xold = xnew.copy()
-                detected_points[:, ix, iy] = xnew
-        imagepts = np.zeros([np.prod(inner_size), 1, 2])
-        imagepts[:, 0, 0] = detected_points[0, :, :].ravel()
-        imagepts[:, 0, 1] = detected_points[1, :, :].ravel()
-        return True, imagepts
+                row_pt, col_pt = W[leg_b], W[leg_a]
+            return Xb, row_pt, col_pt
+        
+        nrows, ncols = int(board.size[1]), int(board.size[0])
+        grid_rc = np.array([[r, c] for r in range(nrows) for c in range(ncols)], dtype='float32')
+        Xb, row_pt, col_pt = IdentifyMarkers(X3)
+
+        obj_pts = np.array(board.inner, dtype='float32')
+        img_pts = np.array([Xb, row_pt, col_pt], dtype='float32')
+    
+        def FitAndMatch(obj_src, img_dst, radius, ransac_thresh=None):
+            if len(obj_src) < 4:
+                Haff, _ = cv2.estimateAffine2D(obj_src, img_dst)
+                if Haff is None:
+                    return None, None
+                pred = cv2.transform(grid_rc.reshape(-1, 1, 2), Haff).reshape(-1, 2)
+            else:
+                H, _ = cv2.findHomography(obj_src, img_dst, method=cv2.RANSAC,
+                                            ransacReprojThreshold=ransac_thresh)
+                if H is None:
+                    return None, None
+                pred = cv2.perspectiveTransform(grid_rc.reshape(-1, 1, 2), H).reshape(-1, 2)
+            matched = np.zeros((len(grid_rc), 2))
+            ok = np.zeros(len(grid_rc), dtype=bool)
+            for k, p in enumerate(pred):
+                i = np.argmin(np.sum((X - p) ** 2, axis=1))
+                dist = np.linalg.norm(X[i] - p)
+                if dist < radius:
+                    matched[k] = X[i]
+                    ok[k] = True
+                else:
+                    matched[k] = p  # position predite par l'homographie
+            return matched, ok
+    
+        # passe 1 : transformation affine grossiere a partir des 3 reperes
+        matched1, ok1 = FitAndMatch(obj_pts, img_pts, radius=35.0)
+        if matched1 is None or ok1.sum() < 20:
+            return False, None
+
+        print('match1:', ok1.sum())
+        # passe 2 : homographie affinee sur les points apparies en passe 1
+        matched2, ok2 = FitAndMatch(grid_rc[ok1], matched1[ok1].astype('float32'),
+                                        radius=15.0, ransac_thresh=15.0)
+        if matched2 is None:
+            matched2, ok2 = matched1, ok1
+        print('match2:', ok2.sum())
+    
+        # passe 3 : re-ajustement avec un seuil RANSAC serre, pour ecarter les
+        # points que la passe 2 a acceptes (proches de sa propre prediction)
+        # mais qui restent incoherents avec l'homographie globale majoritaire -
+        # sans cela, un point accroche au mauvais site de la grille peut rester
+        # localement plausible et fausser silencieusement la calibration.
+        matched3, ok3 = FitAndMatch(grid_rc[ok2], matched2[ok2].astype('float32'),
+                                        radius=6.0, ransac_thresh=4.0)
+        if matched3 is None:
+            matched3, ok3 = matched2, ok2
+        print('match3:', ok3.sum())
+        if (~ok3).sum() > 50:
+            return False, None
+    
+        pts = matched3.reshape(-1, 1, 2).astype('float32')
+        crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+        try:
+            pts[ok3] = cv2.cornerSubPix(gray, pts[ok3].copy(), (9, 9), (-1, -1), crit)
+        except cv2.error:
+            pass
+        return True, pts
 
     def DetectPoints_i(self, board, imnum, opt=False):
         """
@@ -778,8 +879,8 @@ class Camera:
             img = self.GetImage(imnum, opt)
             if opt['method'] in ['circles', 'acircles']:
                 res, pts = self.DetectPoints_circles(board, img, opt)
-            elif opt['method'] == 'circlesvic':
-                res, pts = self.DetectPoints_circlesvic(board, imnum, opt)
+            elif opt['method'] in ('circlesvic', 'circles_vic'):
+                res, pts = self.findChessboardCornersVIC(board, imnum, opt)
             elif opt['method'] == 'circlesvic2':
                 res, pts = self.DetectPoints_circlesvic2(board, img, opt)
             elif opt['method'] == 'chess':
@@ -1020,7 +1121,9 @@ class Camera:
         dist = self.params['Distortion']
         # uvd = cv2.undistortPoints(uv, K, dist, None, K)
         opt = (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 30, 0.03)
-        uvd = cv2.undistortPointsIter(uv, K, dist, None, K, opt)
+        # cv2.undistortPointsIter was merged into cv2.undistortPoints (criteria
+        # kwarg) in opencv-python 5.x; this project's env uses 5.0.0.
+        uvd = cv2.undistortPoints(uv, K, dist, None, K, criteria=opt)
         return uvd
 
     def UndistortImage(self, img):
@@ -1281,7 +1384,131 @@ class StereoRig():
     def LoadParams(self, filename):
         self.params = dict(np.load(filename))
 
-# %% 
+# %%
+
+
+class MultiCameraSystem():
+    def __init__(self, cams, rigs, ref_cam):
+        """
+        A system of N calibrated cameras (N >= 2) sharing a common world
+        coordinate system, built from a set of pairwise StereoRig objects
+        that all share the same reference camera.
+
+        Parameters
+        ----------
+        cams : DICT {camera_id: CAMERA}
+            all cameras of the system, including the reference one, each
+            with calibrated Intrinsic/Distortion parameters (see
+            Camera.Calibrate).
+        rigs : DICT {camera_id: STEREORIG}
+            one calibrated StereoRig per non-reference camera (see
+            StereoRig.StereoCalibration), such that rigs[camera_id].cam0
+            is the reference camera and rigs[camera_id].cam1 is the
+            camera camera_id.
+        ref_cam : camera_id
+            id of the reference camera in `cams`; the world coordinate
+            system of the multi-camera system is the reference camera's
+            own coordinate system.
+
+        """
+        self.ref_cam = ref_cam
+        self.cams = cams
+        self.rigs = rigs
+        self.P = {}  # 3x4 projection matrix of each camera, world (=ref_cam) frame
+        K0 = cams[ref_cam].params['Intrinsic']
+        self.P[ref_cam] = K0 @ np.hstack([np.eye(3), np.zeros((3, 1))])
+        for cid, rig in rigs.items():
+            Ki = cams[cid].params['Intrinsic']
+            T = rig.params['Transformation']  # ref_cam -> cid
+            self.P[cid] = Ki @ T[:3, :]
+
+    def Triangulate(self, uv, cam_ids=None):
+        """
+        Linear (DLT) triangulation of 3D points seen by 2 or more cameras
+        of the system, using all the provided views at once (more robust
+        than a single camera pair when a point is visible by more than 2
+        cameras).
+
+        Parameters
+        ----------
+        uv : DICT {camera_id: NUMPY.ARRAY (N, 2)}
+            (distorted) pixel coordinates of the same N points in each
+            camera; at least 2 cameras required.
+        cam_ids : LIST, optional
+            subset of cameras to use (default: all keys of `uv`).
+
+        Returns
+        -------
+        NUMPY.ARRAY (N, 3)
+            triangulated 3D points, in the reference camera's coordinate
+            system.
+
+        """
+        if cam_ids is None:
+            cam_ids = list(uv.keys())
+        if len(cam_ids) < 2:
+            raise Exception('At least 2 cameras are required for triangulation')
+        uvd = {}
+        for cid in cam_ids:
+            pts = np.asarray(uv[cid], dtype='float32').reshape(-1, 1, 2)
+            uvd[cid] = self.cams[cid].UndistortPoints(pts).reshape(-1, 2)
+        n = len(uvd[cam_ids[0]])
+        X = np.zeros((n, 3))
+        for k in range(n):
+            A = []
+            for cid in cam_ids:
+                x, y = uvd[cid][k]
+                P = self.P[cid]
+                A.append(x * P[2] - P[0])
+                A.append(y * P[2] - P[1])
+            _, _, Vt = np.linalg.svd(np.array(A))
+            Xh = Vt[-1]
+            X[k] = Xh[:3] / Xh[3]
+        return X
+
+    def Project(self, X, cam_ids=None):
+        """
+        Project 3D points (reference camera's coordinate system) into one
+        or several cameras of the system, including lens distortion.
+
+        Parameters
+        ----------
+        X : NUMPY.ARRAY (N, 3)
+        cam_ids : LIST, optional
+            subset of cameras to project into (default: all cameras).
+
+        Returns
+        -------
+        DICT {camera_id: NUMPY.ARRAY (N, 2)}
+            pixel coordinates of the projections in each camera.
+
+        """
+        if cam_ids is None:
+            cam_ids = list(self.cams.keys())
+        out = {}
+        for cid in cam_ids:
+            K = self.cams[cid].params['Intrinsic']
+            D = self.cams[cid].params['Distortion']
+            if cid == self.ref_cam:
+                r, t = np.zeros((3, 1)), np.zeros((3, 1))
+            else:
+                T = self.rigs[cid].params['Transformation']
+                r, _ = cv2.Rodrigues(T[:3, :3])
+                t = T[:3, [-1]]
+            uv, _ = cv2.projectPoints(X, r, t, K, D)
+            out[cid] = uv.reshape(-1, 2)
+        return out
+
+    def SaveParams(self, filename=None):
+        if not filename:
+            filename = datetime.now().strftime("multicam_param_%y%m%d-%H%M%S-%f")
+        data = {'ref_cam': self.ref_cam}
+        for cid in self.P:
+            data['P_%s' % cid] = self.P[cid]
+        np.savez(filename, **data)
+        print("Writing file %s.npz" % filename)
+
+# %%
 
 def CamerasFromVICFile(filename):
     """
