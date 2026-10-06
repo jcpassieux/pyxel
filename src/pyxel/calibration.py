@@ -594,24 +594,18 @@ class Camera:
         if matched1 is None or ok1.sum() < 20:
             return False, None
 
-        print('match1:', ok1.sum())
         # passe 2 : homographie affinee sur les points apparies en passe 1
         matched2, ok2 = FitAndMatch(grid_rc[ok1], matched1[ok1].astype('float32'),
                                         radius=15.0, ransac_thresh=15.0)
         if matched2 is None:
             matched2, ok2 = matched1, ok1
-        print('match2:', ok2.sum())
     
-        # passe 3 : re-ajustement avec un seuil RANSAC serre, pour ecarter les
-        # points que la passe 2 a acceptes (proches de sa propre prediction)
-        # mais qui restent incoherents avec l'homographie globale majoritaire -
-        # sans cela, un point accroche au mauvais site de la grille peut rester
-        # localement plausible et fausser silencieusement la calibration.
+        # passe 3 : re-ajustement avec un seuil RANSAC serre
         matched3, ok3 = FitAndMatch(grid_rc[ok2], matched2[ok2].astype('float32'),
                                         radius=6.0, ransac_thresh=4.0)
         if matched3 is None:
             matched3, ok3 = matched2, ok2
-        print('match3:', ok3.sum())
+
         if (~ok3).sum() > 50:
             return False, None
     
