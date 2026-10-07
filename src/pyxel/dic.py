@@ -700,9 +700,9 @@ def MultiscaleInit(imf, img, m, cam, scales=[3, 2, 1], l0=None, U0=None,
             cam2 = None
         m2 = m.Copy()
         if len(f.pix.shape) == 3:
-            # aesi = min(5, aes // (2**iscale))  # max 5 integration points > Fast
-            # aesi = max(1, aesi)  # not smaller than 1
-            # m2.DVCIntegration(aesi)
+            aesi = min(5, aes // (2**iscale))  # max 5 integration points > Fast
+            aesi = max(1, aesi)  # not smaller than 1
+            m2.DVCIntegration(aesi)
             m2.DVCIntegrationTetVoxel(f, cam2, fill=0.3)
         else:
             aes2 = max(aes // (2**iscale), 2)
