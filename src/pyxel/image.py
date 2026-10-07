@@ -17,7 +17,7 @@ from .utils import PlotMeshImage, full_screen
 from .vtktools import VTIWriter, PVDFile
 from .mesh import Mesh
 import cv2
-from skimage import io
+import imageio as io
 from warnings import warn
 
 class Image:
@@ -347,12 +347,15 @@ class Volume:
 
     def Save(self, fname='SavedVolume.tiff'):
         """Image Save"""
-        f = np.round(self.pix).astype("uint8")
-        io.imsave(fname, f)
+        f = np.round(self.pix).astype("int8")
+        io.volwrite(fname, f)
 
-    def VTKImage(self, fname='SavedVolume', sx=0, sy=0, sz=0):
+    def VTKImage(self, fname='SavedVolume', sx=0, sy=0, sz=0, dtype='uint8'):
         """Image Save"""
-        fpix = np.round(self.pix).astype("uint8")
+        if dtype == 'uint8':
+            fpix = np.round(self.pix).astype("uint8")
+        else:
+            fpix = self.pix.astype(dtype)
         vtk = VTIWriter(
             self.pix.shape[0], self.pix.shape[1], self.pix.shape[2], sx, sy, sz)
         vtk.addCellData('f', 1, fpix.T.ravel())
@@ -361,17 +364,26 @@ class Volume:
             os.makedirs(os.path.join("vtk", dir0))
         vtk.VTIWriter(os.path.join("vtk", dir0, filename))
 
-    def VTKSlice(self, fname='SavedSlice'):
+    def VTKSlice(self, fname='SavedSlice', **kwargs):
         """Image Save"""
-        nx, ny, nz = self.pix.shape
-        fs = self.Copy()
-        fs.pix = self.pix[[nx//2], :, :]
-        fs.VTKImage(fname+'_0_0', nx//2, 0, 0)
-        fs.pix = self.pix[:, [ny//2], :]
-        fs.VTKImage(fname+'_1_0', 0, ny//2, 0)
-        fs.pix = self.pix[:, :, [nz//2]]
-        fs.VTKImage(fname+'_2_0', 0, 0, nz//2)
-        PVDFile(os.path.join('vtk', fname), 'vti', 3, 1)
+        im = self.Copy()
+        nx, ny, nz = im.pix.shape
+        # if nx % 2:
+        #     im.pix = im.pix[:-1, :, :]
+        # if ny % 2:
+        #     im.pix = im.pix[:, :-1, :]
+        # if nz % 2:
+        #     im.pix = im.pix[:, :, :-1]
+        # nx, ny, nz = im.pix.shape
+        fs = im.Copy()
+        fs.pix = im.pix[[nx//2], :, :]
+        fs.VTKImage(fname+'_0_0', nx//2, 0, 0, **kwargs)
+        fs.pix = im.pix[:, [ny//2], :]
+        fs.VTKImage(fname+'_1_0', 0, ny//2, 0, **kwargs)
+        fs.pix = im.pix[:, :, [nz//2]]
+        fs.VTKImage(fname+'_2_0', 0, 0, nz//2, **kwargs)
+        # PVDFile(os.path.join('vtk', fname), 'vti', 3, 1)
+        PVDFile(fname, 'vti', 3, 1)
 
     def BuildInterp(self):
         """build trilinear interp"""
@@ -407,26 +419,31 @@ class Volume:
         # df_dP = self.interp.grad(self.pix, P_coords)
         # return df_dP[0], df_dP[1], df_dP[2]
 
-    def Plot(self, **kwargs):
+    def Plot(self, cmap="gray", **kwargs):
         """Plot Image"""
         nx, ny, nz = self.pix.shape
+        kwargs.setdefault("vmin", self.pix.min())
+        kwargs.setdefault("vmax", self.pix.max())
+        opts = dict(cmap=cmap, interpolation="none", origin="upper", **kwargs)
+
         plt.subplot(221)
-        plt.imshow(self.pix[nx//2, :, :], cmap="gray",
-                   interpolation="none", origin="upper", **kwargs)
+        im = plt.imshow(self.pix[nx//2, :, :], **opts)
         plt.xlabel('3')
         plt.ylabel('2')
+
+        ax_cb = plt.subplot(222)
+        ax_cb.axis('off')
+        plt.colorbar(im, ax=ax_cb, fraction=0.05, aspect=30)
+
         plt.subplot(223)
-        plt.imshow(self.pix[:, ny//2, :], cmap="gray",
-                   interpolation="none", origin="upper", **kwargs)
+        plt.imshow(self.pix[:, ny//2, :], **opts)
         plt.xlabel('3')
         plt.ylabel('1')
+
         plt.subplot(224)
-        plt.imshow(self.pix[:, :, nz//2], cmap="gray",
-                   interpolation="none", origin="upper", **kwargs)
+        plt.imshow(self.pix[:, :, nz//2], **opts)
         plt.xlabel('2')
         plt.ylabel('1')
-        # plt.axis('off')
-        # plt.colorbar()
 
     def Dynamic(self):
         """Compute image dynamic"""

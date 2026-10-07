@@ -1,3 +1,6 @@
-
 *.pyc
-*.pyc
+dist/
+.conda/
+*.nbc
+*.nbi
+tests/*/vtk/

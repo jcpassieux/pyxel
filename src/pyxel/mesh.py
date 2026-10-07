@@ -14,14 +14,14 @@ import os
 import numpy as np
 import scipy as sp
 import scipy.sparse.linalg as splgl
-from scipy.sparse import diags, csr_matrix, bmat, issparse, coo_array
+from scipy.sparse import diags, csr_matrix, bmat, issparse, coo_array, hstack
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import art3d
 import matplotlib.pyplot as plt
 import matplotlib.collections as cols
 import matplotlib.animation as animation
 from matplotlib.tri import Triangulation
-# from numba import njit # uncomment for just in time compilation
+from numba import njit # uncomment for just in time compilation
 from .utils import meshgrid, isInBox, full_screen, PointCloudIntersection
 from .vtktools import PVDFile
 from .material import *
@@ -95,6 +95,55 @@ def MeshUnion(mlist, difference=False):
     mg.RemoveDoubleElems(difference=difference)
     return mg
 
+@njit(cache=True)
+def _voxelize_kernel(nodes, tets, origin, h, shape, offset, eps):
+    nx, ny, nz = shape
+    elem = -np.ones((nx, ny, nz), np.int64)
+    bary = np.zeros((nx, ny, nz, 4))
+    T = np.empty((3, 3))
+    d = np.empty(3)
+
+    for e in range(tets.shape[0]):
+        v0 = nodes[tets[e, 0]]
+        v1 = nodes[tets[e, 1]]
+        v2 = nodes[tets[e, 2]]
+        v3 = nodes[tets[e, 3]]
+
+        for i in range(3):
+            T[i, 0] = v1[i] - v0[i]
+            T[i, 1] = v2[i] - v0[i]
+            T[i, 2] = v3[i] - v0[i]
+        if abs(np.linalg.det(T)) < 1e-300:   # tétraèdre dégénéré
+            continue
+        Ti = np.linalg.inv(T)
+
+        # boîte englobante en indices voxel
+        lo = np.minimum(np.minimum(v0, v1), np.minimum(v2, v3))
+        hi = np.maximum(np.maximum(v0, v1), np.maximum(v2, v3))
+        i0 = np.ceil((lo - origin) / h - offset - eps).astype(np.int64)
+        i1 = np.floor((hi - origin) / h - offset + eps).astype(np.int64)
+        i0x, i0y, i0z = max(i0[0], 0), max(i0[1], 0), max(i0[2], 0)
+        i1x, i1y, i1z = min(i1[0], nx - 1), min(i1[1], ny - 1), min(i1[2], nz - 1)
+
+        for i in range(i0x, i1x + 1):
+            px = origin[0] + (i + offset) * h - v0[0]
+            for j in range(i0y, i1y + 1):
+                py = origin[1] + (j + offset) * h - v0[1]
+                for k in range(i0z, i1z + 1):
+                    if elem[i, j, k] != -1:      # déjà affecté : on garde le premier
+                        continue
+                    pz = origin[2] + (k + offset) * h - v0[2]
+                    l1 = Ti[0, 0]*px + Ti[0, 1]*py + Ti[0, 2]*pz
+                    l2 = Ti[1, 0]*px + Ti[1, 1]*py + Ti[1, 2]*pz
+                    l3 = Ti[2, 0]*px + Ti[2, 1]*py + Ti[2, 2]*pz
+                    l0 = 1.0 - l1 - l2 - l3
+                    if l0 >= -eps and l1 >= -eps and l2 >= -eps and l3 >= -eps:
+                        elem[i, j, k] = e
+                        bary[i, j, k, 0] = l0
+                        bary[i, j, k, 1] = l1
+                        bary[i, j, k, 2] = l2
+                        bary[i, j, k, 3] = l3
+    return elem, bary
 
 # %% Elements tools
 
@@ -1822,6 +1871,58 @@ class Mesh:
         self.pgx = self.phix.dot(qx)
         self.pgy = self.phiy.dot(qx)
         self.pgz = self.phiz.dot(qx)
+
+
+    def DVCIntegrationTetVoxel(self, f, cam, fill=1.0, seed=0):
+        """
+        m : pyxel.mesh (m.n : nnodes x 3, m.e[3] : ntet x 4)
+        f : pyxel.volume (f.pix de shape (nx, ny, nz), f.x0, f.y0, f.z0)
+        fill in ]0, 1] set the ratio of voxels in the quadrature rule.
+            if fill < 1, a random subset of voxels is used instead.
+    
+        Returns
+        --------
+        npg, wdetJ, pgx, pgy, pgz, phix, phiy, phiz, pgu (voxels coord.)
+        """
+        uvw = np.c_[cam.P(self.n[:, 0], self.n[:, 1], self.n[:, 2])]
+        nodes = np.ascontiguousarray(uvw, dtype=np.float64)
+        tets = np.ascontiguousarray(self.e[4], dtype=np.int64)
+        origin = np.array([f.x0, f.y0, f.z0], dtype=np.float64)
+        shape = tuple(int(s) for s in f.pix.shape)
+        elem, bary = _voxelize_kernel(nodes, tets, origin, 1.0, shape, 0.0, 1e-10)
+        # h = f.Copy()
+        # h.pix = elem
+        # h.Plot()
+        nnodes = self.n.shape[0]
+        mask = elem >= 0
+        if fill < 1.0:
+            rng = np.random.default_rng(seed)
+            idx = np.flatnonzero(mask)
+            keep = rng.choice(idx, size=int(round(fill * idx.size)), replace=False)
+            mask = np.zeros(shape, dtype=bool)
+            mask.flat[keep] = True
+        # self.pgu = np.argwhere(mask)
+        e = elem[mask]
+        b = bary[mask]
+        cols = self.e[4][e]
+        nin = e.size
+        rows_id = np.arange(nin)
+        nrows = nin
+        rows = np.repeat(rows_id, 4)
+        phi = csr_matrix((b.ravel(), (rows, cols.ravel())),
+              shape=(nrows, nnodes)).tocsr()
+        Z = csr_matrix(phi.shape)
+        self.phix = hstack([phi, Z,  Z], format='csr')
+        self.phiy = hstack([Z,  phi, Z], format='csr')
+        self.phiz = hstack([Z,  Z,  phi], format='csr')
+        qx = np.zeros(self.ndof)
+        rep, = np.where(self.conn[:, 0] >= 0)
+        qx[self.conn[rep, :]] = self.n[rep, :]
+        self.pgx = self.phix @ qx
+        self.pgy = self.phiy @ qx
+        self.pgz = self.phiz @ qx
+        self.npg = len(e)
+        self.wdetJ = np.ones(self.npg) / fill
 
     def __GaussIntegElem(self, e, et, subint=False):
         # parent element
