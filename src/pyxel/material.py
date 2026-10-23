@@ -1,6 +1,19 @@
 
 import numpy as np
 
+def Young2Lame(p):
+    E = p[0]
+    nu = p[1]
+    mu = E/(2*(1+nu))
+    lam = (nu*E)/((1-2*nu)*(1+nu))
+    return [lam, mu]
+
+def Lame2Young(p):
+    lam = p[0]
+    mu = p[1]
+    E = mu * (3*lam + 2*mu)/(lam+mu) 
+    nu = (lam)/(2*(lam + mu))    
+    return [E, nu]
 
 def Hooke(p, typc='isotropic_2D_ps'):
     """Compute Hooke tensor from elastic constants

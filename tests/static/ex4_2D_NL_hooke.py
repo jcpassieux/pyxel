@@ -14,7 +14,7 @@ import pyxel as px
 # %% Defining an arbitrary nonlinear hooke law
 
 
-def NonLinearHooke(p, En, Es):
+def UserMaterial(p, En, Es):
     exx = En[:, 0]
     eyy = En[:, 1]
 
@@ -33,6 +33,7 @@ def NonLinearHooke(p, En, Es):
     C[1, 0] = p[1] * h
     C[1, 1] = p[2] * f
     C[2, 2] = p[3]
+    Sn, Ss = px.Strain2Stress(C, En, Es)
     # tangent operator
     Ct = np.zeros((3, 3, len(eyy)))
     Ct[0, 0] = p[0]
@@ -40,7 +41,7 @@ def NonLinearHooke(p, En, Es):
     Ct[1, 0] = p[1] * h
     Ct[1, 1] = p[1] * dh * exx + p[2] * (f + df*eyy)
     Ct[2, 2] = p[3]
-    return C, Ct
+    return Sn, Ss, Ct
 
 # %%  MESH AND BC
 
@@ -75,8 +76,7 @@ U = np.zeros(m.ndof)
 dirichlet_dof = m.conn[repu, :].ravel()
 for it in range(30):
     En, Es = m.StrainAtGP(U)
-    Cnl, Ct = NonLinearHooke(p, En, Es)
-    Sn, Ss = px.Strain2Stress(Cnl, En, Es)
+    Sn, Ss, Ct = UserMaterial(p, En, Es)
     Fint = m.ComputeInternalForce(Sn, Ss)
     Kt = m.Stiffness(Ct)
     Ktd, Fd, _ = m.ApplyDirichlet(Kt, BC, 'penalty')
@@ -97,7 +97,7 @@ m.Plot(alpha=0.2)
 m.Plot(U, 1)
 
 m.PlotContourStrain(U, s=1)
-m.PlotContourStress(U, Cnl, s=1)
+m.PlotContourStress(U, None, Sn, Ss, s=1)
 
 m.PlotContourDispl(U, s=1)
 

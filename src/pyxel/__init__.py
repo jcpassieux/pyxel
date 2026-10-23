@@ -13,3 +13,4 @@ from .exportpixmap import *
 from .mesher import *
 from .vtktools import VTRWriter, PVDFile
 from . import calibration
+from .stereof import StereOF

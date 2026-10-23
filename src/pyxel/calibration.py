@@ -1113,11 +1113,11 @@ class Camera:
     def UndistortPoints(self, uv):
         K = self.params['Intrinsic']
         dist = self.params['Distortion']
-        # uvd = cv2.undistortPoints(uv, K, dist, None, K)
-        opt = (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 30, 0.03)
+        uvd = cv2.undistortPoints(uv, K, dist, None, K)
+        # opt = (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 30, 0.03)
         # cv2.undistortPointsIter was merged into cv2.undistortPoints (criteria
         # kwarg) in opencv-python 5.x; this project's env uses 5.0.0.
-        uvd = cv2.undistortPoints(uv, K, dist, None, K, criteria=opt)
+        # uvd = cv2.undistortPoints(uv, K, dist, None, K, criteria=opt)
         return uvd
 
     def UndistortImage(self, img):
@@ -1253,16 +1253,16 @@ class StereoRig():
             triangulated points.
 
         """
-        K1 = self.cam0.params['Intrinsic']
-        K2 = self.cam1.params['Intrinsic']
+        K0 = self.cam0.params['Intrinsic']
+        K1 = self.cam1.params['Intrinsic']
         # transformation between world CSYS and Cam0
         r0 = self.params['Rotation']
         t0 = self.params['Translation']
         T0 = Vects2Matrix(r0, t0)
         # Composition of transformations T0 and T12
         T1 = self.params['Transformation'] @ T0
-        projMatr1 = K1 @ T0[:-1]
-        projMatr2 = K2 @ T1[:-1]
+        projMatr1 = K0 @ T0[:-1]
+        projMatr2 = K1 @ T1[:-1]
         switch_col_row = (pts1.shape[1] == 2)
         if switch_col_row:
             pts1 = pts1.T
@@ -1540,7 +1540,7 @@ def CamerasFromVICFile(filename):
             if line.find("Focal Length (Y)") > -1:
                 p[3] = float(line.split()[3])
             if line.find("Skew") > -1:
-                p[4] = float(line.split()[2])
+                p[4] = float(line.split()[1])
             if line.find("Kappa 1") > -1:
                 p[5] = float(line.split()[2])
             if line.find("Kappa 2") > -1:

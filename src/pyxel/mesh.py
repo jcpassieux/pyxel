@@ -2221,40 +2221,40 @@ class Mesh:
                 gp_list = np.append(gp_list, gpl)
         return gp_list
 
-    def Stiffness(self, hooke):
-        """Assembles Stiffness Operator"""
+    def Stiffness(self, hooke, full=False):
+        """
+        Assembles Stiffness Operator
+        
+        hooke: NUMPY.ARRAY
+            3x3 (2D) or 6x6 operator in Voigt order: xx, yy, (zz), xy, (xz, yz)
+            build from px.Hooke() 
+        full: BOOL (optional, default False)
+            False: non-zero hooke blocs only : normal-normal + diagonal shear
+            True: all pairs for anisotropic or non-linear laws        
+        
+        """
         if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
             m = self
-        if self.dim == 3:
-            Bxy = m.dphixdy + m.dphiydx
-            Bxz = m.dphixdz + m.dphizdx
-            Byz = m.dphiydz + m.dphizdy
-            K = (
-                 m.dphixdx.T @ diags(m.wdetJ * hooke[0, 0]) @ m.dphixdx
-                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 1]) @ m.dphiydy
-                 + m.dphizdz.T @ diags(m.wdetJ * hooke[2, 2]) @ m.dphizdz
-                 + Bxy.T @ diags(m.wdetJ * hooke[3, 3]) @ Bxy
-                 + Bxz.T @ diags(m.wdetJ * hooke[4, 4]) @ Bxz
-                 + Byz.T @ diags(m.wdetJ * hooke[5, 5]) @ Byz
-                 + m.dphixdx.T @ diags(m.wdetJ * hooke[0, 1]) @ m.dphiydy
-                 + m.dphixdx.T @ diags(m.wdetJ * hooke[0, 2]) @ m.dphizdz
-                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 0]) @ m.dphixdx
-                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 2]) @ m.dphizdz
-                 + m.dphizdz.T @ diags(m.wdetJ * hooke[2, 0]) @ m.dphixdx
-                 + m.dphizdz.T @ diags(m.wdetJ * hooke[2, 1]) @ m.dphiydy
-               )
+        # Voigt strain ops : xx, yy, (zz), xy, (xz, yz)
+        if self.dim == 2:
+            B = [m.dphixdx, m.dphiydy, m.dphixdy + m.dphiydx]
         else:
-            Bxy = m.dphixdy + m.dphiydx
-            K = (
-                 m.dphixdx.T @ diags(m.wdetJ * hooke[0, 0]) @ m.dphixdx
-                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 1]) @ m.dphiydy
-                 + Bxy.T @ diags(m.wdetJ * hooke[2, 2]) @ Bxy
-                 + m.dphixdx.T @ diags(m.wdetJ * hooke[0, 1]) @ m.dphiydy
-                 + m.dphiydy.T @ diags(m.wdetJ * hooke[1, 0]) @ m.dphixdx
-                 )
+            B = [m.dphixdx, m.dphiydy, m.dphizdz, 
+                m.dphixdy + m.dphiydx, m.dphixdz + m.dphizdx, m.dphiydz + m.dphizdy]
+
+        nv = len(B)
+        if full:
+            pairs = [(a, b) for a in range(nv) for b in range(nv)]
+        else:
+            pairs = [(a, b) for a in range(self.dim) for b in range(self.dim)]
+            pairs += [(a, a) for a in range(self.dim, nv)]
+
+        K = 0
+        for a, b in pairs:
+            K = K + B[a].T @ diags(m.wdetJ * hooke[a, b]) @ B[b]
         return K
 
     def ComputeInternalForce(self, Sn, Ss):
@@ -2265,49 +2265,149 @@ class Mesh:
         ----------
         Sn, Ss : NUMPY.NDARRAY
             Normal and Shear Stress matrices.
+            Sn : (ngp, dim)  -> xx, yy, (zz)
+            Ss : (ngp, dim) -> xy, (xz, yz)  (only first column used in 2D)
 
         """
-        if self.dim == 3:
-            Bxy = self.dphixdy + self.dphiydx
-            Bxz = self.dphixdz + self.dphizdx
-            Byz = self.dphiydz + self.dphizdy
-            Fint = (self.dphixdx.T @ (self.wdetJ * Sn[:, 0])
-                    + self.dphiydy.T @ (self.wdetJ * Sn[:, 1])
-                    + self.dphizdz.T @ (self.wdetJ * Sn[:, 2])
-                    + Bxy.T @ (self.wdetJ * Ss[:, 0])
-                    + Bxz.T @ (self.wdetJ * Ss[:, 1])
-                    + Byz.T @ (self.wdetJ * Ss[:, 2]))
+        # Voigt strain ops : xx, yy, (zz), xy, (xz, yz)
+        if self.dim == 2:
+            B = [self.dphixdx, self.dphiydy, self.dphixdy + self.dphiydx]
         else:
-            Bxy = self.dphixdy + self.dphiydx
-            Fint = (self.dphixdx.T @ (self.wdetJ * Sn[:, 0])
-                    + self.dphiydy.T @ (self.wdetJ * Sn[:, 1])
-                    + Bxy.T @ (self.wdetJ * Ss[:, 0]))
+            B = [self.dphixdx, self.dphiydy, self.dphizdz,
+                 self.dphixdy + self.dphiydx,
+                 self.dphixdz + self.dphizdx,
+                 self.dphiydz + self.dphizdy]
+
+        # stress components in the same order
+        S = [Sn[:, i] for i in range(self.dim)]
+        S += [Ss[:, i] for i in range(len(B) - self.dim)]
+
+        Fint = 0
+        for b, s in zip(B, S):
+            Fint = Fint + b.T @ (self.wdetJ * s)
         return Fint
 
-    def StiffnessAxi(self, hooke):
-        """Assembles Stiffness Operator"""
+    def _Dphi(self):
+        """D[i][J] = d phi_i / d X_J  (i: displacement component, J: direction)"""
+        if self.dim == 2:
+            return [[self.dphixdx, self.dphixdy],
+                    [self.dphiydx, self.dphiydy]]
+        return [[self.dphixdx, self.dphixdy, self.dphixdz],
+                [self.dphiydx, self.dphiydy, self.dphiydz],
+                [self.dphizdx, self.dphizdy, self.dphizdz]]
+
+    def _BNL(self, U):
+        """
+        Non-linear strain operator dE = B_NL(U) dU, Voigt order:
+        xx, yy, (zz), xy, (xz, yz)   (shear = 2 E_IJ, like the linear B)
+        With F = I + grad u, B_IJ = sum_i F_iI dphi_i/dX_J
+        """
+        d = self.dim
+        D = self._Dphi()
+        F = [[(1. if i == J else 0.) + D[i][J] @ U for J in range(d)]
+             for i in range(d)]
+
+        def Bij(I, J):
+            return sum(diags(F[i][I]) @ D[i][J] for i in range(d))
+
+        if d == 2:
+            return [Bij(0, 0), Bij(1, 1), Bij(0, 1) + Bij(1, 0)]
+        return [Bij(0, 0), Bij(1, 1), Bij(2, 2),
+                Bij(0, 1) + Bij(1, 0),
+                Bij(0, 2) + Bij(2, 0),
+                Bij(1, 2) + Bij(2, 1)]
+
+    def ComputeInternalForceTL(self, U, Sn, Ss):
+        """
+        Total Lagrangian internal force, Fint = int B_NL^T S dOmega_0
+
+        Parameters
+        ----------
+        U : displacement DOF vector
+        Sn, Ss : 2nd Piola-Kirchhoff stress (same layout as ComputeInternalForce)
+            Sn : (ngp, dim)    -> xx, yy, (zz)
+            Ss : (ngp, 1 or 3) -> xy, (xz, yz)  (only first column used in 2D)
+        """
+        B = self._BNL(U)
+        S = [Sn[:, i] for i in range(self.dim)]
+        S += [Ss[:, i] for i in range(len(B) - self.dim)]
+
+        Fint = 0
+        for b, s in zip(B, S):
+            Fint = Fint + b.T @ (self.wdetJ * s)
+        return Fint
+
+    def StiffnessTL(self, U, Sn, Ss, Ct):
+        """
+        Total Lagrangian tangent stiffness = material + geometric
+            K = int B_NL^T Ct B_NL  +  int grad(N)^T S grad(N)
+
+        Parameters
+        ----------
+        U : displacement DOF vector
+        Sn, Ss : 2nd Piola-Kirchhoff stress at Gauss points
+        Ct : (nv, nv, ngp) tangent operator dS/dE (Voigt, shear = 2E)
+        """
+        d = self.dim
+        w = self.wdetJ
+        B = self._BNL(U)
+        nv = len(B)
+
+        # material part : all pairs (Ct is not sparse in a non-linear law)
+        K = 0
+        for a in range(nv):
+            for b in range(nv):
+                K = K + B[a].T @ diags(w * Ct[a, b]) @ B[b]
+
+        # geometric part : full symmetric stress tensor S_IJ
+        if d == 2:
+            S = [[Sn[:, 0], Ss[:, 0]],
+                 [Ss[:, 0], Sn[:, 1]]]
+        else:
+            S = [[Sn[:, 0], Ss[:, 0], Ss[:, 1]],
+                 [Ss[:, 0], Sn[:, 1], Ss[:, 2]],
+                 [Ss[:, 1], Ss[:, 2], Sn[:, 2]]]
+
+        D = self._Dphi()
+        for i in range(d):            # same block for each component u_i
+            for I in range(d):
+                for J in range(d):
+                    K = K + D[i][I].T @ diags(w * S[I][J]) @ D[i][J]
+        return K
+
+    def StiffnessAxi(self, hooke, full=False):
+        """
+        Assembles Axisymmetric Stiffness Operator (convention without 2 pi)
+
+        hooke: NUMPY.ARRAY
+            4x4 operator in Voigt order (rr, zz, tt, rz)
+        full: BOOL (optional, default False)
+            False: non-zero hooke blocs only : normal-normal + diagonal shear
+            True: all pairs for anisotropic or non-linear laws
+        """
         if self.dphixdx is None:
             m = self.Copy()
             print('Gauss Integ.')
             m.GaussIntegration()
         else:
             m = self
-        wdetJr = m.wdetJ * m.pgx   # r dr dz !
-        Bxy = m.dphixdy + m.dphiydx
-        Nr = diags(1/m.pgx) @ m.phix
-        # convention without 2 pi (both in right and left hand sides)
-        K = (
-             m.dphixdx.T @ diags(wdetJr * hooke[0, 0]) @ m.dphixdx
-             + m.dphiydy.T @ diags(wdetJr * hooke[1, 1]) @ m.dphiydy
-             + Nr.T @ diags(wdetJr * hooke[2, 2]) @ Nr
-             + Bxy.T @ diags(wdetJr * hooke[3, 3]) @ Bxy
-             + m.dphixdx.T @ diags(wdetJr * hooke[0, 1]) @ m.dphiydy
-             + m.dphixdx.T @ diags(wdetJr * hooke[0, 2]) @ Nr
-             + m.dphiydy.T @ diags(wdetJr * hooke[1, 0]) @ m.dphixdx
-             + m.dphiydy.T @ diags(wdetJr * hooke[1, 2]) @ Nr
-             + Nr.T @ diags(wdetJr * hooke[2, 0]) @ m.dphixdx
-             + Nr.T @ diags(wdetJr * hooke[2, 1]) @ m.dphiydy
-           )
+        wdetJr = m.wdetJ * m.pgx          # r dr dz !
+        Nr = diags(1/m.pgx) @ m.phix      # u_r / r  (hoop strain)
+
+        # Voigt strain ops : rr, zz, tt, rz
+        B = [m.dphixdx, m.dphiydy, Nr, m.dphixdy + m.dphiydx]
+
+        nv = len(B)
+        nn = 3                            # number of normal components
+        if full:
+            pairs = [(a, b) for a in range(nv) for b in range(nv)]
+        else:
+            pairs = [(a, b) for a in range(nn) for b in range(nn)]
+            pairs += [(a, a) for a in range(nn, nv)]
+
+        K = 0
+        for a, b in pairs:
+            K = K + B[a].T @ diags(wdetJr * hooke[a, b]) @ B[b]
         return K
 
     def StiffnessBeam(self, bp, z=None):
@@ -2416,28 +2516,26 @@ class Mesh:
 
 
     def Laplacian(self):
-        """Assembles Tikhonov (Laplacian) Operator"""
+        """
+        Assembles Tikhonov (Laplacian) Operator, 
+        L = int grad(u)^T grad(u)
+        """
         if self.dphixdx is None:
             m = self.Copy()
             m.GaussIntegration()
         else:
             m = self
+
         wdetJ = diags(m.wdetJ)
-        if self.dim == 3:
-            L = m.dphixdx.T @ wdetJ @ m.dphixdx + \
-                m.dphixdy.T @ wdetJ @ m.dphixdy + \
-                m.dphixdz.T @ wdetJ @ m.dphixdz + \
-                m.dphiydx.T @ wdetJ @ m.dphiydx + \
-                m.dphiydy.T @ wdetJ @ m.dphiydy + \
-                m.dphiydz.T @ wdetJ @ m.dphiydz + \
-                m.dphizdx.T @ wdetJ @ m.dphizdx + \
-                m.dphizdy.T @ wdetJ @ m.dphizdy + \
-                m.dphizdz.T @ wdetJ @ m.dphizdz
+        if m.dim == 2:
+            G = [m.dphixdx, m.dphixdy, m.dphiydx, m.dphiydy]
         else:
-            L = m.dphixdx.T @ wdetJ @ m.dphixdx + \
-                m.dphiydy.T @ wdetJ @ m.dphiydy + \
-                m.dphixdy.T @ wdetJ @ m.dphixdy + \
-                m.dphiydx.T @ wdetJ @ m.dphiydx
+            G = [m.dphixdx, m.dphixdy, m.dphixdz,
+                m.dphiydx, m.dphiydy, m.dphiydz,
+                m.dphizdx, m.dphizdy, m.dphizdz]
+        L = 0
+        for g in G:
+            L = L + g.T @ wdetJ @ g
         return L
 
     def GetConductionOperator(self, k):
@@ -2981,14 +3079,14 @@ class Mesh:
                                   m.phiz @ dof_field)).T
         return gp_field
 
+    def TensorFieldAtNodes(self, TN, TS):
+        TN = self.DOF2Nodes(self.GP2DOF(TN))
+        TS = self.DOF2Nodes(self.GP2DOF(TS))
+        return TN, TS
 
     def StrainAtNodes(self, U):
         eps_normal, eps_shear = self.StrainAtGP(U)
-        eps_normal = self.GP2DOF(eps_normal)
-        eps_normal = self.DOF2Nodes(eps_normal)
-        eps_shear = self.GP2DOF(eps_shear)
-        eps_shear = self.DOF2Nodes(eps_shear)
-        return eps_normal, eps_shear
+        return self.TensorFieldAtNodes(eps_normal, eps_shear)
 
     def VTKIntegrationPoints(self, cam, f, g, U, filename="IntPts", iscale=2):
         """
@@ -3538,7 +3636,7 @@ class Mesh:
             plt.title(r"$"+field_name+"_{XY}$")
             #plt.show()
 
-    def PlotContourStrain(self, U, n=None, s=1.0, stype='comp',
+    def PlotContourStrain(self, U, EN=None, ES=None, n=None, s=1.0, stype='comp',
                           newfig=True, cmap='RdBu', plotmesh=True, clim=1.0, **kwargs):
         """
         Plots the strain field using Matplotlib Library.
@@ -3547,6 +3645,8 @@ class Mesh:
         ----------
         U : 1D NUMPY.ARRAY
             displacement dof vector
+        EN : Normal strain at GP  (default None > compute from displacement) 
+        ES : Shear strain at GP
         n : NUMPY.ARRAY, optional
             Coordinate of the nodes. The default is None, which corresponds
             to using self.n instead.
@@ -3570,13 +3670,15 @@ class Mesh:
         None.
 
         """
-        EN, ES = self.StrainAtNodes(U)
+        if EN is None:
+            EN, ES = self.StrainAtGP(U)
+        EN, ES = self.TensorFieldAtNodes(EN, ES)
         self.PlotContourTensorField(U, EN, ES, n=n, s=s, stype=stype,
                           newfig=newfig, cmap=cmap, field_name='\\epsilon',
                           clim=clim, plotmesh=plotmesh, **kwargs)
 
 
-    def PlotContourStress(self, U, hooke, n=None, s=1.0, stype='comp',
+    def PlotContourStress(self, U, hooke, SN=None, SS=None, n=None, s=1.0, stype='comp',
                           newfig=True, cmap='RdBu', clim=1.0, plotmesh=True, **kwargs):
         """
         Plots the stress field using Matplotlib Library.
@@ -3586,6 +3688,8 @@ class Mesh:
         U : 1D NUMPY.ARRAY
             displacement dof vector
         hooke : Hooke operator
+        SN : Normal stress at GP  (default None > compute from displacement and Hooke) 
+        SS : Shear stress at GP
         n : NUMPY.ARRAY, optional
             Coordinate of the nodes. The default is None, which corresponds
             to using self.n instead.
@@ -3609,18 +3713,15 @@ class Mesh:
         None.
 
         """
-        axisym = False
-        if len(hooke) == 4:  # 2D axisymetric
-            axisym = True
-        EN, ES = self.StrainAtGP(U, axisym=axisym)
-        SN, SS = Strain2Stress(hooke, EN, ES)
-        if axisym:  # plot only in-plane stress.
-            SN = SN[:, :2]
-            SS = SS[:, :2]
-        SN = self.GP2DOF(SN)
-        SN = self.DOF2Nodes(SN)
-        SS = self.GP2DOF(SS)
-        SS = self.DOF2Nodes(SS)
+        if SN is None:
+            axisym = False
+            if len(hooke) == 4:  # 2D axisymetric
+                axisym = True
+            EN, ES = self.StrainAtGP(U, axisym=axisym)
+            SN, SS = Strain2Stress(hooke, EN, ES)
+        SN = SN[:, :self.dim]  # only inplane stress in axisymetric
+        SS = SS[:, :self.dim]
+        SN, SS = self.TensorFieldAtNodes(SN, SS)
         self.PlotContourTensorField(U, SN, SS, n=n, s=s, stype=stype, 
                         newfig=newfig, cmap=cmap, plotmesh=plotmesh,
                         clim=clim, field_name='\\sigma', **kwargs)

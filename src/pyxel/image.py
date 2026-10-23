@@ -109,9 +109,9 @@ class Image:
         """evaluate Hessian of the interpolator at non-integer pixel position u, v"""
         return self.tck.ev(v-self.v0, u-self.u0, 0, 2), self.tck.ev(v-self.v0, u-self.u0, 2, 0), self.tck.ev(v-self.v0, u-self.u0, 1, 1)
 
-    def Plot(self):
+    def Plot(self, cmap='gray'):
         """Plot Image"""
-        plt.imshow(self.pix, cmap="gray", interpolation="none", origin="upper")
+        plt.imshow(self.pix, cmap=cmap, interpolation="none", origin="upper")
         # plt.axis('off')
         # plt.colorbar()
 
