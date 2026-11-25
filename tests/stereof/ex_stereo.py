@@ -7,7 +7,6 @@
 
 """
 
-
 import pyxel as px
 
 

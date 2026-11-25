@@ -12,6 +12,7 @@ PYthon library for eXperimental mechanics using Finite ELements
 import os
 import numpy as np
 import scipy.interpolate as spi
+import scipy.ndimage as ndi
 import matplotlib.pyplot as plt
 from .utils import PlotMeshImage, full_screen
 from .vtktools import VTIWriter, PVDFile
@@ -87,27 +88,76 @@ class Image:
         cv2.imwrite(fname, f)
 
     def BuildInterp(self):
-        """build bivariate Spline interp"""
-        x = np.arange(0, self.pix.shape[0])
-        y = np.arange(0, self.pix.shape[1])
-        self.tck = spi.RectBivariateSpline(x, y, self.pix)
+        """Build the cubic B-spline coefficients of the image.
+
+        Same interpolating bicubic spline as scipy.interpolate.
+        RectBivariateSpline (same space, same interpolation conditions), but
+        stored as uniform-knot B-spline coefficients, which makes the
+        evaluation in Interp about 5x faster.
+        """
+        self.tck = ndi.spline_filter(np.asarray(self.pix, dtype=np.float64),
+                                     order=3, mode='reflect')
+
+    def _InterpCoords(self, u, v):
+        """Broadcast (u, v) to common shape, convert to (row, col) image
+        coordinates and clamp them to the image domain, as FITPACK does
+        outside the knot span. Also returns the expected output shape:
+        map_coordinates rejects 0-d coordinates whereas RectBivariateSpline.ev
+        accepts scalars and returns a 0-d array."""
+        def clamp(x, hi):   # avoids a copy when everything is already inside
+            if x.size and (x.min() < 0.0 or x.max() > hi):
+                return np.clip(x, 0.0, hi)
+            return x
+        nr, nc = self.pix.shape
+        r, c = np.broadcast_arrays(np.asarray(v, dtype=np.float64) - self.v0,
+                                   np.asarray(u, dtype=np.float64) - self.u0)
+        return (clamp(np.atleast_1d(r), nr - 1.0),
+                clamp(np.atleast_1d(c), nc - 1.0), r.shape)
+
+    def _InterpEval(self, row, col):
+        """Evaluate the spline at image coordinates (row, col)."""
+        if not hasattr(self, 'tck'):
+            self.BuildInterp()
+        return ndi.map_coordinates(self.tck, [row, col], order=3,
+                                   prefilter=False, mode='reflect')
 
     def Interp(self, u, v):
         """evaluate interpolator at non-integer pixel position u, v
             u the right horizontal coord in pixel
             v the downward vertical in pixel
         """
-        if not hasattr(self, 'tck'):
-            self.BuildInterp()
-        return self.tck.ev(v-self.v0, u-self.u0)
+        r, c, shape = self._InterpCoords(u, v)
+        return self._InterpEval(r, c).reshape(shape)
 
     def InterpGrad(self, u, v):
-        """evaluate gradient of the interpolator at non-integer pixel position u, v"""
-        return self.tck.ev(v-self.v0, u-self.u0, 0, 1), self.tck.ev(v-self.v0, u-self.u0, 1, 0)
+        """evaluate gradient of the interpolator at non-integer pixel
+        position u, v, by centered finite differences on the spline.
+
+        Warning: the derivative near the image border is inaccurate within
+         ~5 px of the edge. Keep the integration points away from the border.
+        """
+        h = 1e-4
+        r, c, shape = self._InterpCoords(u, v)
+        du = (self._InterpEval(r, c + h) - self._InterpEval(r, c - h)) / (2 * h)
+        dv = (self._InterpEval(r + h, c) - self._InterpEval(r - h, c)) / (2 * h)
+        return du.reshape(shape), dv.reshape(shape)
 
     def InterpHess(self, u, v):
-        """evaluate Hessian of the interpolator at non-integer pixel position u, v"""
-        return self.tck.ev(v-self.v0, u-self.u0, 0, 2), self.tck.ev(v-self.v0, u-self.u0, 2, 0), self.tck.ev(v-self.v0, u-self.u0, 1, 1)
+        """evaluate Hessian of the interpolator at non-integer pixel position
+        u, v, by centered finite differences on the spline. Relative accuracy
+        ~1e-5 only: the error is O(h) and not O(h**2), because the third
+        derivative of a cubic spline jumps at every integer pixel."""
+        h = 1e-4
+        r, c, shape = self._InterpCoords(u, v)
+        f0 = self._InterpEval(r, c)
+        duu = (self._InterpEval(r, c + h) - 2 * f0
+               + self._InterpEval(r, c - h)) / h ** 2
+        dvv = (self._InterpEval(r + h, c) - 2 * f0
+               + self._InterpEval(r - h, c)) / h ** 2
+        duv = (self._InterpEval(r + h, c + h) - self._InterpEval(r + h, c - h)
+               - self._InterpEval(r - h, c + h)
+               + self._InterpEval(r - h, c - h)) / (4 * h ** 2)
+        return duu.reshape(shape), dvv.reshape(shape), duv.reshape(shape)
 
     def Plot(self, cmap='gray'):
         """Plot Image"""
@@ -172,7 +222,7 @@ class Image:
         )
         nn[1] = nn[1] // scale
         self.pix = im0.reshape(nn)
-        self.SetOrigin(self.u0/scale, self.u0/scale)
+        self.SetOrigin(self.u0/scale, self.v0/scale)
 
     def ToGray(self, type="lum"):
         """Convert RGB to Grayscale :

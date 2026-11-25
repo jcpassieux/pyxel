@@ -67,7 +67,7 @@ def Hooke(p, typc='isotropic_2D_ps'):
         alp = 1 / (1 - vlt * vtl)
         return np.array([[alp * El, alp * vtl * El, 0],
                         [alp * vlt * Et, alp * Et, 0],
-                        [0, 0, 2 * Glt]])
+                        [0, 0, Glt]])
     elif typc == 'laminate_2D':
         # mat.type='Laminate';
         # mat.El=165e9;

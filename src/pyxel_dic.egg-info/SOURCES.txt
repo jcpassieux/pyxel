@@ -14,6 +14,7 @@ src/pyxel/levelset.py
 src/pyxel/material.py
 src/pyxel/mesh.py
 src/pyxel/mesher.py
+src/pyxel/stereof.py
 src/pyxel/utils.py
 src/pyxel/vtktools.py
 src/pyxel_dic.egg-info/PKG-INFO
